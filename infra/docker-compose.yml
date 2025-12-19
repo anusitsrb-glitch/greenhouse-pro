@@ -1,0 +1,87 @@
+# GreenHouse Pro - Docker Compose Configuration
+# Production-ready setup with Caddy reverse proxy
+
+version: '3.8'
+
+services:
+  # Backend API
+  api:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    container_name: greenhouse-api
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DB_PATH=/app/data/greenhouse.db
+      - APP_SESSION_SECRET=${APP_SESSION_SECRET}
+      - ADMIN_USERNAME=${ADMIN_USERNAME}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - TB_BASE_URL=${TB_BASE_URL}
+      - TB_USERNAME=${TB_USERNAME}
+      - TB_PASSWORD=${TB_PASSWORD}
+    volumes:
+      - app_data:/app/data
+      - app_backups:/app/backups
+    networks:
+      - greenhouse-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Frontend (built static files served by Caddy)
+  caddy:
+    image: caddy:2-alpine
+    container_name: greenhouse-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../client/dist:/srv:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - greenhouse-network
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # Backup job (run manually or via cron)
+  # Usage: docker compose run --rm backup
+  backup:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    container_name: greenhouse-backup
+    restart: "no"
+    entrypoint: ["node", "dist/scripts/backup.js"]
+    environment:
+      - NODE_ENV=production
+      - DB_PATH=/app/data/greenhouse.db
+    volumes:
+      - app_data:/app/data:ro
+      - app_backups:/app/backups
+    networks:
+      - greenhouse-network
+    profiles:
+      - backup
+
+networks:
+  greenhouse-network:
+    driver: bridge
+
+volumes:
+  app_data:
+    name: greenhouse-data
+  app_backups:
+    name: greenhouse-backups
+  caddy_data:
+    name: greenhouse-caddy-data
+  caddy_config:
+    name: greenhouse-caddy-config

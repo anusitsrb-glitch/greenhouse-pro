@@ -1,0 +1,70 @@
+# GreenHouse Pro - Caddy Configuration
+# Replace YOUR_DOMAIN with your actual domain
+
+# For development (HTTP only, port 80)
+:80 {
+    # Serve static frontend files
+    root * /srv
+    file_server
+
+    # SPA routing - try file first, then index.html
+    try_files {path} /index.html
+
+    # API reverse proxy
+    handle /api/* {
+        reverse_proxy api:3001
+    }
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    # Gzip compression
+    encode gzip
+
+    # Logging
+    log {
+        output stdout
+        format console
+    }
+}
+
+# For production with HTTPS (uncomment and replace YOUR_DOMAIN)
+# YOUR_DOMAIN {
+#     # Serve static frontend files
+#     root * /srv
+#     file_server
+#
+#     # SPA routing
+#     try_files {path} /index.html
+#
+#     # API reverse proxy
+#     handle /api/* {
+#         reverse_proxy api:3001
+#     }
+#
+#     # Security headers
+#     header {
+#         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+#         X-Content-Type-Options nosniff
+#         X-Frame-Options DENY
+#         X-XSS-Protection "1; mode=block"
+#         Referrer-Policy strict-origin-when-cross-origin
+#         Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; connect-src 'self'"
+#         -Server
+#     }
+#
+#     # Gzip compression
+#     encode gzip
+#
+#     # Logging
+#     log {
+#         output file /var/log/caddy/access.log
+#         format json
+#     }
+# }

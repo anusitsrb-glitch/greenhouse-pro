@@ -1,0 +1,288 @@
+/**
+ * ThingsBoard Data Keys Configuration (Frontend)
+ * Mirrors backend config - import from here for consistency
+ */
+
+// ============================================================
+// Telemetry Keys
+// ============================================================
+
+export const TELEMETRY_KEYS = {
+  AIR: {
+    TEMP: 'air_temp',
+    HUMIDITY: 'air_humidity',
+    CO2: 'air_co2',
+    LIGHT: 'air_light',
+  },
+  SYSTEM: {
+    WIFI_SSID: 'wifi_ssid',
+    RSSI: 'rssi',
+    FIRMWARE_VERSION: 'firmware_version',
+    STATS_READ_TIME_MS: 'stats_read_time_ms',
+  },
+} as const;
+
+export function getSoilKeys(nodeIndex: number) {
+  const i = nodeIndex;
+  return {
+    MOISTURE: `soil${i}_moisture`,
+    TEMP: `soil${i}_temp`,
+    EC: `soil${i}_ec`,
+    PH: `soil${i}_ph`,
+    N: `soil${i}_n`,
+    P: `soil${i}_p`,
+    K: `soil${i}_k`,
+  };
+}
+
+export const AIR_TELEMETRY_KEYS = Object.values(TELEMETRY_KEYS.AIR);
+export const SYSTEM_TELEMETRY_KEYS = Object.values(TELEMETRY_KEYS.SYSTEM);
+
+export function getSoilKeysArray(nodeIndex: number): string[] {
+  return Object.values(getSoilKeys(nodeIndex));
+}
+
+// ============================================================
+// Attribute Keys
+// ============================================================
+
+export const ATTRIBUTE_KEYS = {
+  STATUS: 'status',
+  
+  RELAY: {
+    FAN_1_CMD: 'fan_1_cmd',
+    FAN_2_CMD: 'fan_2_cmd',
+    VALVE_2_CMD: 'valve_2_cmd',
+    PUMP_1_CMD: 'pump_1_cmd',
+    LIGHT_1_CMD: 'light_1_cmd',
+  },
+  
+  MOTOR: {
+    MOTOR_1_FW: 'motor_1_fw',
+    MOTOR_1_RE: 'motor_1_re',
+    MOTOR_2_FW: 'motor_2_fw',
+    MOTOR_2_RE: 'motor_2_re',
+    MOTOR_3_FW: 'motor_3_fw',
+    MOTOR_3_RE: 'motor_3_re',
+    MOTOR_4_FW: 'motor_4_fw',
+    MOTOR_4_RE: 'motor_4_re',
+  },
+  
+  AUTO: {
+    FAN_1_AUTO: 'fan_1_auto',
+    FAN_2_AUTO: 'fan_2_auto',
+    VALVE_2_AUTO: 'valve_2_auto',
+    PUMP_1_AUTO: 'pump_1_auto',
+    LIGHT_1_AUTO: 'light_1_auto',
+    GLOBAL_MOTOR_AUTO: 'global_motor_auto',
+  },
+  
+  TIMER: {
+    FAN_1_ON: 'fan_1_on',
+    FAN_1_OFF: 'fan_1_off',
+    FAN_2_ON: 'fan_2_on',
+    FAN_2_OFF: 'fan_2_off',
+    VALVE_2_ON: 'valve_2_on',
+    VALVE_2_OFF: 'valve_2_off',
+    PUMP_1_ON: 'pump_1_on',
+    PUMP_1_OFF: 'pump_1_off',
+    LIGHT_1_ON: 'light_1_on',
+    LIGHT_1_OFF: 'light_1_off',
+    GLOBAL_FW_TIME: 'global_fw_time',
+    GLOBAL_RE_TIME: 'global_re_time',
+  },
+} as const;
+
+export const RELAY_ATTRIBUTE_KEYS = Object.values(ATTRIBUTE_KEYS.RELAY);
+export const MOTOR_ATTRIBUTE_KEYS = Object.values(ATTRIBUTE_KEYS.MOTOR);
+export const AUTO_ATTRIBUTE_KEYS = Object.values(ATTRIBUTE_KEYS.AUTO);
+export const TIMER_ATTRIBUTE_KEYS = Object.values(ATTRIBUTE_KEYS.TIMER);
+
+export const ALL_CONTROL_ATTRIBUTES = [
+  ATTRIBUTE_KEYS.STATUS,
+  ...RELAY_ATTRIBUTE_KEYS,
+  ...MOTOR_ATTRIBUTE_KEYS,
+  ...AUTO_ATTRIBUTE_KEYS,
+  ...TIMER_ATTRIBUTE_KEYS,
+];
+
+// ============================================================
+// RPC Methods
+// ============================================================
+
+export const RPC_METHODS = {
+  RELAY: {
+    SET_FAN_1_CMD: 'set_fan_1_cmd',
+    SET_FAN_2_CMD: 'set_fan_2_cmd',
+    SET_VALVE_2_CMD: 'set_valve_2_cmd',
+    SET_PUMP_1_CMD: 'set_pump_1_cmd',
+    SET_LIGHT_1_CMD: 'set_light_1_cmd',
+  },
+  
+  MOTOR: {
+    SET_MOTOR_1_STATUS: 'set_motor_1_status',
+    SET_MOTOR_2_STATUS: 'set_motor_2_status',
+    SET_MOTOR_3_STATUS: 'set_motor_3_status',
+    SET_MOTOR_4_STATUS: 'set_motor_4_status',
+  },
+  
+  AUTO: {
+    SET_FAN_1_AUTO: 'set_fan_1_auto',
+    SET_FAN_2_AUTO: 'set_fan_2_auto',
+    SET_VALVE_2_AUTO: 'set_valve_2_auto',
+    SET_PUMP_1_AUTO: 'set_pump_1_auto',
+    SET_LIGHT_1_AUTO: 'set_light_1_auto',
+    SET_GLOBAL_MOTOR_AUTO: 'set_global_motor_auto',
+  },
+  
+  TIMER: {
+    SET_FAN_1_ON_TIME: 'set_fan_1_on_time',
+    SET_FAN_1_OFF_TIME: 'set_fan_1_off_time',
+    SET_FAN_2_ON_TIME: 'set_fan_2_on_time',
+    SET_FAN_2_OFF_TIME: 'set_fan_2_off_time',
+    SET_VALVE_2_ON_TIME: 'set_valve_2_on_time',
+    SET_VALVE_2_OFF_TIME: 'set_valve_2_off_time',
+    SET_PUMP_1_ON_TIME: 'set_pump_1_on_time',
+    SET_PUMP_1_OFF_TIME: 'set_pump_1_off_time',
+    SET_LIGHT_1_ON_TIME: 'set_light_1_on_time',
+    SET_LIGHT_1_OFF_TIME: 'set_light_1_off_time',
+    SET_GLOBAL_FW_TIME: 'set_global_fw_time',
+    SET_GLOBAL_RE_TIME: 'set_global_re_time',
+  },
+} as const;
+
+// ============================================================
+// RPC to Attribute Confirmation Mapping
+// ============================================================
+
+export const RPC_CONFIRM_MAP: Record<string, string> = {
+  // Relay
+  [RPC_METHODS.RELAY.SET_FAN_1_CMD]: ATTRIBUTE_KEYS.RELAY.FAN_1_CMD,
+  [RPC_METHODS.RELAY.SET_FAN_2_CMD]: ATTRIBUTE_KEYS.RELAY.FAN_2_CMD,
+  [RPC_METHODS.RELAY.SET_VALVE_2_CMD]: ATTRIBUTE_KEYS.RELAY.VALVE_2_CMD,
+  [RPC_METHODS.RELAY.SET_PUMP_1_CMD]: ATTRIBUTE_KEYS.RELAY.PUMP_1_CMD,
+  [RPC_METHODS.RELAY.SET_LIGHT_1_CMD]: ATTRIBUTE_KEYS.RELAY.LIGHT_1_CMD,
+  
+  // Auto
+  [RPC_METHODS.AUTO.SET_FAN_1_AUTO]: ATTRIBUTE_KEYS.AUTO.FAN_1_AUTO,
+  [RPC_METHODS.AUTO.SET_FAN_2_AUTO]: ATTRIBUTE_KEYS.AUTO.FAN_2_AUTO,
+  [RPC_METHODS.AUTO.SET_VALVE_2_AUTO]: ATTRIBUTE_KEYS.AUTO.VALVE_2_AUTO,
+  [RPC_METHODS.AUTO.SET_PUMP_1_AUTO]: ATTRIBUTE_KEYS.AUTO.PUMP_1_AUTO,
+  [RPC_METHODS.AUTO.SET_LIGHT_1_AUTO]: ATTRIBUTE_KEYS.AUTO.LIGHT_1_AUTO,
+  [RPC_METHODS.AUTO.SET_GLOBAL_MOTOR_AUTO]: ATTRIBUTE_KEYS.AUTO.GLOBAL_MOTOR_AUTO,
+  
+  // Timer
+  [RPC_METHODS.TIMER.SET_FAN_1_ON_TIME]: ATTRIBUTE_KEYS.TIMER.FAN_1_ON,
+  [RPC_METHODS.TIMER.SET_FAN_1_OFF_TIME]: ATTRIBUTE_KEYS.TIMER.FAN_1_OFF,
+  [RPC_METHODS.TIMER.SET_FAN_2_ON_TIME]: ATTRIBUTE_KEYS.TIMER.FAN_2_ON,
+  [RPC_METHODS.TIMER.SET_FAN_2_OFF_TIME]: ATTRIBUTE_KEYS.TIMER.FAN_2_OFF,
+  [RPC_METHODS.TIMER.SET_VALVE_2_ON_TIME]: ATTRIBUTE_KEYS.TIMER.VALVE_2_ON,
+  [RPC_METHODS.TIMER.SET_VALVE_2_OFF_TIME]: ATTRIBUTE_KEYS.TIMER.VALVE_2_OFF,
+  [RPC_METHODS.TIMER.SET_PUMP_1_ON_TIME]: ATTRIBUTE_KEYS.TIMER.PUMP_1_ON,
+  [RPC_METHODS.TIMER.SET_PUMP_1_OFF_TIME]: ATTRIBUTE_KEYS.TIMER.PUMP_1_OFF,
+  [RPC_METHODS.TIMER.SET_LIGHT_1_ON_TIME]: ATTRIBUTE_KEYS.TIMER.LIGHT_1_ON,
+  [RPC_METHODS.TIMER.SET_LIGHT_1_OFF_TIME]: ATTRIBUTE_KEYS.TIMER.LIGHT_1_OFF,
+  [RPC_METHODS.TIMER.SET_GLOBAL_FW_TIME]: ATTRIBUTE_KEYS.TIMER.GLOBAL_FW_TIME,
+  [RPC_METHODS.TIMER.SET_GLOBAL_RE_TIME]: ATTRIBUTE_KEYS.TIMER.GLOBAL_RE_TIME,
+};
+
+// ============================================================
+// Display Names (Thai)
+// ============================================================
+
+export const DISPLAY_NAMES: Record<string, string> = {
+  // Air
+  air_temp: 'อุณหภูมิอากาศ',
+  air_humidity: 'ความชื้นอากาศ',
+  air_co2: 'CO₂',
+  air_light: 'แสง',
+  
+  // Soil
+  moisture: 'ความชื้นดิน',
+  temp: 'อุณหภูมิดิน',
+  ec: 'EC',
+  ph: 'pH',
+  n: 'ไนโตรเจน (N)',
+  p: 'ฟอสฟอรัส (P)',
+  k: 'โพแทสเซียม (K)',
+  
+  // Relays
+  fan_1: 'พัดลม 1',
+  fan_2: 'พัดลม 2',
+  valve_2: 'วาล์ว 2',
+  pump_1: 'ปั๊ม 1',
+  light_1: 'ไฟ 1',
+  
+  // Motors
+  motor_1: 'มอเตอร์ 1',
+  motor_2: 'มอเตอร์ 2',
+  motor_3: 'มอเตอร์ 3',
+  motor_4: 'มอเตอร์ 4',
+  
+  // System
+  wifi_ssid: 'WiFi SSID',
+  rssi: 'สัญญาณ WiFi',
+  firmware_version: 'Firmware',
+  stats_read_time_ms: 'เวลาอ่านข้อมูล',
+};
+
+// ============================================================
+// Units
+// ============================================================
+
+export const UNITS: Record<string, string> = {
+  air_temp: '°C',
+  air_humidity: '%',
+  air_co2: 'ppm',
+  air_light: 'lux',
+  moisture: '%',
+  temp: '°C',
+  ec: 'mS/cm',
+  ph: '',
+  n: 'mg/kg',
+  p: 'mg/kg',
+  k: 'mg/kg',
+  rssi: 'dBm',
+  stats_read_time_ms: 'ms',
+};
+
+// ============================================================
+// Polling Intervals (ms)
+// ============================================================
+
+export const POLLING_INTERVALS = {
+  ATTRIBUTES: 3000,      // 3 seconds - for control states
+  TELEMETRY: 60000,      // 60 seconds - for sensor data
+  BURST_CONFIRM: 500,    // 500ms - after RPC for confirmation
+  BURST_DURATION: 6000,  // 6 seconds - how long to burst poll
+};
+
+// ============================================================
+// Relay Configurations
+// ============================================================
+
+export const RELAY_CONFIG = [
+  { key: 'fan_1', name: 'พัดลม 1', icon: 'Fan', cmdKey: 'fan_1_cmd', autoKey: 'fan_1_auto', rpcMethod: 'set_fan_1_cmd' },
+  { key: 'fan_2', name: 'พัดลม 2', icon: 'Fan', cmdKey: 'fan_2_cmd', autoKey: 'fan_2_auto', rpcMethod: 'set_fan_2_cmd' },
+  { key: 'valve_2', name: 'วาล์ว 2', icon: 'Droplets', cmdKey: 'valve_2_cmd', autoKey: 'valve_2_auto', rpcMethod: 'set_valve_2_cmd' },
+  { key: 'pump_1', name: 'ปั๊ม 1', icon: 'Waves', cmdKey: 'pump_1_cmd', autoKey: 'pump_1_auto', rpcMethod: 'set_pump_1_cmd' },
+  { key: 'light_1', name: 'ไฟ 1', icon: 'Lightbulb', cmdKey: 'light_1_cmd', autoKey: 'light_1_auto', rpcMethod: 'set_light_1_cmd' },
+] as const;
+
+// ============================================================
+// Motor Configurations
+// ============================================================
+
+export const MOTOR_CONFIG = [
+  { key: 'motor_1', name: 'มอเตอร์ 1', fwKey: 'motor_1_fw', reKey: 'motor_1_re', rpcMethod: 'set_motor_1_status' },
+  { key: 'motor_2', name: 'มอเตอร์ 2', fwKey: 'motor_2_fw', reKey: 'motor_2_re', rpcMethod: 'set_motor_2_status' },
+  { key: 'motor_3', name: 'มอเตอร์ 3', fwKey: 'motor_3_fw', reKey: 'motor_3_re', rpcMethod: 'set_motor_3_status' },
+  { key: 'motor_4', name: 'มอเตอร์ 4', fwKey: 'motor_4_fw', reKey: 'motor_4_re', rpcMethod: 'set_motor_4_status' },
+] as const;
+
+// Motor command values
+export const MOTOR_COMMANDS = {
+  FORWARD: 1,  // Down
+  REVERSE: 2,  // Up
+  STOP: 0,
+} as const;
