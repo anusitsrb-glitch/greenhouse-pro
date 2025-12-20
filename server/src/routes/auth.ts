@@ -143,6 +143,7 @@ router.post('/logout', requireAuth, (req: Request, res: Response) => {
       action: AuditActions.LOGOUT,
     });
     
+    res.clearCookie('greenhouse.sid');
     res.clearCookie('connect.sid');
     sendSuccess(res, { message: 'ออกจากระบบสำเร็จ' });
   });

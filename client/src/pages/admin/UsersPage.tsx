@@ -30,6 +30,10 @@ export function UsersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // ✅ actor info (ใช้ปิดปุ่มแก้ superadmin สำหรับ admin)
+  const [actorRole, setActorRole] = useState<string | null>(null);
+  const [actorId, setActorId] = useState<number | null>(null);
+
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
@@ -50,6 +54,23 @@ export function UsersPage() {
       setIsLoading(false);
     }
   };
+
+  // ✅ โหลด me เพื่อรู้ role/id (ถ้าพังไม่เป็นไร UI ยังทำงานเหมือนเดิม)
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch('/api/auth/me', { credentials: 'include' });
+        if (!r.ok) return;
+        const data: any = await r.json();
+        if (!data?.success) return;
+        const u = data?.data?.user;
+        if (typeof u?.role === 'string') setActorRole(u.role);
+        if (typeof u?.id === 'number') setActorId(u.id);
+      } catch {
+        // ignore
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -162,6 +183,10 @@ export function UsersPage() {
                 filteredUsers.map((user) => {
                   const lockSuper = isSuperadmin(user.role);
 
+                  const actorIsSuper = actorRole === 'superadmin';
+                  // ✅ ปิดปุ่มแก้ superadmin สำหรับ admin (เฉพาะเมื่อรู้ actorRole)
+                  const disableEditSuper = lockSuper && actorRole !== null && !actorIsSuper;
+
                   return (
                     <tr key={user.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
@@ -222,8 +247,18 @@ export function UsersPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setEditingUser(user)}
-                            title={lockSuper ? 'แก้ไขอีเมลได้ (role ล็อก)' : 'แก้ไข'}
+                            onClick={() => {
+                            if (actorRole === null) return; // หรือโชว์ toast ว่า "กำลังโหลดสิทธิ์..."
+                              setEditingUser(user);
+                  }}
+                            disabled={disableEditSuper}
+                            title={
+                              disableEditSuper
+                                ? 'ไม่อนุญาตให้ Admin แก้ไข Super Admin'
+                                : lockSuper
+                                  ? 'Super Admin แก้ไขได้ (role ล็อก)'
+                                  : 'แก้ไข'
+                            }
                           >
                             <Pencil className="w-4 h-4" />
                           </Button>
@@ -267,6 +302,8 @@ export function UsersPage() {
       {editingUser && (
         <EditUserModal
           user={editingUser}
+          actorRole={actorRole}
+          actorId={actorId}
           onClose={() => setEditingUser(null)}
           onSuccess={() => {
             setEditingUser(null);
@@ -322,26 +359,61 @@ function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
       <Card className="w-full max-w-md">
         <div className="p-6">
           <h2 className="text-xl font-bold mb-4">เพิ่มผู้ใช้ใหม่</h2>
+
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
-              label="ชื่อผู้ใช้"
-              value={formData.username}
-              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-              required
-            />
-            <Input
-              label="อีเมล"
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            />
-            <Input
-              label="รหัสผ่าน"
-              type="password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              required
-            />
+            {/* Username */}
+            <div>
+              <label htmlFor="create-username" className="block text-sm font-medium text-gray-700 mb-1">
+                ชื่อผู้ใช้ <span className="text-red-600">*</span>
+              </label>
+              <Input
+                id="create-username"
+                value={formData.username}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                required
+                placeholder="เช่น somchai"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                ใช้สำหรับเข้าสู่ระบบ (อย่างน้อย 3 ตัวอักษร)
+              </p>
+            </div>
+
+            {/* Email */}
+            <div>
+              <label htmlFor="create-email" className="block text-sm font-medium text-gray-700 mb-1">
+                อีเมล (ไม่บังคับ)
+              </label>
+              <Input
+                id="create-email"
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="name@example.com"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                ใช้สำหรับติดต่อ/กู้รหัสผ่าน (ปล่อยว่างได้)
+              </p>
+            </div>
+
+            {/* Password */}
+            <div>
+              <label htmlFor="create-password" className="block text-sm font-medium text-gray-700 mb-1">
+                รหัสผ่าน <span className="text-red-600">*</span>
+              </label>
+              <Input
+                id="create-password"
+                type="password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                required
+                placeholder="อย่างน้อย 6 ตัวอักษร"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                แนะนำ: ผสมตัวอักษรและตัวเลขเพื่อความปลอดภัย
+              </p>
+            </div>
+
+            {/* Role */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">สิทธิ์</label>
               <select
@@ -353,7 +425,11 @@ function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
                 <option value="operator">ผู้ควบคุม (Operator)</option>
                 <option value="admin">ผู้ดูแล (Admin)</option>
               </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Viewer = ดูอย่างเดียว, Operator = ควบคุม/ตั้งเวลาได้, Admin = จัดการผู้ใช้/โปรเจกต์ได้
+              </p>
             </div>
+
             <div className="flex gap-2 pt-4">
               <Button type="button" variant="outline" onClick={onClose} className="flex-1">
                 ยกเลิก
@@ -370,13 +446,16 @@ function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
 }
 
 // Edit User Modal Component
-// Edit User Modal Component
 function EditUserModal({
   user,
+  actorRole,
+  actorId,
   onClose,
   onSuccess
 }: {
   user: AdminUser;
+  actorRole: string | null;
+  actorId: number | null;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -385,17 +464,37 @@ function EditUserModal({
 
   const lockRole = user.role === 'superadmin';
 
+  // ✅ เงื่อนไขสำคัญ: admin ห้ามแก้ superadmin
+  const targetIsSuper = user.role === 'superadmin';
+  const actorIsSuper = actorRole === 'superadmin';
+  const canEditThisUser = !targetIsSuper || actorIsSuper;
+
   const [formData, setFormData] = useState({
+    username: user.username,
     email: user.email ?? '',
     role: user.role,
   });
 
   const handleSave = async () => {
+    // ✅ กันไว้ชัด ๆ (แม้เปิด modal ได้จากกรณี actorRole ไม่รู้)
+    if (!canEditThisUser) {
+      addToast({ type: 'error', message: 'ไม่อนุญาตให้แก้ไข Super Admin' });
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       // ✅ ส่งเฉพาะสิ่งที่จำเป็นจริง ๆ (กัน zod ฝั่ง backend reject)
       const payload: any = {};
+
+      // --- username: ถ้าไม่แก้ ก็ไม่ต้องส่ง ---
+      const usernameTrimmed = (formData.username ?? '').trim();
+      const originalUsernameTrimmed = (user.username ?? '').trim();
+
+      if (usernameTrimmed !== originalUsernameTrimmed) {
+        payload.username = usernameTrimmed;
+      }
 
       // --- email: ถ้าไม่แก้ ก็ไม่ต้องส่ง / ถ้าเป็นค่าว่างให้เป็น null ---
       const emailTrimmed = (formData.email ?? '').trim();
@@ -419,7 +518,15 @@ function EditUserModal({
       await adminApi.updateUser(user.id, payload);
 
       addToast({ type: 'success', message: 'บันทึกข้อมูลสำเร็จ' });
+      // ✅ ถ้าแก้ "ตัวเอง" และมีการเปลี่ยน username → รีโหลดเพื่อให้ทุกส่วนอัปเดตทันที
+      const changedUsername = typeof payload.username === 'string' && payload.username.trim().length > 0;
+      if (changedUsername && actorId != null && actorId === user.id) {
+        onSuccess(); // ปิด modal + refresh ตารางผู้ใช้
+        setTimeout(() => window.location.reload(), 200); // รีโหลดเบาๆ หลัง UI ปิด modal
+        return;
+      }
       onSuccess();
+
     } catch (error) {
       addToast({
         type: 'error',
@@ -436,19 +543,53 @@ function EditUserModal({
         <div className="p-6">
           <h2 className="text-xl font-bold mb-4">แก้ไขผู้ใช้: {user.username}</h2>
 
-          {lockRole && (
+          {!canEditThisUser && (
+            <div className="mb-4 p-3 rounded-lg bg-red-50 text-red-800 text-sm">
+              ไม่อนุญาตให้ <b>Admin</b> แก้ไข <b>Super Admin</b>
+            </div>
+          )}
+
+          {lockRole && canEditThisUser && (
             <div className="mb-4 p-3 rounded-lg bg-yellow-50 text-yellow-800 text-sm">
-              ผู้ใช้เป็น <b>Super Admin</b> (ล็อกการเปลี่ยน Role) — แก้ได้เฉพาะอีเมล
+              ผู้ใช้เป็น <b>Super Admin</b> (ล็อกการเปลี่ยน Role) — แก้ได้เฉพาะชื่อผู้ใช้และอีเมล
             </div>
           )}
 
           <div className="space-y-4">
-            <Input
-              label="อีเมล"
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            />
+            {/* Username */}
+            <div>
+              <label htmlFor="edit-username" className="block text-sm font-medium text-gray-700 mb-1">
+                ชื่อผู้ใช้ (Username)
+              </label>
+              <Input
+                id="edit-username"
+                value={formData.username}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                placeholder="เช่น somchai"
+                disabled={!canEditThisUser}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                ใช้สำหรับเข้าสู่ระบบ (อย่างน้อย 3 ตัวอักษร)
+              </p>
+            </div>
+
+            {/* Email */}
+            <div>
+              <label htmlFor="edit-email" className="block text-sm font-medium text-gray-700 mb-1">
+                อีเมล (ไม่บังคับ)
+              </label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="name@example.com"
+                disabled={!canEditThisUser}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                ใช้สำหรับติดต่อ/กู้รหัสผ่าน (ปล่อยว่างได้)
+              </p>
+            </div>
 
             {!lockRole && (
               <div>
@@ -457,11 +598,15 @@ function EditUserModal({
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  disabled={!canEditThisUser}
                 >
                   <option value="viewer">ผู้ชม (Viewer)</option>
                   <option value="operator">ผู้ควบคุม (Operator)</option>
                   <option value="admin">ผู้ดูแล (Admin)</option>
                 </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  Viewer = ดูอย่างเดียว, Operator = ควบคุม/ตั้งเวลาได้, Admin = จัดการผู้ใช้/โปรเจกต์ได้
+                </p>
               </div>
             )}
 
@@ -470,12 +615,12 @@ function EditUserModal({
                 ยกเลิก
               </Button>
 
-              {/* ✅ เปลี่ยนเป็น onClick ตรงๆ กัน submit เพี้ยน */}
               <Button
                 type="button"
                 onClick={handleSave}
                 isLoading={isLoading}
                 className="flex-1"
+                disabled={!canEditThisUser}
               >
                 บันทึก
               </Button>

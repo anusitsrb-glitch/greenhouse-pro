@@ -21,6 +21,7 @@ const createUserSchema = z.object({
 });
 
 const updateUserSchema = z.object({
+  username: z.string().min(3).max(50).optional(), // ✅ เพิ่มให้แก้ username ได้
   email: z.string().email().optional().nullable(),
   role: z.enum(['admin', 'operator', 'viewer']).optional(),
   is_active: z.boolean().optional(),
@@ -37,6 +38,36 @@ const updateProjectAccessSchema = z.object({
 const activateUserSchema = z.object({
   is_active: z.boolean(),
 });
+
+/** ✅ helper: ดู role ของผู้กระทำ (actor) แบบไม่พัง แม้ session.role ไม่มี */
+const getActorRole = (req: Request): UserRole | null => {
+  const actorId = (req as any)?.session?.userId ?? null;
+  if (!actorId) return null;
+
+  // ถ้ามี session.role ใช้ได้เลย (เร็ว)
+  const sessionRole = (req as any)?.session?.role;
+  if (typeof sessionRole === 'string' && sessionRole.length > 0) {
+    return sessionRole as UserRole;
+  }
+
+  // fallback: อ่านจาก DB
+  try {
+    const row = db.prepare('SELECT role FROM users WHERE id = ?').get(actorId) as { role?: UserRole } | undefined;
+    return row?.role ?? null;
+  } catch {
+    return null;
+  }
+};
+
+/** ✅ helper: admin ห้ามแก้ superadmin (กันหลุดทุก endpoint) */
+const denyIfTargetIsSuperadmin = (targetRole: UserRole, req: Request, res: Response) => {
+  const actorRole = getActorRole(req);
+  if (targetRole === 'superadmin' && actorRole !== 'superadmin') {
+    sendError(res, 'ไม่อนุญาตให้แก้ไข Super Admin', 403);
+    return true;
+  }
+  return false;
+};
 
 /**
  * GET /api/admin/users
@@ -206,18 +237,44 @@ router.put('/:id', (req: Request, res: Response) => {
       return;
     }
 
-    // Check user exists
+    // Check user exists (✅ ต้องรู้ role เพื่อกัน admin แก้ superadmin)
     const user = db
-      .prepare('SELECT id, username FROM users WHERE id = ?')
-      .get(userId) as { id: number; username: string } | undefined;
+      .prepare('SELECT id, username, role, email FROM users WHERE id = ?')
+      .get(userId) as { id: number; username: string; role: UserRole; email: string | null } | undefined;
 
     if (!user) {
       sendError(res, ThaiErrors.USER_NOT_FOUND, 404);
       return;
     }
 
+    // ✅ กัน admin แก้ superadmin
+    if (denyIfTargetIsSuperadmin(user.role, req, res)) return;
+
     const updates: string[] = [];
     const values: (string | number | null)[] = [];
+
+    if (parsed.data.username !== undefined) {
+      const uname = String(parsed.data.username).trim();
+
+      // กันค่าว่างแบบหลุด schema
+      if (uname.length < 3) {
+        sendError(res, ThaiErrors.INVALID_INPUT, 400);
+        return;
+      }
+
+      // กัน username ซ้ำ
+      const existing = db
+        .prepare('SELECT id FROM users WHERE username = ? AND id != ?')
+        .get(uname, userId);
+
+      if (existing) {
+        sendError(res, ThaiErrors.USERNAME_EXISTS, 409);
+        return;
+      }
+
+      updates.push('username = ?');
+      values.push(uname);
+    }
 
     if (parsed.data.email !== undefined) {
       updates.push('email = ?');
@@ -258,6 +315,10 @@ router.put('/:id', (req: Request, res: Response) => {
           sendError(res, 'อีเมลนี้ถูกใช้งานแล้ว', 409);
           return;
         }
+        if (msg.toLowerCase().includes('username')) {
+          sendError(res, ThaiErrors.USERNAME_EXISTS, 409);
+          return;
+        }
       }
 
       console.error('DB error updating user:', dbErr);
@@ -278,6 +339,13 @@ router.put('/:id', (req: Request, res: Response) => {
     } catch (auditErr) {
       console.warn('Audit log failed (ignored):', auditErr);
     }
+
+    // ✅ ถ้าแก้ตัวเอง: sync username ใน session (กัน UI แสดงชื่อเก่า)
+    try {
+      if ((req as any)?.session?.userId === userId && parsed.data.username !== undefined) {
+        (req as any).session.username = String(parsed.data.username).trim();
+      }
+    } catch {}
 
     sendSuccess(res, { message: 'อัปเดตผู้ใช้สำเร็จ' });
   } catch (error) {
@@ -315,6 +383,9 @@ router.post('/:id/roles', (req: Request, res: Response) => {
       sendError(res, ThaiErrors.USER_NOT_FOUND, 404);
       return;
     }
+
+    // ✅ กัน admin แก้ superadmin
+    if (denyIfTargetIsSuperadmin(user.role, req, res)) return;
     
     const oldRole = user.role;
     const newRole = parsed.data.role;
@@ -356,13 +427,16 @@ router.post('/:id/project-access', (req: Request, res: Response) => {
       return;
     }
     
-    const user = db.prepare('SELECT id, username FROM users WHERE id = ?')
-      .get(userId) as { id: number; username: string } | undefined;
+    const user = db.prepare('SELECT id, username, role FROM users WHERE id = ?')
+      .get(userId) as { id: number; username: string; role: UserRole } | undefined;
     
     if (!user) {
       sendError(res, ThaiErrors.USER_NOT_FOUND, 404);
       return;
     }
+
+    // ✅ กัน admin แก้ superadmin
+    if (denyIfTargetIsSuperadmin(user.role, req, res)) return;
     
     const { project_ids } = parsed.data;
     
@@ -438,13 +512,16 @@ router.post('/:id/activate', (req: Request, res: Response) => {
       return;
     }
     
-    const user = db.prepare('SELECT id, username FROM users WHERE id = ?')
-      .get(userId) as { id: number; username: string } | undefined;
+    const user = db.prepare('SELECT id, username, role FROM users WHERE id = ?')
+      .get(userId) as { id: number; username: string; role: UserRole } | undefined;
     
     if (!user) {
       sendError(res, ThaiErrors.USER_NOT_FOUND, 404);
       return;
     }
+
+    // ✅ กัน admin แก้ superadmin
+    if (denyIfTargetIsSuperadmin(user.role, req, res)) return;
     
     db.prepare(`
       UPDATE users SET is_active = ?, updated_at = datetime('now') WHERE id = ?
@@ -484,13 +561,16 @@ router.delete('/:id', (req: Request, res: Response) => {
       return;
     }
     
-    const user = db.prepare('SELECT id, username FROM users WHERE id = ?')
-      .get(userId) as { id: number; username: string } | undefined;
+    const user = db.prepare('SELECT id, username, role FROM users WHERE id = ?')
+      .get(userId) as { id: number; username: string; role: UserRole } | undefined;
     
     if (!user) {
       sendError(res, ThaiErrors.USER_NOT_FOUND, 404);
       return;
     }
+
+    // ✅ กัน admin แก้ superadmin
+    if (denyIfTargetIsSuperadmin(user.role, req, res)) return;
     
     // Soft delete (deactivate instead of hard delete)
     db.prepare(`

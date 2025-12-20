@@ -117,20 +117,7 @@ export function LoginPage() {
               </Button>
             </form>
             
-            {/* Demo accounts hint */}
-            <div className="mt-6 pt-4 border-t border-gray-100">
-              <p className="text-xs text-gray-400 text-center mb-2">บัญชีทดสอบ:</p>
-              <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
-                <div className="bg-gray-50 p-2 rounded">
-                  <p className="font-medium">superadmin</p>
-                  <p className="text-gray-400">superadmin123</p>
-                </div>
-                <div className="bg-gray-50 p-2 rounded">
-                  <p className="font-medium">admin</p>
-                  <p className="text-gray-400">admin123</p>
-                </div>
-              </div>
-            </div>
+            
           </CardContent>
         </Card>
         
