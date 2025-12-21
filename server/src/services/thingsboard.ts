@@ -1,8 +1,7 @@
 /**
  * ThingsBoard API Client
  * Centralized module for all ThingsBoard interactions
- * 
- * Features:
+ * * Features:
  * - JWT authentication with auto-refresh
  * - Request timeout handling
  * - Automatic retry on 401/403
@@ -28,12 +27,12 @@ interface TBTokenCache {
   expiresAt: number;
 }
 
-interface TBTelemetryValue {
+export interface TBTelemetryValue {
   ts: number;
   value: string | number | boolean;
 }
 
-interface TBTelemetryResponse {
+export interface TBTelemetryResponse {
   [key: string]: TBTelemetryValue[];
 }
 
@@ -199,7 +198,7 @@ async function getToken(projectKey: string): Promise<string> {
 /**
  * Clear cached token (force re-login on next request)
  */
-function clearToken(projectKey: string): void {
+export function clearToken(projectKey: string): void {
   tokenCache.delete(projectKey);
 }
 
@@ -276,6 +275,13 @@ async function tbRequest<T>(
 // ============================================================
 // Public API Functions
 // ============================================================
+
+/**
+ * NEW: Get Project Details (Fixes missing export)
+ */
+export function getProject(projectKey: string): Project | undefined {
+  return db.prepare('SELECT * FROM projects WHERE key = ?').get(projectKey) as Project | undefined;
+}
 
 /**
  * Get latest telemetry values
@@ -358,8 +364,9 @@ export async function getAttributes(
 
 /**
  * Send RPC command to device (two-way)
+ * (Renamed from sendRpc to sendRpcCommand to match usage)
  */
-export async function sendRpc(
+export async function sendRpcCommand(
   projectKey: string,
   ghKey: string,
   method: string,
@@ -382,6 +389,9 @@ export async function sendRpc(
     }),
   });
 }
+
+// Alias for compatibility (optional)
+export const sendRpc = sendRpcCommand;
 
 /**
  * Check if device is online
@@ -430,8 +440,10 @@ export const tbService = {
   getLatestTelemetry,
   getTelemetryTimeseries,
   getAttributes,
+  sendRpcCommand, // Updated name
   sendRpc,
   isDeviceOnline,
   testConnection,
   clearToken,
+  getProject, // Added
 };
