@@ -6,6 +6,7 @@ interface AuthContextType extends AuthState {
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
+  refreshUser: () => Promise<void>; // ✅ เพิ่มตัวนี้
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -16,7 +17,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading: true,
     isAuthenticated: false,
   });
-  
+
   const checkAuth = useCallback(async () => {
     try {
       const response = await authApi.me();
@@ -41,24 +42,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     }
   }, []);
-  
+
   useEffect(() => {
     checkAuth();
   }, [checkAuth]);
-  
+
   const login = useCallback(async (username: string, password: string): Promise<boolean> => {
     setState(prev => ({ ...prev, isLoading: true }));
-    
+
     try {
       const response = await authApi.login(username, password);
-      
+
       if (response.success && response.data) {
-        // Set CSRF token from login response
         if (response.data.csrfToken) {
           api.setCsrfToken(response.data.csrfToken);
         }
-        
-        // Get full user info
+
         const meResponse = await authApi.me();
         if (meResponse.success && meResponse.data?.user) {
           setState({
@@ -68,8 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
           return true;
         }
-        
-        // Fallback to login response user
+
         setState({
           user: response.data.user as User,
           isLoading: false,
@@ -94,7 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return false;
     }
   }, []);
-  
+
   const logout = useCallback(async () => {
     try {
       await authApi.logout();
@@ -109,9 +107,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     }
   }, []);
-  
+
+  const refreshUser = useCallback(async () => {
+    await checkAuth();
+  }, [checkAuth]);
+
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, checkAuth }}>
+    <AuthContext.Provider value={{ ...state, login, logout, checkAuth, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

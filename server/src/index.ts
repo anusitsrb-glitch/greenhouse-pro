@@ -5,6 +5,9 @@ import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import rateLimit from 'express-rate-limit';
 
+import path from 'path';
+import { fileURLToPath } from 'url';
+
 import { env, isDev } from './config/env.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
@@ -18,57 +21,49 @@ import reportsRoutes from './routes/reports.js';
 import alertsRoutes from './routes/alerts.js';
 import passwordRoutes from './routes/password.js';
 
-
 // Initialize database
 import './db/connection.js';
 
 const app = express();
 
 // Global error handlers to prevent crash
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
-});
+process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
+process.on('unhandledRejection', (reason, promise) =>
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason)
+);
 
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
-
-// Trust proxy (for reverse proxy like Caddy)
+// Trust proxy (Railway เป็น reverse proxy)
 app.set('trust proxy', 1);
 
 // Security middleware
-app.use(helmet({
-  contentSecurityPolicy: false, // Disable for SPA
-}));
+app.use(helmet({ contentSecurityPolicy: false }));
 
-// CORS configuration
+// CORS
 app.use(cors({
   origin: isDev ? ['http://localhost:5173', 'http://127.0.0.1:5173'] : true,
   credentials: true,
 }));
 
-// Body parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// Cookie parser
 app.use(cookieParser());
 
-// Session configuration
+// Session
 app.use(session({
   secret: env.APP_SESSION_SECRET,
   name: 'greenhouse.sid',
   resave: false,
   saveUninitialized: false,
+  proxy: true,                 // ✅ แนะนำเมื่ออยู่หลัง proxy
   cookie: {
     httpOnly: true,
-    secure: false, // Set to true in production with HTTPS
+    secure: !isDev,            // ✅ Railway เป็น HTTPS → production ควร true
     sameSite: 'lax',
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    maxAge: 24 * 60 * 60 * 1000,
   },
 }));
 
-// Rate limiting - less strict for dev
+// Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: isDev ? 1000 : 100,
@@ -76,10 +71,9 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-
 app.use('/api/', limiter);
 
-// Routes - no CSRF validation for simpler setup
+// ===== API routes =====
 app.use('/api/health', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/password', passwordRoutes);
@@ -89,15 +83,29 @@ app.use('/api/tb', tbRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/alerts', alertsRoutes);
 
-// 404 handler
-app.use(notFoundHandler);
+// ✅ 404 เฉพาะฝั่ง API เท่านั้น
+app.use('/api', notFoundHandler);
 
-// Error handler
+// ===== Serve React build (Production) =====
+if (!isDev) {
+  const clientDist = path.resolve(process.cwd(), 'client', 'dist');
+
+  app.use(express.static(clientDist));
+
+  // SPA fallback
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+}
+
+
+// Error handler ต้องท้ายสุด
 app.use(errorHandler);
 
-// Start server
-const PORT = env.PORT;
-app.listen(PORT, () => {
+// ✅ PORT สำหรับ Railway
+const PORT = Number(process.env.PORT) || env.PORT || 3000;
+
+app.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('════════════════════════════════════════════════════════');
   console.log('🌿 GreenHouse Pro V5 Server');

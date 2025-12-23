@@ -12,6 +12,9 @@ export interface User {
   theme?: string;
   isActive: boolean;
   createdAt: string;
+
+  // ✅ เพิ่มให้ตรงกับ ProfilePage (backend อาจส่งมา หรือไม่ส่งมาก็ได้)
+  lastLoginAt?: string | null;
 }
 
 // Auth context types
@@ -83,13 +86,12 @@ export interface SystemTelemetry {
 // Attributes types
 export interface DeviceAttributes {
   status: string | null;
-  // Relay commands
   fan_1_cmd: boolean;
   fan_2_cmd: boolean;
   valve_2_cmd: boolean;
   pump_1_cmd: boolean;
   light_1_cmd: boolean;
-  // Motor states
+
   motor_1_fw: boolean;
   motor_1_re: boolean;
   motor_2_fw: boolean;
@@ -98,14 +100,14 @@ export interface DeviceAttributes {
   motor_3_re: boolean;
   motor_4_fw: boolean;
   motor_4_re: boolean;
-  // Auto modes
+
   fan_1_auto: boolean;
   fan_2_auto: boolean;
   valve_2_auto: boolean;
   pump_1_auto: boolean;
   light_1_auto: boolean;
   global_motor_auto: boolean;
-  // Timers
+
   fan_1_on: string;
   fan_1_off: string;
   fan_2_on: string;
@@ -120,7 +122,6 @@ export interface DeviceAttributes {
   global_re_time: string;
 }
 
-// Control command types
 export type RelayKey = 'fan_1' | 'fan_2' | 'valve_2' | 'pump_1' | 'light_1';
 export type MotorKey = 'motor_1' | 'motor_2' | 'motor_3' | 'motor_4';
 
@@ -131,7 +132,6 @@ export interface ControlCommand {
   expectedValue: unknown;
 }
 
-// Pending state for controls
 export interface PendingState {
   isPending: boolean;
   startedAt: number | null;
@@ -139,13 +139,12 @@ export interface PendingState {
   expectedValue: unknown;
 }
 
-// Lock reasons
-export type LockReason = 
-  | 'offline' 
-  | 'auto_locked' 
-  | 'motor_auto_locked' 
-  | 'pending' 
-  | 'no_permission' 
+export type LockReason =
+  | 'offline'
+  | 'auto_locked'
+  | 'motor_auto_locked'
+  | 'pending'
+  | 'no_permission'
   | 'developing';
 
 export const LOCK_REASON_MESSAGES: Record<LockReason, string> = {
@@ -157,7 +156,6 @@ export const LOCK_REASON_MESSAGES: Record<LockReason, string> = {
   developing: 'กำลังพัฒนา - ยังไม่มีการผูก ThingsBoard Device (deviceId)',
 };
 
-// Chart types
 export type ChartRange = '1h' | '6h' | '24h' | '7d' | '30d';
 
 export const CHART_RANGE_CONFIG: Record<ChartRange, { label: string; ms: number; interval: number; agg: string }> = {
@@ -170,7 +168,6 @@ export const CHART_RANGE_CONFIG: Record<ChartRange, { label: string; ms: number;
 
 export type ChartMode = 'air' | 'soil' | 'compare';
 
-// Toast types
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
 export interface Toast {

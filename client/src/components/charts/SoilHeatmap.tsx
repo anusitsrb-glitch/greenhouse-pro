@@ -56,6 +56,17 @@ const GRID_LAYOUT = [
   [6, 7, 8, 9, 10],
 ];
 
+function toNumberOrNull(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+  if (typeof raw === 'string') {
+    const n = parseFloat(raw);
+    return Number.isFinite(n) ? n : null;
+  }
+  // boolean หรืออื่นๆ
+  return null;
+}
+
 export function SoilHeatmap({ projectKey, ghKey }: HeatmapProps) {
   const { addToast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
@@ -64,27 +75,30 @@ export function SoilHeatmap({ projectKey, ghKey }: HeatmapProps) {
   const [showSettings, setShowSettings] = useState(false);
   const [customRanges, setCustomRanges] = useState<ColorRange[]>(DEFAULT_MOISTURE_RANGES);
 
-  const currentSensorOption = SENSOR_OPTIONS.find(s => s.key === selectedSensor);
+  const currentSensorOption = SENSOR_OPTIONS.find((s) => s.key === selectedSensor);
 
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // Build keys for all 10 soil points
-      const keys = Array.from({ length: 10 }, (_, i) => `soil${i + 1}_${selectedSensor}`).join(',');
-      
-      const data = await tbApi.getTelemetryLatest(projectKey, ghKey, keys);
+      // ✅ keys ต้องเป็น string[] ไม่ใช่ string
+      const keysArr = Array.from({ length: 10 }, (_, i) => `soil${i + 1}_${selectedSensor}`);
+
+      const data = await tbApi.getLatestTelemetry(projectKey, ghKey, keysArr);
 
       if (data) {
         const newSensorData: Record<number, number | null> = {};
         for (let i = 1; i <= 10; i++) {
           const key = `soil${i}_${selectedSensor}`;
-          const value = data[key]?.[0]?.value;
-          newSensorData[i] = value !== undefined ? parseFloat(value) : null;
+          const raw = data[key]?.[0]?.value;
+          const num = toNumberOrNull(raw);
+          newSensorData[i] = num;
         }
         setSensorData(newSensorData);
+      } else {
+        setSensorData({});
       }
     } catch (error) {
-      addToast({ type: 'error', message: 'ไม่สามารถโหลดข้อมูลได้' });
+      addToast('error', 'ไม่สามารถโหลดข้อมูลได้');
     } finally {
       setIsLoading(false);
     }
@@ -94,36 +108,33 @@ export function SoilHeatmap({ projectKey, ghKey }: HeatmapProps) {
     fetchData();
     const interval = setInterval(fetchData, 60000); // Refresh every minute
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectKey, ghKey, selectedSensor]);
 
   useEffect(() => {
-    const option = SENSOR_OPTIONS.find(s => s.key === selectedSensor);
-    if (option) {
-      setCustomRanges(option.ranges);
-    }
+    const option = SENSOR_OPTIONS.find((s) => s.key === selectedSensor);
+    if (option) setCustomRanges(option.ranges);
   }, [selectedSensor]);
 
   const getColorForValue = (value: number | null): string => {
     if (value === null) return '#e5e7eb'; // Gray for no data
-    
+
     for (const range of customRanges) {
-      if (value >= range.min && value < range.max) {
-        return range.color;
-      }
+      if (value >= range.min && value < range.max) return range.color;
     }
     return customRanges[customRanges.length - 1]?.color || '#e5e7eb';
   };
 
   const getLabelForValue = (value: number | null): string => {
     if (value === null) return 'ไม่มีข้อมูล';
-    
+
     for (const range of customRanges) {
-      if (value >= range.min && value < range.max) {
-        return range.label;
-      }
+      if (value >= range.min && value < range.max) return range.label;
     }
     return customRanges[customRanges.length - 1]?.label || '-';
   };
+
+  const numbers = Object.values(sensorData).filter((v): v is number => v !== null);
 
   return (
     <div className="space-y-4">
@@ -132,7 +143,7 @@ export function SoilHeatmap({ projectKey, ghKey }: HeatmapProps) {
         <div className="flex flex-wrap gap-4 items-center justify-between">
           {/* Sensor Type Selection */}
           <div className="flex flex-wrap gap-2">
-            {SENSOR_OPTIONS.map(option => (
+            {SENSOR_OPTIONS.map((option) => (
               <Button
                 key={option.key}
                 variant={selectedSensor === option.key ? 'primary' : 'outline'}
@@ -162,16 +173,13 @@ export function SoilHeatmap({ projectKey, ghKey }: HeatmapProps) {
           <div className="space-y-2">
             {customRanges.map((range, index) => (
               <div key={index} className="flex items-center gap-3">
-                <div
-                  className="w-6 h-6 rounded"
-                  style={{ backgroundColor: range.color }}
-                />
+                <div className="w-6 h-6 rounded" style={{ backgroundColor: range.color }} />
                 <input
                   type="number"
                   value={range.min}
                   onChange={(e) => {
                     const newRanges = [...customRanges];
-                    newRanges[index].min = parseFloat(e.target.value);
+                    newRanges[index] = { ...newRanges[index], min: parseFloat(e.target.value) };
                     setCustomRanges(newRanges);
                   }}
                   className="w-20 px-2 py-1 border rounded text-sm"
@@ -182,7 +190,7 @@ export function SoilHeatmap({ projectKey, ghKey }: HeatmapProps) {
                   value={range.max}
                   onChange={(e) => {
                     const newRanges = [...customRanges];
-                    newRanges[index].max = parseFloat(e.target.value);
+                    newRanges[index] = { ...newRanges[index], max: parseFloat(e.target.value) };
                     setCustomRanges(newRanges);
                   }}
                   className="w-20 px-2 py-1 border rounded text-sm"
@@ -192,7 +200,7 @@ export function SoilHeatmap({ projectKey, ghKey }: HeatmapProps) {
                   value={range.label}
                   onChange={(e) => {
                     const newRanges = [...customRanges];
-                    newRanges[index].label = e.target.value;
+                    newRanges[index] = { ...newRanges[index], label: e.target.value };
                     setCustomRanges(newRanges);
                   }}
                   className="flex-1 px-2 py-1 border rounded text-sm"
@@ -202,7 +210,7 @@ export function SoilHeatmap({ projectKey, ghKey }: HeatmapProps) {
                   value={range.color}
                   onChange={(e) => {
                     const newRanges = [...customRanges];
-                    newRanges[index].color = e.target.value;
+                    newRanges[index] = { ...newRanges[index], color: e.target.value };
                     setCustomRanges(newRanges);
                   }}
                   className="w-10 h-8 rounded cursor-pointer"
@@ -215,9 +223,7 @@ export function SoilHeatmap({ projectKey, ghKey }: HeatmapProps) {
 
       {/* Heatmap Grid */}
       <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">
-          Heatmap: {currentSensorOption?.name}
-        </h3>
+        <h3 className="text-lg font-semibold mb-4">Heatmap: {currentSensorOption?.name}</h3>
 
         {isLoading ? (
           <div className="h-48 flex items-center justify-center">
@@ -229,8 +235,8 @@ export function SoilHeatmap({ projectKey, ghKey }: HeatmapProps) {
             <div className="flex flex-col gap-3">
               {GRID_LAYOUT.map((row, rowIndex) => (
                 <div key={rowIndex} className="flex gap-3 justify-center">
-                  {row.map(point => {
-                    const value = sensorData[point];
+                  {row.map((point) => {
+                    const value = sensorData[point] ?? null;
                     const color = getColorForValue(value);
                     const label = getLabelForValue(value);
 
@@ -242,9 +248,7 @@ export function SoilHeatmap({ projectKey, ghKey }: HeatmapProps) {
                         title={`จุด ${point}: ${value !== null ? value : '-'} ${currentSensorOption?.unit || ''}`}
                       >
                         <span className="text-xs opacity-80">จุด {point}</span>
-                        <span className="text-2xl font-bold">
-                          {value !== null ? value.toFixed(1) : '-'}
-                        </span>
+                        <span className="text-2xl font-bold">{value !== null ? value.toFixed(1) : '-'}</span>
                         <span className="text-xs">{currentSensorOption?.unit}</span>
                         <span className="text-xs opacity-80">{label}</span>
                       </div>
@@ -258,10 +262,7 @@ export function SoilHeatmap({ projectKey, ghKey }: HeatmapProps) {
             <div className="flex flex-wrap justify-center gap-3 pt-4 border-t">
               {customRanges.map((range, index) => (
                 <div key={index} className="flex items-center gap-2">
-                  <div
-                    className="w-4 h-4 rounded"
-                    style={{ backgroundColor: range.color }}
-                  />
+                  <div className="w-4 h-4 rounded" style={{ backgroundColor: range.color }} />
                   <span className="text-sm text-gray-600">
                     {range.label} ({range.min}-{range.max})
                   </span>
@@ -278,33 +279,21 @@ export function SoilHeatmap({ projectKey, ghKey }: HeatmapProps) {
         <div className="grid grid-cols-4 gap-4 text-center">
           <div>
             <p className="text-sm text-gray-500">ค่าต่ำสุด</p>
-            <p className="text-xl font-bold text-blue-600">
-              {Object.values(sensorData).filter(v => v !== null).length > 0
-                ? Math.min(...Object.values(sensorData).filter((v): v is number => v !== null)).toFixed(1)
-                : '-'}
-            </p>
+            <p className="text-xl font-bold text-blue-600">{numbers.length ? Math.min(...numbers).toFixed(1) : '-'}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">ค่าสูงสุด</p>
-            <p className="text-xl font-bold text-red-600">
-              {Object.values(sensorData).filter(v => v !== null).length > 0
-                ? Math.max(...Object.values(sensorData).filter((v): v is number => v !== null)).toFixed(1)
-                : '-'}
-            </p>
+            <p className="text-xl font-bold text-red-600">{numbers.length ? Math.max(...numbers).toFixed(1) : '-'}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">ค่าเฉลี่ย</p>
             <p className="text-xl font-bold text-green-600">
-              {Object.values(sensorData).filter(v => v !== null).length > 0
-                ? (Object.values(sensorData).filter((v): v is number => v !== null).reduce((a, b) => a + b, 0) / Object.values(sensorData).filter(v => v !== null).length).toFixed(1)
-                : '-'}
+              {numbers.length ? (numbers.reduce((a, b) => a + b, 0) / numbers.length).toFixed(1) : '-'}
             </p>
           </div>
           <div>
             <p className="text-sm text-gray-500">จุดที่มีข้อมูล</p>
-            <p className="text-xl font-bold">
-              {Object.values(sensorData).filter(v => v !== null).length}/10
-            </p>
+            <p className="text-xl font-bold">{numbers.length}/10</p>
           </div>
         </div>
       </Card>

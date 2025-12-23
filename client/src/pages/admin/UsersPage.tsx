@@ -12,6 +12,7 @@ import {
   FolderKanban
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { UserRole } from '@/types';
 
 const ROLE_RANK: Record<string, number> = {
   superadmin: 0,
@@ -30,11 +31,9 @@ export function UsersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // ✅ actor info (ใช้ปิดปุ่มแก้ superadmin สำหรับ admin)
   const [actorRole, setActorRole] = useState<string | null>(null);
   const [actorId, setActorId] = useState<number | null>(null);
 
-  // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [showAccessModal, setShowAccessModal] = useState<AdminUser | null>(null);
@@ -55,7 +54,6 @@ export function UsersPage() {
     }
   };
 
-  // ✅ โหลด me เพื่อรู้ role/id (ถ้าพังไม่เป็นไร UI ยังทำงานเหมือนเดิม)
   useEffect(() => {
     (async () => {
       try {
@@ -135,7 +133,6 @@ export function UsersPage() {
 
   return (
     <AdminLayout title="จัดการผู้ใช้" subtitle="เพิ่ม แก้ไข และจัดการสิทธิ์ผู้ใช้งานระบบ">
-      {/* Actions */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -153,7 +150,6 @@ export function UsersPage() {
         </Button>
       </div>
 
-      {/* Users table */}
       <Card>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -182,9 +178,7 @@ export function UsersPage() {
               ) : (
                 filteredUsers.map((user) => {
                   const lockSuper = isSuperadmin(user.role);
-
                   const actorIsSuper = actorRole === 'superadmin';
-                  // ✅ ปิดปุ่มแก้ superadmin สำหรับ admin (เฉพาะเมื่อรู้ actorRole)
                   const disableEditSuper = lockSuper && actorRole !== null && !actorIsSuper;
 
                   return (
@@ -248,9 +242,9 @@ export function UsersPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => {
-                            if (actorRole === null) return; // หรือโชว์ toast ว่า "กำลังโหลดสิทธิ์..."
+                              if (actorRole === null) return;
                               setEditingUser(user);
-                  }}
+                            }}
                             disabled={disableEditSuper}
                             title={
                               disableEditSuper
@@ -287,7 +281,6 @@ export function UsersPage() {
         </div>
       </Card>
 
-      {/* Create User Modal */}
       {showCreateModal && (
         <CreateUserModal
           onClose={() => setShowCreateModal(false)}
@@ -298,7 +291,6 @@ export function UsersPage() {
         />
       )}
 
-      {/* Edit User Modal */}
       {editingUser && (
         <EditUserModal
           user={editingUser}
@@ -312,7 +304,6 @@ export function UsersPage() {
         />
       )}
 
-      {/* Project Access Modal */}
       {showAccessModal && (
         <ProjectAccessModal
           user={showAccessModal}
@@ -328,11 +319,15 @@ export function UsersPage() {
   );
 }
 
-// Create User Modal Component
 function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const { addToast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    username: string;
+    email: string;
+    password: string;
+    role: UserRole;
+  }>({
     username: '',
     email: '',
     password: '',
@@ -361,7 +356,6 @@ function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
           <h2 className="text-xl font-bold mb-4">เพิ่มผู้ใช้ใหม่</h2>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Username */}
             <div>
               <label htmlFor="create-username" className="block text-sm font-medium text-gray-700 mb-1">
                 ชื่อผู้ใช้ <span className="text-red-600">*</span>
@@ -378,7 +372,6 @@ function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
               </p>
             </div>
 
-            {/* Email */}
             <div>
               <label htmlFor="create-email" className="block text-sm font-medium text-gray-700 mb-1">
                 อีเมล (ไม่บังคับ)
@@ -395,7 +388,6 @@ function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
               </p>
             </div>
 
-            {/* Password */}
             <div>
               <label htmlFor="create-password" className="block text-sm font-medium text-gray-700 mb-1">
                 รหัสผ่าน <span className="text-red-600">*</span>
@@ -413,12 +405,11 @@ function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
               </p>
             </div>
 
-            {/* Role */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">สิทธิ์</label>
               <select
                 value={formData.role}
-                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
                 className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
               >
                 <option value="viewer">ผู้ชม (Viewer)</option>
@@ -445,7 +436,6 @@ function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
   );
 }
 
-// Edit User Modal Component
 function EditUserModal({
   user,
   actorRole,
@@ -463,20 +453,21 @@ function EditUserModal({
   const [isLoading, setIsLoading] = useState(false);
 
   const lockRole = user.role === 'superadmin';
-
-  // ✅ เงื่อนไขสำคัญ: admin ห้ามแก้ superadmin
   const targetIsSuper = user.role === 'superadmin';
   const actorIsSuper = actorRole === 'superadmin';
   const canEditThisUser = !targetIsSuper || actorIsSuper;
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    username: string;
+    email: string;
+    role: UserRole;
+  }>({
     username: user.username,
     email: user.email ?? '',
-    role: user.role,
+    role: user.role as UserRole,
   });
 
   const handleSave = async () => {
-    // ✅ กันไว้ชัด ๆ (แม้เปิด modal ได้จากกรณี actorRole ไม่รู้)
     if (!canEditThisUser) {
       addToast({ type: 'error', message: 'ไม่อนุญาตให้แก้ไข Super Admin' });
       return;
@@ -485,27 +476,21 @@ function EditUserModal({
     setIsLoading(true);
 
     try {
-      // ✅ ส่งเฉพาะสิ่งที่จำเป็นจริง ๆ (กัน zod ฝั่ง backend reject)
       const payload: any = {};
 
-      // --- username: ถ้าไม่แก้ ก็ไม่ต้องส่ง ---
       const usernameTrimmed = (formData.username ?? '').trim();
       const originalUsernameTrimmed = (user.username ?? '').trim();
-
       if (usernameTrimmed !== originalUsernameTrimmed) {
         payload.username = usernameTrimmed;
       }
 
-      // --- email: ถ้าไม่แก้ ก็ไม่ต้องส่ง / ถ้าเป็นค่าว่างให้เป็น null ---
       const emailTrimmed = (formData.email ?? '').trim();
       const originalEmailTrimmed = (user.email ?? '').trim();
-
       if (emailTrimmed !== originalEmailTrimmed) {
         payload.email = emailTrimmed === '' ? null : emailTrimmed;
       }
 
-      // --- role: ส่งได้เฉพาะกรณีไม่ใช่ superadmin และมีการเปลี่ยนจริง ---
-      if (!lockRole && formData.role !== user.role) {
+      if (!lockRole && formData.role !== (user.role as UserRole)) {
         payload.role = formData.role;
       }
 
@@ -518,13 +503,14 @@ function EditUserModal({
       await adminApi.updateUser(user.id, payload);
 
       addToast({ type: 'success', message: 'บันทึกข้อมูลสำเร็จ' });
-      // ✅ ถ้าแก้ "ตัวเอง" และมีการเปลี่ยน username → รีโหลดเพื่อให้ทุกส่วนอัปเดตทันที
+
       const changedUsername = typeof payload.username === 'string' && payload.username.trim().length > 0;
       if (changedUsername && actorId != null && actorId === user.id) {
-        onSuccess(); // ปิด modal + refresh ตารางผู้ใช้
-        setTimeout(() => window.location.reload(), 200); // รีโหลดเบาๆ หลัง UI ปิด modal
+        onSuccess();
+        setTimeout(() => window.location.reload(), 200);
         return;
       }
+
       onSuccess();
 
     } catch (error) {
@@ -556,7 +542,6 @@ function EditUserModal({
           )}
 
           <div className="space-y-4">
-            {/* Username */}
             <div>
               <label htmlFor="edit-username" className="block text-sm font-medium text-gray-700 mb-1">
                 ชื่อผู้ใช้ (Username)
@@ -573,7 +558,6 @@ function EditUserModal({
               </p>
             </div>
 
-            {/* Email */}
             <div>
               <label htmlFor="edit-email" className="block text-sm font-medium text-gray-700 mb-1">
                 อีเมล (ไม่บังคับ)
@@ -596,7 +580,7 @@ function EditUserModal({
                 <label className="block text-sm font-medium text-gray-700 mb-1">สิทธิ์</label>
                 <select
                   value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
                   className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50"
                   disabled={!canEditThisUser}
                 >
@@ -632,8 +616,7 @@ function EditUserModal({
   );
 }
 
-
-// Project Access Modal Component
+/* ProjectAccessModal เหมือนเดิมของคุณ (ไม่เกี่ยวกับ error TS ที่เหลือ) */
 function ProjectAccessModal({
   user,
   projects,
@@ -653,7 +636,6 @@ function ProjectAccessModal({
 
   const allAccess = isAllAccessRole(user.role);
 
-  // โหลด user detail (ที่มี projects array + id) ก่อน
   useEffect(() => {
     let alive = true;
 
@@ -661,14 +643,12 @@ function ProjectAccessModal({
       try {
         setIsLoadingAccess(true);
 
-        // ถ้าเป็น admin/superadmin ไม่ต้องโหลดสิทธิ์รายโปรเจกต์
         if (allAccess) {
           if (alive) setSelectedIds([]);
           return;
         }
 
         const detail = await adminApi.getUser(user.id);
-
         const u = (detail as any)?.user ?? detail;
         const accessProjects = u?.projects ?? u?.projectAccess ?? [];
 

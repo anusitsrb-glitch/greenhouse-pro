@@ -46,14 +46,20 @@ interface ReportData {
   generatedAt: Date;
 }
 
+type TbPoint = { ts: number; value: number | string };
+type TbSeries = Record<string, TbPoint[]>;
+
 /**
  * Get period in milliseconds
  */
 function getPeriodMs(period: '1d' | '7d' | '30d'): number {
   switch (period) {
-    case '1d': return 24 * 60 * 60 * 1000;
-    case '7d': return 7 * 24 * 60 * 60 * 1000;
-    case '30d': return 30 * 24 * 60 * 60 * 1000;
+    case '1d':
+      return 24 * 60 * 60 * 1000;
+    case '7d':
+      return 7 * 24 * 60 * 60 * 1000;
+    case '30d':
+      return 30 * 24 * 60 * 60 * 1000;
   }
 }
 
@@ -62,16 +68,19 @@ function getPeriodMs(period: '1d' | '7d' | '30d'): number {
  */
 function getPeriodLabel(period: '1d' | '7d' | '30d'): string {
   switch (period) {
-    case '1d': return 'รายวัน (24 ชั่วโมง)';
-    case '7d': return 'รายสัปดาห์ (7 วัน)';
-    case '30d': return 'รายเดือน (30 วัน)';
+    case '1d':
+      return 'รายวัน (24 ชั่วโมง)';
+    case '7d':
+      return 'รายสัปดาห์ (7 วัน)';
+    case '30d':
+      return 'รายเดือน (30 วัน)';
   }
 }
 
 /**
  * Calculate statistics from telemetry data
  */
-function calculateStats(values: { ts: number; value: number }[]): {
+function calculateStats(values: TbPoint[]): {
   avg: number | null;
   min: number | null;
   max: number | null;
@@ -80,7 +89,9 @@ function calculateStats(values: { ts: number; value: number }[]): {
     return { avg: null, min: null, max: null };
   }
 
-  const nums = values.map(v => typeof v.value === 'number' ? v.value : parseFloat(String(v.value))).filter(n => !isNaN(n));
+  const nums = values
+    .map((v) => (typeof v.value === 'number' ? v.value : parseFloat(String(v.value))))
+    .filter((n) => !Number.isNaN(n));
 
   if (nums.length === 0) {
     return { avg: null, min: null, max: null };
@@ -100,15 +111,23 @@ export async function fetchReportData(options: ReportOptions): Promise<ReportDat
   const { projectKey, ghKey, period } = options;
 
   // Get project and greenhouse info
-  const projectInfo = db.prepare(`
+  const projectInfo = db
+    .prepare(
+      `
     SELECT name_th FROM projects WHERE key = ?
-  `).get(projectKey) as { name_th: string } | undefined;
+  `
+    )
+    .get(projectKey) as { name_th: string } | undefined;
 
-  const ghInfo = db.prepare(`
+  const ghInfo = db
+    .prepare(
+      `
     SELECT g.name_th FROM greenhouses g
     JOIN projects p ON g.project_id = p.id
     WHERE p.key = ? AND g.gh_key = ?
-  `).get(projectKey, ghKey) as { name_th: string } | undefined;
+  `
+    )
+    .get(projectKey, ghKey) as { name_th: string } | undefined;
 
   if (!projectInfo || !ghInfo) {
     throw new Error('ไม่พบข้อมูลโปรเจกต์หรือโรงเรือน');
@@ -118,7 +137,7 @@ export async function fetchReportData(options: ReportOptions): Promise<ReportDat
   const startTs = endTs - getPeriodMs(period);
 
   // Fetch air telemetry
-  const airData = await tbService.getTelemetryTimeseries(
+  const airData = ((await tbService.getTelemetryTimeseries(
     projectKey,
     ghKey,
     AIR_TELEMETRY_KEYS,
@@ -127,15 +146,15 @@ export async function fetchReportData(options: ReportOptions): Promise<ReportDat
     undefined,
     'NONE',
     10000
-  );
+  )) ?? {}) as TbSeries;
 
-  // Fetch soil telemetry for node 1 (representative)
+  // Fetch soil telemetry (moisture only) for nodes 1..10
   const soilNodes: { node: number; avg: number | null; min: number | null; max: number | null }[] = [];
 
   for (let i = 1; i <= 10; i++) {
     try {
       const soilKeys = getSoilKeysArray(i).slice(0, 1); // Just moisture
-      const soilData = await tbService.getTelemetryTimeseries(
+      const soilData = ((await tbService.getTelemetryTimeseries(
         projectKey,
         ghKey,
         soilKeys,
@@ -144,10 +163,10 @@ export async function fetchReportData(options: ReportOptions): Promise<ReportDat
         undefined,
         'NONE',
         10000
-      );
+      )) ?? {}) as TbSeries;
 
       const moistureKey = `soil${i}_moisture`;
-      const stats = calculateStats(soilData[moistureKey] || []);
+      const stats = calculateStats(soilData[moistureKey] ?? []);
       soilNodes.push({ node: i, ...stats });
     } catch {
       soilNodes.push({ node: i, avg: null, min: null, max: null });
@@ -155,10 +174,10 @@ export async function fetchReportData(options: ReportOptions): Promise<ReportDat
   }
 
   // Calculate summary statistics
-  const tempStats = calculateStats(airData['air_temp'] || []);
-  const humidityStats = calculateStats(airData['air_humidity'] || []);
-  const co2Stats = calculateStats(airData['air_co2'] || []);
-  const lightStats = calculateStats(airData['air_light'] || []);
+  const tempStats = calculateStats(airData['air_temp'] ?? []);
+  const humidityStats = calculateStats(airData['air_humidity'] ?? []);
+  const co2Stats = calculateStats(airData['air_co2'] ?? []);
+  const lightStats = calculateStats(airData['air_light'] ?? []);
 
   return {
     project: {
@@ -209,9 +228,6 @@ export async function generatePdfReport(options: ReportOptions): Promise<Buffer>
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    // Register Thai font (use built-in Helvetica for now)
-    // For proper Thai support, you'd need to embed a Thai font
-
     // Header
     doc.fontSize(24).text('GreenHouse Pro', { align: 'center' });
     doc.fontSize(16).text('รายงานข้อมูลโรงเรือน', { align: 'center' });
@@ -257,7 +273,8 @@ export async function generatePdfReport(options: ReportOptions): Promise<Buffer>
     // Table header
     const tableTop = doc.y;
     const tableLeft = 50;
-    const colWidths = [80, 100, 100, 100];
+    const colWidths: [number, number, number, number] = [80, 100, 100, 100];
+
 
     doc.text('จุดที่', tableLeft, tableTop);
     doc.text('เฉลี่ย (%)', tableLeft + colWidths[0], tableTop);
@@ -291,12 +308,8 @@ export async function generatePdfReport(options: ReportOptions): Promise<Buffer>
 /**
  * Generate report filename
  */
-export function getReportFilename(
-  projectKey: string,
-  ghKey: string,
-  period: '1d' | '7d' | '30d'
-): string {
-  const date = new Date().toISOString().split('T')[0];
+export function getReportFilename(projectKey: string, ghKey: string, period: '1d' | '7d' | '30d'): string {
+  const date = new Date().toISOString().slice(0, 10);
   return `greenhouse-report-${projectKey}-${ghKey}-${period}-${date}.pdf`;
 }
 

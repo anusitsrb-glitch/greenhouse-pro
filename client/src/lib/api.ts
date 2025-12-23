@@ -18,7 +18,7 @@ class ApiClient {
    * Fetch CSRF token
    */
   async getCsrfToken(): Promise<string> {
-    if (this.csrfToken) return this.csrfToken;
+    if (this.csrfToken) return this.csrfToken ?? '';
 
     try {
       const response = await fetch(`${API_BASE}/auth/csrf`, {
@@ -28,7 +28,7 @@ class ApiClient {
       
       if (data.success && data.data?.csrfToken) {
         this.csrfToken = data.data.csrfToken;
-        return this.csrfToken;
+        return this.csrfToken ?? '';
       }
     } catch (e) {
       console.error('Failed to get CSRF token:', e);

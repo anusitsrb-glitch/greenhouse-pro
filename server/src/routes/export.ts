@@ -13,10 +13,26 @@ import ExcelJS from 'exceljs';
 
 const router = Router();
 
+type TelemetryValue = { ts: number; value: string | number | boolean };
+type TelemetryMap = Record<string, TelemetryValue[]>;
+
+function normalizeValue(v: string | number | boolean): string | number | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v === 'boolean') return v ? 1 : 0;
+
+  const s = String(v).trim();
+  if (s === '') return null;
+
+  const n = Number(s);
+  if (Number.isFinite(n)) return n;
+
+  return s; // non-numeric string -> keep as string
+}
+
 /**
  * Helper: Convert telemetry data to rows
  */
-function telemetryToRows(data: Record<string, Array<{ ts: number; value: string }>>, keys: string[]) {
+function telemetryToRows(data: TelemetryMap, keys: string[]) {
   // Get all unique timestamps
   const timestamps = new Set<number>();
   for (const key of keys) {
@@ -37,7 +53,7 @@ function telemetryToRows(data: Record<string, Array<{ ts: number; value: string 
 
     for (const key of keys) {
       const item = data[key]?.find(d => d.ts === ts);
-      row[key] = item ? parseFloat(item.value) : null;
+      row[key] = item ? normalizeValue(item.value) : null;
     }
 
     rows.push(row);
@@ -81,7 +97,8 @@ router.post('/telemetry/csv', requireAuth, async (req: Request, res: Response) =
     const start = startTime || Date.now() - 24 * 60 * 60 * 1000; // Default: 24 hours
     const end = endTime || Date.now();
 
-    const data = await getTelemetryTimeseries(project, greenhouse.tb_device_id, keys.join(','), start, end);
+    // ✅ FIX: signature is (projectKey, ghKey, keys[], start, end, ...)
+    const data = await getTelemetryTimeseries(projectKey, ghKey, keys, start, end);
 
     if (!data) {
       sendError(res, 'ไม่สามารถดึงข้อมูลได้', 500);
@@ -89,7 +106,7 @@ router.post('/telemetry/csv', requireAuth, async (req: Request, res: Response) =
     }
 
     // Convert to rows
-    const rows = telemetryToRows(data, keys);
+    const rows = telemetryToRows(data as unknown as TelemetryMap, keys);
 
     // Generate CSV
     const headers = ['Timestamp', 'Timestamp (Local)', ...keys];
@@ -99,7 +116,7 @@ router.post('/telemetry/csv', requireAuth, async (req: Request, res: Response) =
       const values = [
         row.timestamp,
         `"${row.timestamp_local}"`,
-        ...keys.map(k => row[k] ?? ''),
+        ...keys.map(k => (row[k] ?? '')),
       ];
       csvRows.push(values.join(','));
     }
@@ -165,7 +182,8 @@ router.post('/telemetry/excel', requireAuth, async (req: Request, res: Response)
     const start = startTime || Date.now() - 24 * 60 * 60 * 1000;
     const end = endTime || Date.now();
 
-    const data = await getTelemetryTimeseries(project, greenhouse.tb_device_id, keys.join(','), start, end);
+    // ✅ FIX: signature is (projectKey, ghKey, keys[], start, end, ...)
+    const data = await getTelemetryTimeseries(projectKey, ghKey, keys, start, end);
 
     if (!data) {
       sendError(res, 'ไม่สามารถดึงข้อมูลได้', 500);
@@ -173,7 +191,7 @@ router.post('/telemetry/excel', requireAuth, async (req: Request, res: Response)
     }
 
     // Convert to rows
-    const rows = telemetryToRows(data, keys);
+    const rows = telemetryToRows(data as unknown as TelemetryMap, keys);
 
     // Create Excel workbook
     const workbook = new ExcelJS.Workbook();

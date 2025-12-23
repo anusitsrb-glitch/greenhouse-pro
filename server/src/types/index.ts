@@ -80,10 +80,10 @@ export interface AppSetting {
 // Session types
 declare module 'express-session' {
   interface SessionData {
-    userId: number;
-    username: string;
-    role: UserRole;
-    csrfToken: string;
+    userId?: number;
+    username?: string;
+    role?: UserRole;
+    csrfToken?: string;
   }
 }
 
@@ -103,7 +103,7 @@ export interface TBAuthResponse {
 
 export interface TBTelemetryValue {
   ts: number;
-  value: string;
+  value: string | number | boolean; // ✅ match services/thingsboard.ts
 }
 
 export interface TBTelemetryResponse {

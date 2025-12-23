@@ -30,7 +30,9 @@ const HEALTH_CONFIG = {
   good: { label: 'ดี', color: 'bg-blue-100 text-blue-700', icon: '😊' },
   fair: { label: 'ปานกลาง', color: 'bg-yellow-100 text-yellow-700', icon: '😐' },
   poor: { label: 'แย่', color: 'bg-red-100 text-red-700', icon: '😟' },
-};
+} as const;
+
+type HealthStatus = keyof typeof HEALTH_CONFIG;
 
 export function GrowthRecordsPage() {
   const { addToast } = useToast();
@@ -62,8 +64,11 @@ export function GrowthRecordsPage() {
     try {
       const response = await api.get<{ records: GrowthRecord[] }>(`/agriculture/crops/${selectedCrop}/growth`);
       if (response.success && response.data) setRecords(response.data.records);
-    } catch { addToast({ type: 'error', message: 'ไม่สามารถโหลดข้อมูลได้' }); }
-    finally { setIsLoading(false); }
+    } catch {
+      addToast({ type: 'error', message: 'ไม่สามารถโหลดข้อมูลได้' });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleDelete = async (record: GrowthRecord) => {
@@ -72,18 +77,24 @@ export function GrowthRecordsPage() {
       await api.delete(`/agriculture/growth/${record.id}`);
       addToast({ type: 'success', message: 'ลบสำเร็จ' });
       fetchRecords();
-    } catch { addToast({ type: 'error', message: 'เกิดข้อผิดพลาด' }); }
+    } catch {
+      addToast({ type: 'error', message: 'เกิดข้อผิดพลาด' });
+    }
   };
 
-  // Calculate growth trend
   const getGrowthTrend = () => {
     if (records.length < 2) return null;
-    const sorted = [...records].sort((a, b) => new Date(a.record_date).getTime() - new Date(b.record_date).getTime());
+    const sorted = [...records].sort(
+      (a, b) => new Date(a.record_date).getTime() - new Date(b.record_date).getTime()
+    );
     const first = sorted[0];
     const last = sorted[sorted.length - 1];
     if (first.height && last.height) {
       const growth = last.height - first.height;
-      const days = Math.ceil((new Date(last.record_date).getTime() - new Date(first.record_date).getTime()) / (1000 * 60 * 60 * 24));
+      const days = Math.ceil(
+        (new Date(last.record_date).getTime() - new Date(first.record_date).getTime()) /
+          (1000 * 60 * 60 * 24)
+      );
       return { growth, days, perDay: days > 0 ? (growth / days).toFixed(2) : 0 };
     }
     return null;
@@ -93,7 +104,6 @@ export function GrowthRecordsPage() {
 
   return (
     <PageContainer title="บันทึกการเติบโต" subtitle="ติดตามการเจริญเติบโตของพืช">
-      {/* Crop Selection */}
       <div className="flex flex-wrap gap-4 mb-6">
         <div className="flex-1 min-w-64">
           <label className="block text-sm font-medium text-gray-700 mb-1">เลือกพืช</label>
@@ -121,7 +131,6 @@ export function GrowthRecordsPage() {
         <Card><div className="p-8 text-center text-gray-500">กรุณาเลือกพืช</div></Card>
       ) : (
         <>
-          {/* Growth Trend Summary */}
           {trend && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <Card className="p-4">
@@ -160,7 +169,6 @@ export function GrowthRecordsPage() {
             </div>
           )}
 
-          {/* Records List */}
           <Card>
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -219,7 +227,6 @@ export function GrowthRecordsPage() {
         </>
       )}
 
-      {/* Modal */}
       {showModal && (
         <GrowthModal
           cropId={selectedCrop}
@@ -240,11 +247,19 @@ function GrowthModal({ cropId, record, onClose, onSuccess }: {
 }) {
   const { addToast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [form, setForm] = useState({
+
+  const [form, setForm] = useState<{
+    record_date: string;
+    height: string | number;
+    leaf_count: string | number;
+    health_status: HealthStatus;
+    notes: string;
+    photo_url: string;
+  }>({
     record_date: record?.record_date || new Date().toISOString().split('T')[0],
-    height: record?.height || '',
-    leaf_count: record?.leaf_count || '',
-    health_status: record?.health_status || 'good',
+    height: record?.height ?? '',
+    leaf_count: record?.leaf_count ?? '',
+    health_status: (record?.health_status as HealthStatus) || 'good',
     notes: record?.notes || '',
     photo_url: record?.photo_url || '',
   });
@@ -297,6 +312,7 @@ function GrowthModal({ cropId, record, onClose, onSuccess }: {
                 placeholder="เช่น 8"
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">สุขภาพ</label>
               <div className="grid grid-cols-4 gap-2">
@@ -304,7 +320,7 @@ function GrowthModal({ cropId, record, onClose, onSuccess }: {
                   <button
                     key={key}
                     type="button"
-                    onClick={() => setForm({ ...form, health_status: key })}
+                    onClick={() => setForm({ ...form, health_status: key as HealthStatus })}
                     className={`p-2 rounded-lg border text-center transition-colors ${
                       form.health_status === key ? 'border-primary bg-primary/10' : 'border-gray-200'
                     }`}
@@ -315,6 +331,7 @@ function GrowthModal({ cropId, record, onClose, onSuccess }: {
                 ))}
               </div>
             </div>
+
             <Input
               label="URL รูปภาพ"
               value={form.photo_url}

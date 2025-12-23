@@ -206,7 +206,7 @@ router.post('/scenes/:projectKey/:ghKey/:id/execute', requireAdmin, async (req: 
 
     const actions = JSON.parse(scene.actions || '[]');
 
-    // Get ThingsBoard service and execute actions
+    // Ensure project exists (optional but keeps old behavior)
     const { sendRpcCommand, getProject } = await import('../../services/thingsboard.js');
     const project = getProject(projectKey);
     if (!project) { sendError(res, 'ไม่พบโปรเจกต์', 404); return; }
@@ -222,13 +222,23 @@ router.post('/scenes/:projectKey/:ghKey/:id/execute', requireAdmin, async (req: 
     // Execute all actions
     for (const action of actions) {
       const method = `set${action.control_key.charAt(0).toUpperCase() + action.control_key.slice(1)}`;
-      await sendRpcCommand(project, greenhouse.tb_device_id, method, { value: action.action === 'on' });
+
+      // ✅ FIX: sendRpcCommand expects (projectKey, ghKey, method, params)
+      await sendRpcCommand(projectKey, ghKey, method, { value: action.action === 'on' });
 
       // Log to control history
       db.prepare(`
         INSERT INTO control_history (greenhouse_id, control_key, control_name, action, value, source, source_id, user_id)
         VALUES (?, ?, ?, ?, ?, 'scene', ?, ?)
-      `).run(scene.greenhouse_id, action.control_key, action.control_key, action.action, action.action === 'on' ? '1' : '0', scene.id, req.session.userId);
+      `).run(
+        scene.greenhouse_id,
+        action.control_key,
+        action.control_key,
+        action.action,
+        action.action === 'on' ? '1' : '0',
+        scene.id,
+        req.session.userId
+      );
     }
 
     logAudit({ userId: req.session.userId ?? null, action: 'SCENE_EXECUTED', projectKey, ghKey, detail: { scene_id: id, scene_name: scene.name } });

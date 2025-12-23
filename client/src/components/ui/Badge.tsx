@@ -1,12 +1,37 @@
 import { HTMLAttributes, forwardRef } from 'react';
 import { cn } from '@/lib/utils';
 
+export type BadgeVariant =
+  | 'success'
+  | 'warning'
+  | 'danger'
+  | 'info'
+  | 'default'
+  // ✅ aliases ที่หน้าเพจใช้
+  | 'destructive'
+  | 'primary'
+  | 'secondary'
+  | 'purple'
+  | 'error';
+
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
-  variant?: 'success' | 'warning' | 'danger' | 'info' | 'default';
+  variant?: BadgeVariant;
 }
 
 const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
   ({ className, variant = 'default', ...props }, ref) => {
+    // ✅ map alias → variant หลัก (จะได้ไม่ต้องทำสีเพิ่มเยอะ)
+    const normalized: Exclude<BadgeVariant, 'destructive' | 'primary' | 'secondary' | 'purple' | 'error'> =
+      variant === 'destructive' || variant === 'error'
+        ? 'danger'
+        : variant === 'primary'
+          ? 'info'
+          : variant === 'secondary'
+            ? 'default'
+            : variant === 'purple'
+              ? 'info'
+              : variant;
+
     const variants = {
       success: 'bg-green-100 text-green-800',
       warning: 'bg-yellow-100 text-yellow-800',
@@ -14,13 +39,13 @@ const Badge = forwardRef<HTMLSpanElement, BadgeProps>(
       info: 'bg-blue-100 text-blue-800',
       default: 'bg-gray-100 text-gray-800',
     };
-    
+
     return (
       <span
         ref={ref}
         className={cn(
           'inline-flex items-center px-3 py-1 rounded-full text-sm font-medium',
-          variants[variant],
+          variants[normalized],
           className
         )}
         {...props}
