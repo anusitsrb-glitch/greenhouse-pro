@@ -61,7 +61,7 @@ app.use(
     proxy: true,
     cookie: {
       httpOnly: true,
-      secure: !isDev,
+      secure: !isDev, // production ควร true
       sameSite: 'lax',
       maxAge: 24 * 60 * 60 * 1000,
     },
@@ -93,46 +93,32 @@ app.use('/api', notFoundHandler);
 
 // ===== Serve React build (Production) =====
 if (!isDev) {
-  // ทำ __dirname สำหรับ ESModules
+  // ทำให้ path ชัวร์: อิงจากตำแหน่งไฟล์ server/dist/index.js
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
 
-  // ✅ หา client/dist แบบทนทาน (รองรับหลาย working directory)
-  const candidates = [
-    // กรณี Railway ทำงานที่ repo root: /app
-    path.resolve(process.cwd(), 'client', 'dist'),
-    // กรณี start จาก /app/server
-    path.resolve(process.cwd(), '..', 'client', 'dist'),
-    // อิงจากตำแหน่งไฟล์จริง: server/dist/index.js -> ../../client/dist
-    path.resolve(__dirname, '..', '..', 'client', 'dist'),
-  ];
+  // dist/index.js อยู่ที่ /app/server/dist/index.js
+  // ดังนั้น ../../client/dist = /app/client/dist
+  const clientDist = path.resolve(__dirname, '../../client/dist');
+  const indexHtml = path.join(clientDist, 'index.html');
 
-  const clientDist = candidates.find((p) => fs.existsSync(path.join(p, 'index.html')));
+  console.log('📦 Static clientDist:', clientDist);
+  console.log('📦 index.html exists:', fs.existsSync(indexHtml));
 
-  console.log('[static] isDev:', isDev);
-  console.log('[static] candidates:', candidates);
-  console.log('[static] selected:', clientDist || '(NOT FOUND)');
-
-  // กัน favicon ขอแล้วไป 500 ง่าย ๆ
+  // กัน favicon 500 (ถ้าไม่มีใน dist ก็ไม่ควร 500)
   app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
-  if (clientDist) {
+  if (fs.existsSync(indexHtml)) {
     app.use(express.static(clientDist));
 
     // SPA fallback
     app.get('*', (_req, res) => {
-      res.sendFile(path.join(clientDist, 'index.html'));
+      res.sendFile(indexHtml);
     });
   } else {
-    // ถ้าไม่มี client build จริง ๆ ให้บอกชัด ๆ (ไม่ใช่ 500 งง ๆ)
+    // ถ้า build client ไม่สำเร็จ จะได้รู้ทันทีจากหน้าเว็บ + log ไม่ใช่ 500 งงๆ
     app.get('*', (_req, res) => {
-      res
-        .status(503)
-        .json({
-          success: false,
-          error:
-            'Frontend build ไม่พบ (client/dist/index.html). ตรวจ Root Directory/Build Command ให้สร้าง client/dist ก่อน',
-        });
+      res.status(500).send('Client build not found. Please build client to /client/dist.');
     });
   }
 }
