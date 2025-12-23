@@ -10,6 +10,28 @@ import type { UserRole } from '../types/index.js';
 
 const router = Router();
 
+// ✅ กันพัง: สร้างตาราง users ขั้นต่ำให้แน่ใจว่า query ไม่ล้ม
+function ensureUsersTable() {
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'user',
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+    `);
+  } catch (e) {
+    // ถ้าสร้างตารางไม่ได้จริง ๆ ให้ log ไว้ (แต่ไม่ throw เพื่อไม่ให้ route ล้มแบบเงียบ)
+    console.error('[DB] ensureUsersTable failed:', e);
+  }
+}
+
 // Validation schemas
 const loginSchema = z.object({
   username: z.string().min(1),
@@ -43,6 +65,9 @@ router.get('/csrf', (req: Request, res: Response) => {
  */
 router.post('/login', async (req: Request, res: Response) => {
   try {
+    // ✅ กันพัง: ถ้า DB ยังไม่ init หรือเพิ่งสร้างไฟล์ใหม่ จะไม่เจอ "no such table"
+    ensureUsersTable();
+
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
       sendError(res, 'กรุณากรอก Username และ Password', 400);
@@ -156,6 +181,9 @@ router.post('/logout', requireAuth, (req: Request, res: Response) => {
  * Get current user info
  */
 router.get('/me', requireAuth, (req: Request, res: Response) => {
+  // ✅ กันพัง: บางเคส DB ใหม่ / schema ยังไม่มา จะทำให้ route ล้ม
+  ensureUsersTable();
+
   const user = db.prepare(`
     SELECT id, username, email, role, full_name, phone, language, theme, is_active, created_at
     FROM users WHERE id = ?
@@ -190,6 +218,8 @@ router.get('/me', requireAuth, (req: Request, res: Response) => {
  */
 router.post('/change-password', requireAuth, async (req: Request, res: Response) => {
   try {
+    ensureUsersTable();
+
     const parsed = changePasswordSchema.safeParse(req.body);
     if (!parsed.success) {
       sendError(res, 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร', 400);
@@ -234,6 +264,8 @@ router.post('/change-password', requireAuth, async (req: Request, res: Response)
  */
 router.post('/admin-reset-password', requireAdmin, async (req: Request, res: Response) => {
   try {
+    ensureUsersTable();
+
     const parsed = adminResetPasswordSchema.safeParse(req.body);
     if (!parsed.success) {
       sendError(res, ThaiErrors.INVALID_INPUT, 400);

@@ -24,6 +24,7 @@
     "express": "^4.21.0",
     "express-rate-limit": "^7.4.0",
     "express-session": "^1.18.0",
+    "greenhouse-pro": "file:..",
     "helmet": "^7.1.0",
     "node-fetch": "^3.3.2",
     "pdfkit": "^0.15.0",
