@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import rateLimit from 'express-rate-limit';
 
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -26,6 +27,10 @@ import './db/connection.js';
 
 const app = express();
 
+// ===== Path helpers (สำคัญมากสำหรับ production) =====
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // Global error handlers to prevent crash
 process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
 process.on('unhandledRejection', (reason, promise) =>
@@ -39,29 +44,33 @@ app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false }));
 
 // CORS
-app.use(cors({
-  origin: isDev ? ['http://localhost:5173', 'http://127.0.0.1:5173'] : true,
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: isDev ? ['http://localhost:5173', 'http://127.0.0.1:5173'] : true,
+    credentials: true,
+  })
+);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // Session
-app.use(session({
-  secret: env.APP_SESSION_SECRET,
-  name: 'greenhouse.sid',
-  resave: false,
-  saveUninitialized: false,
-  proxy: true,                 // ✅ แนะนำเมื่ออยู่หลัง proxy
-  cookie: {
-    httpOnly: true,
-    secure: !isDev,            // ✅ Railway เป็น HTTPS → production ควร true
-    sameSite: 'lax',
-    maxAge: 24 * 60 * 60 * 1000,
-  },
-}));
+app.use(
+  session({
+    secret: env.APP_SESSION_SECRET,
+    name: 'greenhouse.sid',
+    resave: false,
+    saveUninitialized: false,
+    proxy: true, // ✅ แนะนำเมื่ออยู่หลัง proxy
+    cookie: {
+      httpOnly: true,
+      secure: !isDev, // ✅ production (Railway https) ควร true
+      sameSite: 'lax',
+      maxAge: 24 * 60 * 60 * 1000,
+    },
+  })
+);
 
 // Rate limiting
 const limiter = rateLimit({
@@ -88,16 +97,31 @@ app.use('/api', notFoundHandler);
 
 // ===== Serve React build (Production) =====
 if (!isDev) {
-  const clientDist = path.resolve(process.cwd(), 'client', 'dist');
+  /**
+   * ปัญหาเดิม:
+   * - ใช้ process.cwd() แล้วใน Railway บางครั้ง cwd ไม่ใช่ root ทำให้หา /client/dist ไม่เจอ
+   *
+   * วิธีแก้:
+   * - อิงจากตำแหน่งไฟล์นี้จริง ๆ (server/dist/...)
+   * - แล้วไล่ไปหา ../../client/dist
+   */
+  const clientDist = path.resolve(__dirname, '../../client/dist');
+  const indexHtml = path.join(clientDist, 'index.html');
 
-  app.use(express.static(clientDist));
+  if (fs.existsSync(indexHtml)) {
+    app.use(express.static(clientDist));
 
-  // SPA fallback
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(clientDist, 'index.html'));
-  });
+    // SPA fallback
+    app.get('*', (_req, res) => {
+      res.sendFile(indexHtml);
+    });
+
+    console.log('✅ Serving React build from:', clientDist);
+  } else {
+    console.warn('⚠️ React build not found:', indexHtml);
+    console.warn('⚠️ Fix Railway Build Command to build client and include dist in deploy.');
+  }
 }
-
 
 // Error handler ต้องท้ายสุด
 app.use(errorHandler);
