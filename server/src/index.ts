@@ -5,8 +5,8 @@ import cookieParser from 'cookie-parser';
 import session from 'express-session';
 import rateLimit from 'express-rate-limit';
 
-import fs from 'fs';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 import { env, isDev } from './config/env.js';
@@ -26,10 +26,6 @@ import passwordRoutes from './routes/password.js';
 import './db/connection.js';
 
 const app = express();
-
-// ===== Path helpers (สำคัญมากสำหรับ production) =====
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Global error handlers to prevent crash
 process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
@@ -62,10 +58,10 @@ app.use(
     name: 'greenhouse.sid',
     resave: false,
     saveUninitialized: false,
-    proxy: true, // ✅ แนะนำเมื่ออยู่หลัง proxy
+    proxy: true,
     cookie: {
       httpOnly: true,
-      secure: !isDev, // ✅ production (Railway https) ควร true
+      secure: !isDev,
       sameSite: 'lax',
       maxAge: 24 * 60 * 60 * 1000,
     },
@@ -97,29 +93,47 @@ app.use('/api', notFoundHandler);
 
 // ===== Serve React build (Production) =====
 if (!isDev) {
-  /**
-   * ปัญหาเดิม:
-   * - ใช้ process.cwd() แล้วใน Railway บางครั้ง cwd ไม่ใช่ root ทำให้หา /client/dist ไม่เจอ
-   *
-   * วิธีแก้:
-   * - อิงจากตำแหน่งไฟล์นี้จริง ๆ (server/dist/...)
-   * - แล้วไล่ไปหา ../../client/dist
-   */
-  const clientDist = path.resolve(__dirname, '../../client/dist');
-  const indexHtml = path.join(clientDist, 'index.html');
+  // ทำ __dirname สำหรับ ESModules
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
 
-  if (fs.existsSync(indexHtml)) {
+  // ✅ หา client/dist แบบทนทาน (รองรับหลาย working directory)
+  const candidates = [
+    // กรณี Railway ทำงานที่ repo root: /app
+    path.resolve(process.cwd(), 'client', 'dist'),
+    // กรณี start จาก /app/server
+    path.resolve(process.cwd(), '..', 'client', 'dist'),
+    // อิงจากตำแหน่งไฟล์จริง: server/dist/index.js -> ../../client/dist
+    path.resolve(__dirname, '..', '..', 'client', 'dist'),
+  ];
+
+  const clientDist = candidates.find((p) => fs.existsSync(path.join(p, 'index.html')));
+
+  console.log('[static] isDev:', isDev);
+  console.log('[static] candidates:', candidates);
+  console.log('[static] selected:', clientDist || '(NOT FOUND)');
+
+  // กัน favicon ขอแล้วไป 500 ง่าย ๆ
+  app.get('/favicon.ico', (_req, res) => res.status(204).end());
+
+  if (clientDist) {
     app.use(express.static(clientDist));
 
     // SPA fallback
     app.get('*', (_req, res) => {
-      res.sendFile(indexHtml);
+      res.sendFile(path.join(clientDist, 'index.html'));
     });
-
-    console.log('✅ Serving React build from:', clientDist);
   } else {
-    console.warn('⚠️ React build not found:', indexHtml);
-    console.warn('⚠️ Fix Railway Build Command to build client and include dist in deploy.');
+    // ถ้าไม่มี client build จริง ๆ ให้บอกชัด ๆ (ไม่ใช่ 500 งง ๆ)
+    app.get('*', (_req, res) => {
+      res
+        .status(503)
+        .json({
+          success: false,
+          error:
+            'Frontend build ไม่พบ (client/dist/index.html). ตรวจ Root Directory/Build Command ให้สร้าง client/dist ก่อน',
+        });
+    });
   }
 }
 
