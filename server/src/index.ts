@@ -61,12 +61,13 @@ app.use(
     proxy: true,
     cookie: {
       httpOnly: true,
-      secure: !isDev, // production ควร true
-      sameSite: 'lax',
+      secure: 'auto',     // ✅ สำคัญ: local http จะไม่ secure, แต่บน https จะ secure
+      sameSite: 'lax',    // ✅ ถ้า frontend+backend คนละโดเมนค่อยเปลี่ยนเป็น 'none'
       maxAge: 24 * 60 * 60 * 1000,
     },
   })
 );
+
 
 // Rate limiting
 const limiter = rateLimit({
