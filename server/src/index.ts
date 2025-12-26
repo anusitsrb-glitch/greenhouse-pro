@@ -22,8 +22,11 @@ import reportsRoutes from './routes/reports.js';
 import alertsRoutes from './routes/alerts.js';
 import passwordRoutes from './routes/password.js';
 
-// Initialize database
-import './db/connection.js';
+// ✅ ใช้ DB instance เพื่อทำ SQLite session store
+import { db } from './db/connection.js';
+
+// ✅ SQLite Session Store (แทน MemoryStore)
+import BetterSqlite3SessionStore from 'better-sqlite3-session-store';
 
 const app = express();
 
@@ -39,16 +42,25 @@ app.set('trust proxy', 1);
 // Security middleware
 app.use(helmet({ contentSecurityPolicy: false }));
 
-// ===== CORS (FIX) =====
-// โปรดักชันให้ล็อก origin ชัดเจน (ช่วยมือถือ/บาง webview)
-// ปรับโดเมนให้ตรงกับของคุณ
-const PROD_ORIGIN = 'https://greenhouse-pro-server-production.up.railway.app';
+// -------------------------------
+// ✅ CORS
+// - ถ้าโปรดักชัน “โดเมนเดียวกัน” (serve client+api จากโดเมนเดียว) => origin: true ได้เลย
+// - ถ้าอยากจำกัดหลายโดเมน ให้ตั้ง ENV: CORS_ORIGINS="https://a.com,https://b.com"
+//   แล้วระบบจะอ่านจาก process.env (ไม่ผูกกับ env.ts)
+// -------------------------------
+const corsOrigins =
+  (process.env.CORS_ORIGINS ?? '')
+    .split(',')
+    .map((s: string) => s.trim())
+    .filter(Boolean);
 
 app.use(
   cors({
     origin: isDev
       ? ['http://localhost:5173', 'http://127.0.0.1:5173']
-      : PROD_ORIGIN,
+      : corsOrigins.length
+        ? corsOrigins
+        : true,
     credentials: true,
   })
 );
@@ -57,32 +69,62 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// ===== Session (FIX) =====
+// -------------------------------
+// ✅ SESSION: ใช้ SQLiteStore เพื่อ “จำล็อกอิน” แม้ Railway restart
+// -------------------------------
+const SqliteStore = BetterSqlite3SessionStore(session);
+
 app.use(
   session({
+    store: new SqliteStore({
+      client: db,
+      table: 'sessions',
+      expired: {
+        clear: true,
+        intervalMs: 15 * 60 * 1000,
+      },
+    }),
     secret: env.APP_SESSION_SECRET,
     name: 'greenhouse.sid',
     resave: false,
     saveUninitialized: false,
     proxy: true,
+    rolling: true,
     cookie: {
       httpOnly: true,
-      secure: isDev ? false : true,       // dev=http, prod=https
-      sameSite: isDev ? 'lax' : 'none',   // ✅ ช่วยมือถือ/บาง webview เก็บ session ได้
-      maxAge: 24 * 60 * 60 * 1000,
+      secure: 'auto',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     },
   })
 );
 
-// Rate limiting
-const limiter = rateLimit({
+// -------------------------------
+// ✅ Rate limit แบบไม่ทำเว็บพัง
+// -------------------------------
+const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isDev ? 1000 : 100,
-  message: { success: false, error: 'คำขอถูกจำกัด กรุณาลองใหม่ในภายหลัง' },
+  max: isDev ? 500 : 30,
   standardHeaders: true,
   legacyHeaders: false,
+  message: { success: false, error: 'พยายามเข้าสู่ระบบบ่อยเกินไป กรุณารอสักครู่' },
 });
-app.use('/api/', limiter);
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isDev ? 20000 : 5000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    const p = req.path || '';
+    return p.startsWith('/health') || p.startsWith('/auth/me');
+  },
+  message: { success: false, error: 'คำขอมากเกินไป กรุณาลองใหม่' },
+});
+
+app.use('/api/auth/login', authLimiter);
+app.use('/api/password', authLimiter);
+app.use('/api', apiLimiter);
 
 // ===== API routes =====
 app.use('/api/health', healthRoutes);
@@ -94,45 +136,33 @@ app.use('/api/tb', tbRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/alerts', alertsRoutes);
 
-// ✅ 404 เฉพาะฝั่ง API เท่านั้น
 app.use('/api', notFoundHandler);
 
 // ===== Serve React build (Production) =====
 if (!isDev) {
-  // ทำให้ path ชัวร์: อิงจากตำแหน่งไฟล์ server/dist/index.js
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
 
-  // dist/index.js อยู่ที่ /app/server/dist/index.js
-  // ดังนั้น ../../client/dist = /app/client/dist
   const clientDist = path.resolve(__dirname, '../../client/dist');
   const indexHtml = path.join(clientDist, 'index.html');
 
   console.log('📦 Static clientDist:', clientDist);
   console.log('📦 index.html exists:', fs.existsSync(indexHtml));
 
-  // กัน favicon 500 (ถ้าไม่มีใน dist ก็ไม่ควร 500)
   app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
   if (fs.existsSync(indexHtml)) {
     app.use(express.static(clientDist));
-
-    // SPA fallback
-    app.get('*', (_req, res) => {
-      res.sendFile(indexHtml);
-    });
+    app.get('*', (_req, res) => res.sendFile(indexHtml));
   } else {
-    // ถ้า build client ไม่สำเร็จ จะได้รู้ทันทีจากหน้าเว็บ + log ไม่ใช่ 500 งงๆ
-    app.get('*', (_req, res) => {
-      res.status(500).send('Client build not found. Please build client to /client/dist.');
-    });
+    app.get('*', (_req, res) =>
+      res.status(500).send('Client build not found. Please build client to /client/dist.')
+    );
   }
 }
 
-// Error handler ต้องท้ายสุด
 app.use(errorHandler);
 
-// ✅ PORT สำหรับ Railway
 const PORT = Number(process.env.PORT) || env.PORT || 3000;
 
 app.listen(PORT, '0.0.0.0', () => {
