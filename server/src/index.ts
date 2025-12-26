@@ -39,10 +39,16 @@ app.set('trust proxy', 1);
 // Security middleware
 app.use(helmet({ contentSecurityPolicy: false }));
 
-// CORS
+// ===== CORS (FIX) =====
+// โปรดักชันให้ล็อก origin ชัดเจน (ช่วยมือถือ/บาง webview)
+// ปรับโดเมนให้ตรงกับของคุณ
+const PROD_ORIGIN = 'https://greenhouse-pro-server-production.up.railway.app';
+
 app.use(
   cors({
-    origin: isDev ? ['http://localhost:5173', 'http://127.0.0.1:5173'] : true,
+    origin: isDev
+      ? ['http://localhost:5173', 'http://127.0.0.1:5173']
+      : PROD_ORIGIN,
     credentials: true,
   })
 );
@@ -51,7 +57,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Session
+// ===== Session (FIX) =====
 app.use(
   session({
     secret: env.APP_SESSION_SECRET,
@@ -61,13 +67,12 @@ app.use(
     proxy: true,
     cookie: {
       httpOnly: true,
-      secure: 'auto',     // ✅ สำคัญ: local http จะไม่ secure, แต่บน https จะ secure
-      sameSite: 'lax',    // ✅ ถ้า frontend+backend คนละโดเมนค่อยเปลี่ยนเป็น 'none'
+      secure: isDev ? false : true,       // dev=http, prod=https
+      sameSite: isDev ? 'lax' : 'none',   // ✅ ช่วยมือถือ/บาง webview เก็บ session ได้
       maxAge: 24 * 60 * 60 * 1000,
     },
   })
 );
-
 
 // Rate limiting
 const limiter = rateLimit({
