@@ -308,21 +308,31 @@ router.get('/devices/:projectKey/:ghKey/controls', async (req: Request, res: Res
     
     // Get control configurations from database
     const controlsQuery = `
-      SELECT control_key, name_th, name_en, control_type, icon
+      SELECT control_key, name_th, control_type, icon, is_active
       FROM control_configs 
-      WHERE greenhouse_id = ?
-      ORDER BY display_order, id
+      WHERE greenhouse_id = ? AND is_active = 1
+      ORDER BY sort_order, id
     `;
     const controls: any[] = (await import('../../db/connection.js')).db.prepare(controlsQuery).all(greenhouse.id);
     
+    // Map control_type to friendly type and icon
+    const typeMapping: Record<string, { type: string; defaultIcon: string }> = {
+      relay: { type: 'switch', defaultIcon: '🔌' },
+      motor: { type: 'motor', defaultIcon: '⚙️' },
+      dimmer: { type: 'dimmer', defaultIcon: '🎚️' },
+      custom: { type: 'custom', defaultIcon: '🔧' },
+    };
+    
     // Format controls data
-    const formattedControls = controls.map(control => ({
-      controlKey: control.control_key,
-      name: control.name_th || control.name_en,
-      nameEn: control.name_en,
-      type: control.control_type || 'switch',
-      icon: control.icon || '🔧',
-    }));
+    const formattedControls = controls.map(control => {
+      const mapping = typeMapping[control.control_type] || { type: 'switch', defaultIcon: '🔧' };
+      return {
+        controlKey: control.control_key,
+        name: control.name_th,
+        type: mapping.type,
+        icon: control.icon || mapping.defaultIcon,
+      };
+    });
     
     sendSuccess(res, {
       data: {
