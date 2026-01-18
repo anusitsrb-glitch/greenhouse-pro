@@ -156,7 +156,7 @@ if (!isDev) {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
 
-  const clientDist = path.resolve(__dirname, '../../client/dist');
+  const clientDist = path.resolve(__dirname, '../client-dist');
   const indexHtml = path.join(clientDist, 'index.html');
 
   console.log('📦 Static clientDist:', clientDist);
@@ -169,7 +169,7 @@ if (!isDev) {
     app.get('*', (_req, res) => res.sendFile(indexHtml));
   } else {
     app.get('*', (_req, res) =>
-      res.status(500).send('Client build not found. Please build client to /client/dist.')
+      res.status(500).send('Client build not found. Please build client to /server/client-dist.')
     );
   }
 }

@@ -6,7 +6,9 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "cd ../client && npm install && npm run build && mkdir -p ../server/dist && cp -r dist ../server/client-dist",
+    "build:server": "tsc",
     "start": "node dist/db/migrate.js && node dist/db/seed.js && node dist/index.js",
     "lint": "eslint src/",
     "db:migrate": "tsx src/db/migrate.ts",
