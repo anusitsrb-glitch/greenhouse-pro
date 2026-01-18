@@ -21,6 +21,8 @@ import tbRoutes from './routes/tb.js';
 import reportsRoutes from './routes/reports.js';
 import alertsRoutes from './routes/alerts.js';
 import passwordRoutes from './routes/password.js';
+import externalRoutes from './routes/external/index.js';
+import exportRoutes from './routes/export.js';
 
 // ✅ ใช้ DB instance เพื่อทำ SQLite session store
 import { db } from './db/connection.js';
@@ -122,9 +124,19 @@ const apiLimiter = rateLimit({
   message: { success: false, error: 'คำขอมากเกินไป กรุณาลองใหม่' },
 });
 
+const externalApiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: isDev ? 10000 : 1000, // 1000 requests per 15 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many requests from this API Key' },
+});
+
+
 app.use('/api/auth/login', authLimiter);
 app.use('/api/password', authLimiter);
 app.use('/api', apiLimiter);
+app.use('/api/external', externalApiLimiter);
 
 // ===== API routes =====
 app.use('/api/health', healthRoutes);
@@ -135,7 +147,8 @@ app.use('/api/projects', projectsRoutes);
 app.use('/api/tb', tbRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/alerts', alertsRoutes);
-
+app.use('/api/external/v1', externalRoutes);
+app.use('/api/export', exportRoutes);
 app.use('/api', notFoundHandler);
 
 // ===== Serve React build (Production) =====

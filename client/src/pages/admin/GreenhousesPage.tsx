@@ -100,10 +100,10 @@ export function GreenhousesPage() {
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{gh.projectName}</td>
                   <td className="px-4 py-3">
-                    {gh.tbDeviceId ? (
+                    {gh.deviceId ? (  
                       <div className="flex items-center gap-2">
                         <Wifi className="w-4 h-4 text-green-500" />
-                        <span className="text-sm font-mono text-gray-600">{gh.tbDeviceId.substring(0, 8)}...</span>
+                        <span className="text-sm font-mono text-gray-600">{gh.deviceId.substring(0, 8)}...</span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2 text-gray-400">
@@ -119,7 +119,7 @@ export function GreenhousesPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
-                      {gh.tbDeviceId ? (
+                      {gh.deviceId ? (  
                         <Button variant="ghost" size="sm" onClick={() => handleUnlink(gh)} title="ยกเลิกการเชื่อมต่อ"><Unlink className="w-4 h-4" /></Button>
                       ) : (
                         <Button variant="ghost" size="sm" onClick={() => setLinkingGh(gh)} title="เชื่อมต่ออุปกรณ์"><Link className="w-4 h-4" /></Button>
@@ -143,13 +143,25 @@ export function GreenhousesPage() {
 function CreateGreenhouseModal({ projects, onClose, onSuccess }: { projects: AdminProject[]; onClose: () => void; onSuccess: () => void }) {
   const { addToast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState({ project_key: projects[0]?.key || '', gh_key: '', name_th: '', status: 'developing', tb_device_id: '' });
+  const [formData, setFormData] = useState({ 
+    project_key: projects[0]?.key || '', 
+    gh_key: '', 
+    name_th: '', 
+    status: 'developing' as 'developing' | 'ready', 
+    tb_device_id: '' 
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      await adminApi.createGreenhouse(formData);
+      // ✅ แปลง empty string เป็น null ก่อนส่ง
+      const payload = {
+        ...formData,
+        tb_device_id: formData.tb_device_id.trim() || null
+      };
+      
+      await adminApi.createGreenhouse(payload);
       addToast({ type: 'success', message: 'สร้างโรงเรือนสำเร็จ' });
       onSuccess();
     } catch (error) {

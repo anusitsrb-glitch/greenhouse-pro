@@ -194,7 +194,7 @@ router.post('/', async (req: Request, res: Response) => {
     // Insert user
     const result = db.prepare(`
       INSERT INTO users (username, email, password_hash, role, is_active)
-      VALUES (?, ?, ?, ?, 1, 1)
+      VALUES (?, ?, ?, ?, 1)
     `).run(username, email ?? null, passwordHash, role);
     
     logAudit({

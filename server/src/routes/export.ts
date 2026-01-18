@@ -1,6 +1,6 @@
 /**
- * Data Export Routes
- * Export telemetry data to CSV/Excel
+ * Data Export Routes (IMPROVED)
+ * Export telemetry data to CSV/Excel with flexible date ranges
  */
 
 import { Router, Request, Response } from 'express';
@@ -10,11 +10,29 @@ import { requireAuth } from '../middleware/auth.js';
 import { getTelemetryTimeseries, getProject } from '../services/thingsboard.js';
 import { logAudit, AuditActions } from '../utils/audit.js';
 import ExcelJS from 'exceljs';
+import { z } from 'zod';
 
 const router = Router();
 
 type TelemetryValue = { ts: number; value: string | number | boolean };
 type TelemetryMap = Record<string, TelemetryValue[]>;
+
+// ============================================================
+// Validation Schemas
+// ============================================================
+
+const exportExcelSchema = z.object({
+  projectKey: z.string().min(1),
+  ghKey: z.string().min(1),
+  keys: z.array(z.string()).min(1),
+  days: z.number().min(1).max(365).optional().default(7),
+});
+
+const exportCsvSchema = exportExcelSchema;
+
+// ============================================================
+// Helper Functions
+// ============================================================
 
 function normalizeValue(v: string | number | boolean): string | number | null {
   if (typeof v === 'number') return Number.isFinite(v) ? v : null;
@@ -26,14 +44,10 @@ function normalizeValue(v: string | number | boolean): string | number | null {
   const n = Number(s);
   if (Number.isFinite(n)) return n;
 
-  return s; // non-numeric string -> keep as string
+  return s;
 }
 
-/**
- * Helper: Convert telemetry data to rows
- */
 function telemetryToRows(data: TelemetryMap, keys: string[]) {
-  // Get all unique timestamps
   const timestamps = new Set<number>();
   for (const key of keys) {
     if (data[key]) {
@@ -43,7 +57,6 @@ function telemetryToRows(data: TelemetryMap, keys: string[]) {
 
   const sortedTimestamps = Array.from(timestamps).sort((a, b) => a - b);
 
-  // Create rows
   const rows: any[] = [];
   for (const ts of sortedTimestamps) {
     const row: any = {
@@ -62,103 +75,32 @@ function telemetryToRows(data: TelemetryMap, keys: string[]) {
   return rows;
 }
 
-/**
- * POST /api/export/telemetry/csv
- * Export telemetry data to CSV
- */
-router.post('/telemetry/csv', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const { projectKey, ghKey, keys, startTime, endTime } = req.body;
-
-    if (!projectKey || !ghKey || !keys || !Array.isArray(keys) || keys.length === 0) {
-      sendError(res, 'กรุณาระบุข้อมูลให้ครบ', 400);
-      return;
-    }
-
-    // Get project and greenhouse
-    const project = getProject(projectKey);
-    if (!project) {
-      sendError(res, 'ไม่พบโปรเจกต์', 404);
-      return;
-    }
-
-    const greenhouse = db.prepare(`
-      SELECT * FROM greenhouses g
-      JOIN projects p ON g.project_id = p.id
-      WHERE p.key = ? AND g.gh_key = ?
-    `).get(projectKey, ghKey) as any;
-
-    if (!greenhouse || !greenhouse.tb_device_id) {
-      sendError(res, 'ไม่พบโรงเรือนหรือยังไม่ได้เชื่อมต่อ Device', 404);
-      return;
-    }
-
-    // Get telemetry data
-    const start = startTime || Date.now() - 24 * 60 * 60 * 1000; // Default: 24 hours
-    const end = endTime || Date.now();
-
-    // ✅ FIX: signature is (projectKey, ghKey, keys[], start, end, ...)
-    const data = await getTelemetryTimeseries(projectKey, ghKey, keys, start, end);
-
-    if (!data) {
-      sendError(res, 'ไม่สามารถดึงข้อมูลได้', 500);
-      return;
-    }
-
-    // Convert to rows
-    const rows = telemetryToRows(data as unknown as TelemetryMap, keys);
-
-    // Generate CSV
-    const headers = ['Timestamp', 'Timestamp (Local)', ...keys];
-    const csvRows = [headers.join(',')];
-
-    for (const row of rows) {
-      const values = [
-        row.timestamp,
-        `"${row.timestamp_local}"`,
-        ...keys.map(k => (row[k] ?? '')),
-      ];
-      csvRows.push(values.join(','));
-    }
-
-    const csv = csvRows.join('\n');
-
-    // Log export
-    logAudit({
-      userId: req.session.userId ?? null,
-      action: AuditActions.DATA_EXPORTED,
-      projectKey,
-      ghKey,
-      detail: { format: 'csv', keys, rowCount: rows.length },
-    });
-
-    // Record in export history
-    db.prepare(`
-      INSERT INTO export_history (user_id, export_type, data_type, row_count, filters)
-      VALUES (?, 'csv', 'telemetry', ?, ?)
-    `).run(req.session.userId, rows.length, JSON.stringify({ projectKey, ghKey, keys, startTime: start, endTime: end }));
-
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="telemetry-${projectKey}-${ghKey}-${new Date().toISOString().split('T')[0]}.csv"`);
-    res.send('\uFEFF' + csv); // BOM for Excel UTF-8 support
-  } catch (error) {
-    console.error('Error exporting CSV:', error);
-    sendError(res, ThaiErrors.SERVER_ERROR, 500);
-  }
-});
+// ============================================================
+// Routes
+// ============================================================
 
 /**
  * POST /api/export/telemetry/excel
  * Export telemetry data to Excel
+ * 
+ * Body:
+ * {
+ *   "projectKey": "maejard",
+ *   "ghKey": "greenhouse8",
+ *   "keys": ["air_temp", "air_humidity", "soil1_moisture"],
+ *   "days": 7  // Optional, default: 7
+ * }
  */
 router.post('/telemetry/excel', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { projectKey, ghKey, keys, startTime, endTime } = req.body;
+    const parsed = exportExcelSchema.safeParse(req.body);
 
-    if (!projectKey || !ghKey || !keys || !Array.isArray(keys) || keys.length === 0) {
-      sendError(res, 'กรุณาระบุข้อมูลให้ครบ', 400);
+    if (!parsed.success) {
+      sendError(res, 'กรุณาระบุข้อมูลให้ครบถ้วน', 400);
       return;
     }
+
+    const { projectKey, ghKey, keys, days } = parsed.data;
 
     // Get project and greenhouse
     const project = getProject(projectKey);
@@ -178,12 +120,12 @@ router.post('/telemetry/excel', requireAuth, async (req: Request, res: Response)
       return;
     }
 
-    // Get telemetry data
-    const start = startTime || Date.now() - 24 * 60 * 60 * 1000;
-    const end = endTime || Date.now();
+    // Calculate time range based on days
+    const endTime = Date.now();
+    const startTime = endTime - (days * 24 * 60 * 60 * 1000);
 
-    // ✅ FIX: signature is (projectKey, ghKey, keys[], start, end, ...)
-    const data = await getTelemetryTimeseries(projectKey, ghKey, keys, start, end);
+    // Fetch telemetry data
+    const data = await getTelemetryTimeseries(projectKey, ghKey, keys, startTime, endTime);
 
     if (!data) {
       sendError(res, 'ไม่สามารถดึงข้อมูลได้', 500);
@@ -207,7 +149,9 @@ router.post('/telemetry/excel', requireAuth, async (req: Request, res: Response)
     infoSheet.addRows([
       { property: 'โปรเจกต์', value: greenhouse.project_name },
       { property: 'โรงเรือน', value: greenhouse.name_th },
-      { property: 'ช่วงเวลา', value: `${new Date(start).toLocaleString('th-TH')} - ${new Date(end).toLocaleString('th-TH')}` },
+      { property: 'ช่วงเวลา (วัน)', value: `${days} วัน` },
+      { property: 'วันที่เริ่มต้น', value: new Date(startTime).toLocaleString('th-TH') },
+      { property: 'วันที่สิ้นสุด', value: new Date(endTime).toLocaleString('th-TH') },
       { property: 'จำนวนข้อมูล', value: rows.length },
       { property: 'สร้างเมื่อ', value: new Date().toLocaleString('th-TH') },
     ]);
@@ -239,23 +183,124 @@ router.post('/telemetry/excel', requireAuth, async (req: Request, res: Response)
       action: AuditActions.DATA_EXPORTED,
       projectKey,
       ghKey,
-      detail: { format: 'excel', keys, rowCount: rows.length },
+      detail: { format: 'excel', keys, days, rowCount: rows.length },
     });
 
     // Record in export history
     db.prepare(`
       INSERT INTO export_history (user_id, export_type, data_type, row_count, filters)
       VALUES (?, 'excel', 'telemetry', ?, ?)
-    `).run(req.session.userId, rows.length, JSON.stringify({ projectKey, ghKey, keys, startTime: start, endTime: end }));
+    `).run(
+      req.session.userId,
+      rows.length,
+      JSON.stringify({ projectKey, ghKey, keys, days, startTime, endTime })
+    );
 
     // Send file
+    const filename = `telemetry-${projectKey}-${ghKey}-${days}days-${new Date().toISOString().split('T')[0]}.xlsx`;
+    
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="telemetry-${projectKey}-${ghKey}-${new Date().toISOString().split('T')[0]}.xlsx"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
     await workbook.xlsx.write(res);
     res.end();
   } catch (error) {
     console.error('Error exporting Excel:', error);
+    sendError(res, ThaiErrors.SERVER_ERROR, 500);
+  }
+});
+
+/**
+ * POST /api/export/telemetry/csv
+ * Export telemetry data to CSV
+ * 
+ * Body: Same as Excel export
+ */
+router.post('/telemetry/csv', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const parsed = exportCsvSchema.safeParse(req.body);
+
+    if (!parsed.success) {
+      sendError(res, 'กรุณาระบุข้อมูลให้ครบถ้วน', 400);
+      return;
+    }
+
+    const { projectKey, ghKey, keys, days } = parsed.data;
+
+    // Get project and greenhouse
+    const project = getProject(projectKey);
+    if (!project) {
+      sendError(res, 'ไม่พบโปรเจกต์', 404);
+      return;
+    }
+
+    const greenhouse = db.prepare(`
+      SELECT * FROM greenhouses g
+      JOIN projects p ON g.project_id = p.id
+      WHERE p.key = ? AND g.gh_key = ?
+    `).get(projectKey, ghKey) as any;
+
+    if (!greenhouse || !greenhouse.tb_device_id) {
+      sendError(res, 'ไม่พบโรงเรือนหรือยังไม่ได้เชื่อมต่อ Device', 404);
+      return;
+    }
+
+    // Calculate time range
+    const endTime = Date.now();
+    const startTime = endTime - (days * 24 * 60 * 60 * 1000);
+
+    // Get telemetry data
+    const data = await getTelemetryTimeseries(projectKey, ghKey, keys, startTime, endTime);
+
+    if (!data) {
+      sendError(res, 'ไม่สามารถดึงข้อมูลได้', 500);
+      return;
+    }
+
+    // Convert to rows
+    const rows = telemetryToRows(data as unknown as TelemetryMap, keys);
+
+    // Generate CSV
+    const headers = ['Timestamp', 'Timestamp (Local)', ...keys];
+    const csvRows = [headers.join(',')];
+
+    for (const row of rows) {
+      const values = [
+        row.timestamp,
+        `"${row.timestamp_local}"`,
+        ...keys.map(k => (row[k] ?? '')),
+      ];
+      csvRows.push(values.join(','));
+    }
+
+    const csv = csvRows.join('\n');
+
+    // Log export
+    logAudit({
+      userId: req.session.userId ?? null,
+      action: AuditActions.DATA_EXPORTED,
+      projectKey,
+      ghKey,
+      detail: { format: 'csv', keys, days, rowCount: rows.length },
+    });
+
+    // Record in export history
+    db.prepare(`
+      INSERT INTO export_history (user_id, export_type, data_type, row_count, filters)
+      VALUES (?, 'csv', 'telemetry', ?, ?)
+    `).run(
+      req.session.userId,
+      rows.length,
+      JSON.stringify({ projectKey, ghKey, keys, days, startTime, endTime })
+    );
+
+    const filename = `telemetry-${projectKey}-${ghKey}-${days}days-${new Date().toISOString().split('T')[0]}.csv`;
+    
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send('\uFEFF' + csv);
+  } catch (error) {
+    console.error('Error exporting CSV:', error);
     sendError(res, ThaiErrors.SERVER_ERROR, 500);
   }
 });

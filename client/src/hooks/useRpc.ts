@@ -1,6 +1,8 @@
 /**
- * useRpc Hook
+ * useRpc Hook - FIXED VERSION
  * Sends RPC commands and handles confirmation via attribute polling
+ * 
+ * FIX: ส่ง timeout parameter ไปด้วย
  */
 
 import { useState, useCallback, useRef } from 'react';
@@ -134,8 +136,8 @@ export function useRpc({
     });
 
     try {
-      // Send RPC
-      await tbApi.sendRpc(project, gh, method, params);
+      // ✅ FIX: ส่ง timeout parameter (30 วินาที - รองรับ device ช้า)
+      await tbApi.sendRpc(project, gh, method, params, 20000);
 
       // Start confirmation polling if we have an attribute to check
       if (expectedAttribute) {
@@ -183,7 +185,7 @@ export function useRpc({
 }
 
 /**
- * useMotorRpc Hook
+ * useMotorRpc Hook - FIXED VERSION
  * Special hook for motor commands that need different confirmation logic
  */
 export function useMotorRpc({
@@ -228,7 +230,8 @@ export function useMotorRpc({
     // params === 0: both false (stop)
 
     try {
-      await tbApi.sendRpc(project, gh, method, params);
+      // ✅ FIX: ส่ง timeout parameter (30 วินาที - รองรับ device ช้า)
+      await tbApi.sendRpc(project, gh, method, params, 20000);
 
       // Start confirmation polling
       const checkConfirmation = async () => {

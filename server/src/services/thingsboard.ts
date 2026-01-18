@@ -1,11 +1,13 @@
 /**
  * ThingsBoard API Client
  * Centralized module for all ThingsBoard interactions
- * * Features:
+ * 
+ * Features:
  * - JWT authentication with auto-refresh
  * - Request timeout handling
  * - Automatic retry on 401/403
  * - Thai error messages
+ * - RPC retry logic (แก้ไขแล้ว)
  */
 
 import { db } from '../db/connection.js';
@@ -47,12 +49,13 @@ interface TBRpcResponse {
 }
 
 // ============================================================
-// Configuration
+// Configuration (แก้ไขแล้ว)
 // ============================================================
 
-const REQUEST_TIMEOUT = 10000; // 10 seconds
+const REQUEST_TIMEOUT = 30000; // ✅ เพิ่มจาก 10s → 30s
 const TOKEN_EXPIRY_BUFFER = 60000; // Refresh 1 minute before expiry
 const JWT_LIFETIME = 9000000; // ~2.5 hours (ThingsBoard default)
+const RPC_RETRY_ATTEMPTS = 3; // ✅ เพิ่มใหม่
 
 // ============================================================
 // Token Cache (per project)
@@ -277,7 +280,7 @@ async function tbRequest<T>(
 // ============================================================
 
 /**
- * NEW: Get Project Details (Fixes missing export)
+ * Get Project Details
  */
 export function getProject(projectKey: string): Project | undefined {
   return db.prepare('SELECT * FROM projects WHERE key = ?').get(projectKey) as Project | undefined;
@@ -364,14 +367,14 @@ export async function getAttributes(
 
 /**
  * Send RPC command to device (two-way)
- * (Renamed from sendRpc to sendRpcCommand to match usage)
+ * ✅ แก้ไขแล้ว: เพิ่ม retry logic
  */
 export async function sendRpcCommand(
   projectKey: string,
   ghKey: string,
   method: string,
   params: unknown,
-  timeout = 5000
+  timeout = 20000 // ✅ เพิ่มจาก 5s → 20s
 ): Promise<TBRpcResponse> {
   const deviceId = getDeviceId(projectKey, ghKey);
   if (!deviceId) {
@@ -380,17 +383,43 @@ export async function sendRpcCommand(
 
   const endpoint = `/api/rpc/twoway/${deviceId}`;
 
-  return tbRequest<TBRpcResponse>(projectKey, endpoint, {
-    method: 'POST',
-    body: JSON.stringify({
-      method,
-      params,
-      timeout,
-    }),
-  });
+  // ✅ เพิ่ม retry logic
+  let lastError: Error | null = null;
+  
+  for (let attempt = 1; attempt <= RPC_RETRY_ATTEMPTS; attempt++) {
+    try {
+      console.log(`🚀 Sending RPC to ${ghKey} (attempt ${attempt}/${RPC_RETRY_ATTEMPTS})...`);
+      
+      const result = await tbRequest<TBRpcResponse>(projectKey, endpoint, {
+        method: 'POST',
+        body: JSON.stringify({
+          method,
+          params,
+          timeout,
+        }),
+      });
+
+      console.log(`✅ RPC success for ${ghKey}`);
+      return result;
+      
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Unknown error');
+      
+      if (lastError.message.includes('Timeout') && attempt < RPC_RETRY_ATTEMPTS) {
+        console.log(`⏱️  RPC timeout for ${ghKey}, retrying...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        continue;
+      }
+      
+      break;
+    }
+  }
+
+  console.error(`❌ RPC failed for ${ghKey} after ${RPC_RETRY_ATTEMPTS} attempts`);
+  throw lastError;
 }
 
-// Alias for compatibility (optional)
+// Alias for compatibility
 export const sendRpc = sendRpcCommand;
 
 /**
@@ -440,10 +469,10 @@ export const tbService = {
   getLatestTelemetry,
   getTelemetryTimeseries,
   getAttributes,
-  sendRpcCommand, // Updated name
+  sendRpcCommand,
   sendRpc,
   isDeviceOnline,
   testConnection,
   clearToken,
-  getProject, // Added
+  getProject,
 };

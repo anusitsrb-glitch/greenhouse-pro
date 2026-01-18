@@ -14,6 +14,7 @@ import {
   Legend 
 } from 'recharts';
 import { Clock, RefreshCw, AlertCircle } from 'lucide-react';
+import { ExportButton } from './ExportButton'; // ← เพิ่มบรรทัดนี้
 
 interface ChartsTabProps {
   project: string;
@@ -166,6 +167,12 @@ export function ChartsTab({ project, gh, isReady }: ChartsTabProps) {
     );
   };
 
+  // ← เพิ่มส่วนนี้: รวม telemetry keys สำหรับ export
+  const exportTelemetryKeys = useMemo(() => {
+    const soilKeys = getSoilKeysArray(selectedSoilNode);
+    return [...AIR_TELEMETRY_KEYS, ...soilKeys];
+  }, [selectedSoilNode]);
+
   if (!isReady) {
     return (
       <Card className="p-6 text-center text-gray-500">
@@ -199,14 +206,24 @@ export function ChartsTab({ project, gh, isReady }: ChartsTabProps) {
           </div>
         </div>
 
-        <button
-          onClick={fetchChartData}
-          disabled={isLoading}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          รีเฟรช
-        </button>
+        {/* ← เพิ่มส่วนนี้: ปุ่ม Export และ Refresh */}
+        <div className="flex items-center gap-2">
+          <ExportButton 
+            projectKey={project}
+            ghKey={gh}
+            telemetryKeys={exportTelemetryKeys}
+            disabled={isLoading || !isReady}
+          />
+          
+          <button
+            onClick={fetchChartData}
+            disabled={isLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">รีเฟรช</span>
+          </button>
+        </div>
       </div>
 
       {/* Error */}
