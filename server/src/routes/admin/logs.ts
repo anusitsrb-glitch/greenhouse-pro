@@ -4,14 +4,14 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { authenticate, requireRole } from '../../middleware/auth.js'; // ✅ เปลี่ยนจาก authMiddleware
+import { requireAuth, requireRole } from '../../middleware/auth.js'; // ✅ ใช้ requireAuth
 import { getControlLogs, getControlLogStats } from '../../services/activityLog.js';
 import { db } from '../../db/connection.js';
 
 const router = Router();
 
 // Apply auth middleware
-router.use(authenticate); // ✅ เปลี่ยนจาก authMiddleware
+router.use(requireAuth); // ✅ ใช้ requireAuth
 
 /**
  * GET /api/admin/logs/control

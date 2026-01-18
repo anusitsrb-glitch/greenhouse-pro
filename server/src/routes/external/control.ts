@@ -7,7 +7,7 @@ import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import { db } from '../../db/connection.js'; // ✅ เปลี่ยนเป็น ../../ แทน ../
 import { logDeviceControl } from '../../services/activityLog.js';
-import { verifyApiKey } from '../../middleware/apiAuth.js';
+import { verifyApiKey } from '../../middleware/apiKey.js'; // ✅ เปลี่ยนเป็น apiKey.js
 
 const router = Router();
 
