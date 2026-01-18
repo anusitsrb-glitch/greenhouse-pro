@@ -158,7 +158,7 @@ function CreateGreenhouseModal({ projects, onClose, onSuccess }: { projects: Adm
       // ✅ แปลง empty string เป็น null ก่อนส่ง
       const payload = {
         ...formData,
-        tb_device_id: formData.tb_device_id.trim() || null
+        tb_device_id: formData.tb_device_id.trim() || undefined
       };
       
       await adminApi.createGreenhouse(payload);
