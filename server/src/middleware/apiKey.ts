@@ -22,18 +22,18 @@ export interface ApiKeyData {
 // ============================================================
 
 const VALID_API_KEYS: Record<string, ApiKeyData> = {
-  // Read-Only API Key
-  'ghp_readonly_abc123xyz789': {
+  // ✅ Production Read-Only API Key
+  'ghp_readonly_9271d426f500cf5914e9a52f8c313bc0e46ccff79e18def8c2c2e9f01bed755a': {
     permissions: ['read'],
     projectKeys: ['maejard'], // จำกัดเฉพาะ project maejard
-    description: 'Read-only access for Company ABC',
+    description: 'Read-only access for Mobile App Company',
   },
   
-  // Full Access API Key
-  'ghp_fullaccess_xyz789abc123': {
+  // ✅ Production Full Access API Key
+  'ghp_fullaccess_291a3d1919e0bb99ac44b8a1b658365035787667f58546da59e7e1c15d14fcab': {
     permissions: ['read', 'control'],
     projectKeys: ['maejard'],
-    description: 'Full access for Company ABC',
+    description: 'Full access for Mobile App Company',
   },
 };
 
