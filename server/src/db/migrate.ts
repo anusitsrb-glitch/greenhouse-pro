@@ -918,6 +918,32 @@ db.exec(`
   )
 `);
 
+
+
+// ============================================================
+// V5: Control Logs Table (Activity Log for External API)
+// ============================================================
+db.exec(`
+  CREATE TABLE IF NOT EXISTS control_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_key TEXT NOT NULL,
+    gh_key TEXT NOT NULL,
+    device_name TEXT NOT NULL,
+    action TEXT NOT NULL,
+    value TEXT,
+    source TEXT NOT NULL CHECK (source IN ('webapp', 'external_api', 'automation', 'schedule')),
+    user_id INTEGER,
+    api_key_prefix TEXT,
+    ip_address TEXT,
+    user_agent TEXT,
+    success INTEGER NOT NULL DEFAULT 1,
+    error_message TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+  )
+`);
+
+
 // ============================================================
 // Create indexes for better query performance
 // ============================================================
@@ -957,6 +983,12 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_yield_records_greenhouse_id ON yield_records(greenhouse_id);
   CREATE INDEX IF NOT EXISTS idx_photo_gallery_greenhouse_id ON photo_gallery(greenhouse_id);
   CREATE INDEX IF NOT EXISTS idx_translations_language ON translations(language);
+  // ✅ เพิ่มบรรทัดเหล่านี้
+  CREATE INDEX IF NOT EXISTS idx_control_logs_project ON control_logs(project_key, gh_key);
+  CREATE INDEX IF NOT EXISTS idx_control_logs_device ON control_logs(device_name);
+  CREATE INDEX IF NOT EXISTS idx_control_logs_source ON control_logs(source);
+  CREATE INDEX IF NOT EXISTS idx_control_logs_created ON control_logs(created_at);
+
 `);
 
 console.log('✅ Database migrations completed');
