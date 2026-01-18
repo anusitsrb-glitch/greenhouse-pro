@@ -903,6 +903,7 @@ db.exec(`
   )
 `);
 
+
 // ============================================================
 // V4: Translations Table (i18n)
 // ============================================================
@@ -917,8 +918,6 @@ db.exec(`
     UNIQUE(language, key)
   )
 `);
-
-
 
 // ============================================================
 // V5: Control Logs Table (Activity Log for External API)
@@ -942,7 +941,6 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
   )
 `);
-
 
 // ============================================================
 // Create indexes for better query performance
@@ -983,12 +981,11 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_yield_records_greenhouse_id ON yield_records(greenhouse_id);
   CREATE INDEX IF NOT EXISTS idx_photo_gallery_greenhouse_id ON photo_gallery(greenhouse_id);
   CREATE INDEX IF NOT EXISTS idx_translations_language ON translations(language);
-  // ✅ เพิ่มบรรทัดเหล่านี้
+  
   CREATE INDEX IF NOT EXISTS idx_control_logs_project ON control_logs(project_key, gh_key);
   CREATE INDEX IF NOT EXISTS idx_control_logs_device ON control_logs(device_name);
   CREATE INDEX IF NOT EXISTS idx_control_logs_source ON control_logs(source);
   CREATE INDEX IF NOT EXISTS idx_control_logs_created ON control_logs(created_at);
-
 `);
 
 console.log('✅ Database migrations completed');
