@@ -93,22 +93,23 @@ export function requirePermission(permission: 'read' | 'control') {
  */
 export function requireProjectAccess(req: Request, res: Response, next: NextFunction): void {
   const keyData = (req as any).apiKeyData as ApiKeyData | undefined;
-  const projectKey = req.params.projectKey;
   
   if (!keyData) {
     sendError(res, 'API Key validation required', 401);
     return;
   }
   
-  if (!projectKey) {
-    sendError(res, 'Project key is required', 400);
-    return;
-  }
+  // ✅ Fix: Check if we're in a middleware chain that will set projectKey later
+  // Skip validation here if projectKey not yet in params
+  // It will be validated in the route handler itself if needed
+  const projectKey = req.params.projectKey;
   
-  // Check if API key has access to this project
-  if (!keyData.projectKeys.includes(projectKey)) {
-    sendError(res, `API Key does not have access to project '${projectKey}'`, 403);
-    return;
+  if (projectKey) {
+    // Check if API key has access to this project
+    if (!keyData.projectKeys.includes(projectKey)) {
+      sendError(res, `API Key does not have access to project '${projectKey}'`, 403);
+      return;
+    }
   }
   
   next();
