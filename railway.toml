@@ -1,6 +1,10 @@
 [build]
 builder = "nixpacks"
-buildCommand = "npm run build --prefix server"
+# Build ทั้ง client และ server
+buildCommand = "npm install && npm run build:client && npm run build:server"
 
 [deploy]
-startCommand = "npm start --prefix server"
+# Start server (จะรัน migrate + seed + start อัตโนมัติ)
+startCommand = "npm run start"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
