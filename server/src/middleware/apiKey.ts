@@ -27,7 +27,7 @@ const VALID_API_KEYS: Record<string, ApiKeyData> = {
   // ========================================
   // 🔑 Read-Only Key (ดูข้อมูลทุกโรง)
   // ========================================
-  'ghp_readonly_all_9271d426f500cf5914e9a52f8c313bc0e46ccff79e18def8c2c2e9f01bed755a': {
+  'ghp_readonly_9271d426f500cf5914e9a52f8c313bc0e46ccff79e18def8c2c2e9f01bed755a': {
     permissions: ['read'],
     projectKeys: ['maejard'],
     // ไม่ระบุ greenhouseKeys = เข้าถึงทุกโรง (1-9)
@@ -37,7 +37,7 @@ const VALID_API_KEYS: Record<string, ApiKeyData> = {
   // ========================================
   // 🔑 Full Access Key (ดู + ควบคุมทุกโรง)
   // ========================================
-  'ghp_fullaccess_all_291a3d1919e0bb99ac44b8a1b658365035787667f58546da59e7e1c15d14fcab': {
+  'ghp_fullaccess_291a3d1919e0bb99ac44b8a1b658365035787667f58546da59e7e1c15d14fcab': {
     permissions: ['read', 'control'],
     projectKeys: ['maejard'],
     // ไม่ระบุ greenhouseKeys = เข้าถึงทุกโรง (1-9)
