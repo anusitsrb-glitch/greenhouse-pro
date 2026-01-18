@@ -250,4 +250,93 @@ router.get('/devices/:projectKey/:ghKey/status', async (req: Request, res: Respo
   }
 });
 
+/**
+ * GET /api/external/v1/data/devices/:projectKey/:ghKey/controls
+ * Get list of controllable devices
+ * 
+ * Example:
+ * GET /api/external/v1/data/devices/maejard/greenhouse8/controls
+ * Headers: X-API-Key: ghp_readonly_abc123xyz789
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "greenhouse": "โรงเรือน 8",
+ *     "controls": [
+ *       {
+ *         "controlKey": "pump1",
+ *         "name": "ปั๊มน้ำ 1",
+ *         "type": "pump",
+ *         "icon": "💧"
+ *       }
+ *     ]
+ *   }
+ * }
+ */
+router.get('/devices/:projectKey/:ghKey/controls', async (req: Request, res: Response) => {
+  try {
+    const parsed = deviceStatusSchema.safeParse(req.params);
+    
+    if (!parsed.success) {
+      sendError(res, 'Invalid parameters', 400);
+      return;
+    }
+    
+    const { projectKey, ghKey } = parsed.data;
+    
+    // Get project from database
+    const projectQuery = `SELECT * FROM projects WHERE key = ?`;
+    const project: any = (await import('../../db/connection.js')).db.prepare(projectQuery).get(projectKey);
+    
+    if (!project) {
+      sendError(res, 'Project not found', 404);
+      return;
+    }
+    
+    // Get greenhouse from database
+    const greenhouseQuery = `
+      SELECT * FROM greenhouses 
+      WHERE project_id = ? AND gh_key = ?
+    `;
+    const greenhouse: any = (await import('../../db/connection.js')).db.prepare(greenhouseQuery).get(project.id, ghKey);
+    
+    if (!greenhouse) {
+      sendError(res, 'Greenhouse not found', 404);
+      return;
+    }
+    
+    // Get control configurations from database
+    const controlsQuery = `
+      SELECT control_key, name_th, name_en, control_type, icon
+      FROM control_configs 
+      WHERE greenhouse_id = ?
+      ORDER BY display_order, id
+    `;
+    const controls: any[] = (await import('../../db/connection.js')).db.prepare(controlsQuery).all(greenhouse.id);
+    
+    // Format controls data
+    const formattedControls = controls.map(control => ({
+      controlKey: control.control_key,
+      name: control.name_th || control.name_en,
+      nameEn: control.name_en,
+      type: control.control_type || 'switch',
+      icon: control.icon || '🔧',
+    }));
+    
+    sendSuccess(res, {
+      data: {
+        greenhouse: greenhouse.name_th || greenhouse.name_en,
+        greenhouseKey: ghKey,
+        totalControls: formattedControls.length,
+        controls: formattedControls,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching controls list:', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch controls';
+    sendError(res, message, 500);
+  }
+});
+
 export default router;
