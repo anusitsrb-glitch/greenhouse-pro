@@ -100,10 +100,10 @@ export function GreenhousesPage() {
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{gh.projectName}</td>
                   <td className="px-4 py-3">
-                    {gh.deviceId ? (  
+                    {gh.tbDeviceId ? (
                       <div className="flex items-center gap-2">
                         <Wifi className="w-4 h-4 text-green-500" />
-                        <span className="text-sm font-mono text-gray-600">{gh.deviceId.substring(0, 8)}...</span>
+                        <span className="text-sm font-mono text-gray-600">{gh.tbDeviceId.substring(0, 8)}...</span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2 text-gray-400">
@@ -119,7 +119,7 @@ export function GreenhousesPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
-                      {gh.deviceId ? (  
+                      {gh.tbDeviceId ? (
                         <Button variant="ghost" size="sm" onClick={() => handleUnlink(gh)} title="ยกเลิกการเชื่อมต่อ"><Unlink className="w-4 h-4" /></Button>
                       ) : (
                         <Button variant="ghost" size="sm" onClick={() => setLinkingGh(gh)} title="เชื่อมต่ออุปกรณ์"><Link className="w-4 h-4" /></Button>
