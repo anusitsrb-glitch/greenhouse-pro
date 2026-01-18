@@ -5,14 +5,15 @@
 
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
-import { db } from '../../db/connection.js'; // ✅ เปลี่ยนเป็น ../../ แทน ../
+import { db } from '../../db/connection.js';
 import { logDeviceControl } from '../../services/activityLog.js';
-import { verifyApiKey } from '../../middleware/apiKey.js'; // ✅ เปลี่ยนเป็น apiKey.js
+import { validateApiKey, requirePermission } from '../../middleware/apiKey.js'; // ✅ เปลี่ยนเป็น validateApiKey
 
 const router = Router();
 
-// Apply API key verification
-router.use(verifyApiKey);
+// Apply API key verification with control permission
+router.use(validateApiKey);
+router.use(requirePermission('control'));
 
 /**
  * POST /api/external/v1/control/devices/:projectKey/:ghKey/control
