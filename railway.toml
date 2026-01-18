@@ -1,6 +1,6 @@
 [build]
 builder = "nixpacks"
-buildCommand = "npm install && npm run build --workspace=client && npm run build --workspace=server"
+buildCommand = "npm install --prefix server && npm install --prefix client && npm run build --prefix client && npm run build --prefix server"
 
 [deploy]
-startCommand = "npm start --workspace=server"
+startCommand = "npm start --prefix server"
