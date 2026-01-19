@@ -1,3 +1,4 @@
+// Updated 2026-01-19
 /**
  * External Data API
  * Provides read-only access to greenhouse data for third-party applications
