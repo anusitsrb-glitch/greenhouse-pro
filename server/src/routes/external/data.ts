@@ -8,6 +8,7 @@ import { sendSuccess, sendError, ThaiErrors } from '../../utils/response.js';
 import { tbService } from '../../services/thingsboard.js';
 import { apiKeyAuth } from '../../middleware/apiKey.js';
 import { z } from 'zod';
+import { db } from '../../db/connection.js';
 
 const router = Router();
 
@@ -287,7 +288,7 @@ router.get('/devices/:projectKey/:ghKey/controls', async (req: Request, res: Res
     
     // Get project from database
     const projectQuery = `SELECT * FROM projects WHERE key = ?`;
-    const project: any = (await import('../../db/connection.js')).db.prepare(projectQuery).get(projectKey);
+    const project: any = db.prepare(projectQuery).get(projectKey);
     
     if (!project) {
       sendError(res, 'Project not found', 404);
@@ -299,7 +300,7 @@ router.get('/devices/:projectKey/:ghKey/controls', async (req: Request, res: Res
       SELECT * FROM greenhouses 
       WHERE project_id = ? AND gh_key = ?
     `;
-    const greenhouse: any = (await import('../../db/connection.js')).db.prepare(greenhouseQuery).get(project.id, ghKey);
+    const greenhouse: any = db.prepare(greenhouseQuery).get(project.id, ghKey);
     
     if (!greenhouse) {
       sendError(res, 'Greenhouse not found', 404);
@@ -313,7 +314,7 @@ router.get('/devices/:projectKey/:ghKey/controls', async (req: Request, res: Res
       WHERE greenhouse_id = ? AND is_active = 1
       ORDER BY sort_order, id
     `;
-    const controls: any[] = (await import('../../db/connection.js')).db.prepare(controlsQuery).all(greenhouse.id);
+    const controls: any[] = db.prepare(controlsQuery).all(greenhouse.id);
     
     // Map control_type to friendly type and icon
     const typeMapping: Record<string, { type: string; defaultIcon: string }> = {
