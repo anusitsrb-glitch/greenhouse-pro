@@ -1,4 +1,3 @@
-// Updated 2026-01-19
 /**
  * External Data API
  * Provides read-only access to greenhouse data for third-party applications
@@ -254,7 +253,7 @@ router.get('/devices/:projectKey/:ghKey/status', async (req: Request, res: Respo
 
 /**
  * GET /api/external/v1/data/devices/:projectKey/:ghKey/controls
- * Get list of controllable devices
+ * Get list of controllable devices from ThingsBoard
  * 
  * Example:
  * GET /api/external/v1/data/devices/maejard/greenhouse8/controls
@@ -270,7 +269,7 @@ router.get('/devices/:projectKey/:ghKey/status', async (req: Request, res: Respo
  *         "controlKey": "pump1",
  *         "name": "ปั๊มน้ำ 1",
  *         "type": "pump",
- *         "icon": "💧"
+ *         "status": false
  *       }
  *     ]
  *   }
@@ -308,42 +307,74 @@ router.get('/devices/:projectKey/:ghKey/controls', async (req: Request, res: Res
       return;
     }
     
-    // Get control configurations from database
-    const controlsQuery = `
-      SELECT control_key, name_th, control_type, icon, is_active
-      FROM control_configs 
-      WHERE greenhouse_id = ? AND is_active = 1
-      ORDER BY sort_order, id
-    `;
-    const controls: any[] = db.prepare(controlsQuery).all(greenhouse.id);
-    
-    // Map control_type to friendly type and icon
-    const typeMapping: Record<string, { type: string; defaultIcon: string }> = {
-      relay: { type: 'switch', defaultIcon: '🔌' },
-      motor: { type: 'motor', defaultIcon: '⚙️' },
-      dimmer: { type: 'dimmer', defaultIcon: '🎚️' },
-      custom: { type: 'custom', defaultIcon: '🔧' },
-    };
-    
-    // Format controls data
-    const formattedControls = controls.map(control => {
-      const mapping = typeMapping[control.control_type] || { type: 'switch', defaultIcon: '🔧' };
-      return {
-        controlKey: control.control_key,
-        name: control.name_th,
-        type: mapping.type,
-        icon: control.icon || mapping.defaultIcon,
+    // Try to get control configurations from ThingsBoard
+    try {
+      // Get all attributes from ThingsBoard to detect available controls
+      const attributes = await tbService.getAttributes(projectKey, ghKey, [
+        'pump1', 'pump2', 'pump3',
+        'fan1', 'fan2', 'fan3',
+        'light1', 'light2', 'light3',
+        'valve1', 'valve2', 'valve3',
+        'motor1', 'motor2', 'motor3',
+        'relay1', 'relay2', 'relay3', 'relay4', 'relay5', 'relay6',
+      ]);
+      
+      // Map control types to icons and friendly names
+      const controlMap: Record<string, { type: string; icon: string; nameTH: string }> = {
+        pump1: { type: 'pump', icon: '💧', nameTH: 'ปั๊มน้ำ 1' },
+        pump2: { type: 'pump', icon: '💧', nameTH: 'ปั๊มน้ำ 2' },
+        pump3: { type: 'pump', icon: '💧', nameTH: 'ปั๊มน้ำ 3' },
+        fan1: { type: 'fan', icon: '🌀', nameTH: 'พัดลม 1' },
+        fan2: { type: 'fan', icon: '🌀', nameTH: 'พัดลม 2' },
+        fan3: { type: 'fan', icon: '🌀', nameTH: 'พัดลม 3' },
+        light1: { type: 'light', icon: '💡', nameTH: 'ไฟ 1' },
+        light2: { type: 'light', icon: '💡', nameTH: 'ไฟ 2' },
+        light3: { type: 'light', icon: '💡', nameTH: 'ไฟ 3' },
+        valve1: { type: 'valve', icon: '🚰', nameTH: 'วาล์ว 1' },
+        valve2: { type: 'valve', icon: '🚰', nameTH: 'วาล์ว 2' },
+        valve3: { type: 'valve', icon: '🚰', nameTH: 'วาล์ว 3' },
+        motor1: { type: 'motor', icon: '⚙️', nameTH: 'มอเตอร์ 1' },
+        motor2: { type: 'motor', icon: '⚙️', nameTH: 'มอเตอร์ 2' },
+        motor3: { type: 'motor', icon: '⚙️', nameTH: 'มอเตอร์ 3' },
+        relay1: { type: 'relay', icon: '🔌', nameTH: 'รีเลย์ 1' },
+        relay2: { type: 'relay', icon: '🔌', nameTH: 'รีเลย์ 2' },
+        relay3: { type: 'relay', icon: '🔌', nameTH: 'รีเลย์ 3' },
+        relay4: { type: 'relay', icon: '🔌', nameTH: 'รีเลย์ 4' },
+        relay5: { type: 'relay', icon: '🔌', nameTH: 'รีเลย์ 5' },
+        relay6: { type: 'relay', icon: '🔌', nameTH: 'รีเลย์ 6' },
       };
-    });
-    
-    sendSuccess(res, {
-      data: {
-        greenhouse: greenhouse.name_th || greenhouse.name_en,
-        greenhouseKey: ghKey,
-        totalControls: formattedControls.length,
-        controls: formattedControls,
-      },
-    });
+      
+      // Build controls list from available attributes
+      const controls = Object.keys(attributes)
+        .filter(key => controlMap[key]) // Only include known control types
+        .map(key => ({
+          controlKey: key,
+          name: controlMap[key].nameTH,
+          type: controlMap[key].type,
+          icon: controlMap[key].icon,
+          status: attributes[key] === true || attributes[key] === 'true' || attributes[key] === 1,
+        }));
+      
+      sendSuccess(res, {
+        data: {
+          greenhouse: greenhouse.name_th || greenhouse.name_en,
+          greenhouseKey: ghKey,
+          totalControls: controls.length,
+          controls,
+        },
+      });
+    } catch (tbError) {
+      // If ThingsBoard fails, return empty list instead of error
+      console.error('ThingsBoard error (returning empty controls):', tbError);
+      sendSuccess(res, {
+        data: {
+          greenhouse: greenhouse.name_th || greenhouse.name_en,
+          greenhouseKey: ghKey,
+          totalControls: 0,
+          controls: [],
+        },
+      });
+    }
   } catch (error) {
     console.error('Error fetching controls list:', error);
     const message = error instanceof Error ? error.message : 'Failed to fetch controls';
