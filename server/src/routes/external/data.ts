@@ -309,28 +309,55 @@ router.get('/devices/:projectKey/:ghKey/controls', async (req: Request, res: Res
     
     // Try to get control configurations from ThingsBoard
     try {
-      // Get relay control attributes from ThingsBoard (matching Web App format)
+      // Get relay control + motor attributes from ThingsBoard
       const attributes = await tbService.getAttributes(projectKey, ghKey, [
         'fan_1_cmd', 'fan_2_cmd',
         'pump_1_cmd',
         'valve_2_cmd',
         'light_1_cmd',
+        'motor_1_fw', 'motor_1_re',
+        'motor_2_fw', 'motor_2_re',
+        'motor_3_fw', 'motor_3_re',
+        'motor_4_fw', 'motor_4_re',
       ]);
       
       // Map ThingsBoard keys to API response format
-      const controlMap: Record<string, { controlKey: string; type: string; icon: string; nameTH: string }> = {
+      const controlMap: Record<string, { controlKey: string; type: string; icon: string; nameTH: string; state?: 'fw' | 're' }> = {
         fan_1_cmd: { controlKey: 'fan1', type: 'fan', icon: '🌀', nameTH: 'พัดลม 1' },
         fan_2_cmd: { controlKey: 'fan2', type: 'fan', icon: '🌀', nameTH: 'พัดลม 2' },
         pump_1_cmd: { controlKey: 'pump1', type: 'pump', icon: '💧', nameTH: 'ปั๊มน้ำ 1' },
         valve_2_cmd: { controlKey: 'valve2', type: 'valve', icon: '🚰', nameTH: 'วาล์ว 2' },
         light_1_cmd: { controlKey: 'light1', type: 'light', icon: '💡', nameTH: 'ไฟ 1' },
+        motor_1_fw: { controlKey: 'motor1', type: 'motor', icon: '⚙️', nameTH: 'มอเตอร์ 1', state: 'fw' },
+        motor_1_re: { controlKey: 'motor1', type: 'motor', icon: '⚙️', nameTH: 'มอเตอร์ 1', state: 're' },
+        motor_2_fw: { controlKey: 'motor2', type: 'motor', icon: '⚙️', nameTH: 'มอเตอร์ 2', state: 'fw' },
+        motor_2_re: { controlKey: 'motor2', type: 'motor', icon: '⚙️', nameTH: 'มอเตอร์ 2', state: 're' },
+        motor_3_fw: { controlKey: 'motor3', type: 'motor', icon: '⚙️', nameTH: 'มอเตอร์ 3', state: 'fw' },
+        motor_3_re: { controlKey: 'motor3', type: 'motor', icon: '⚙️', nameTH: 'มอเตอร์ 3', state: 're' },
+        motor_4_fw: { controlKey: 'motor4', type: 'motor', icon: '⚙️', nameTH: 'มอเตอร์ 4', state: 'fw' },
+        motor_4_re: { controlKey: 'motor4', type: 'motor', icon: '⚙️', nameTH: 'มอเตอร์ 4', state: 're' },
       };
       
       // Build controls list from available attributes
+      // Group motors (each motor has 2 attributes: fw & re)
+      const motorGroups: Record<string, { fw: boolean; re: boolean }> = {};
+      
       const controls = Object.keys(attributes)
         .filter(key => controlMap[key]) // Only include known control types
         .map(key => {
           const config = controlMap[key];
+          
+          // Handle motors specially (group fw/re into one control)
+          if (config.type === 'motor' && config.state) {
+            const motorKey = config.controlKey;
+            if (!motorGroups[motorKey]) {
+              motorGroups[motorKey] = { fw: false, re: false };
+            }
+            motorGroups[motorKey][config.state] = attributes[key] === true || attributes[key] === 'true' || attributes[key] === 1;
+            return null; // Will be added later
+          }
+          
+          // Simple devices (relay)
           return {
             controlKey: config.controlKey,
             name: config.nameTH,
@@ -338,7 +365,24 @@ router.get('/devices/:projectKey/:ghKey/controls', async (req: Request, res: Res
             icon: config.icon,
             status: attributes[key] === true || attributes[key] === 'true' || attributes[key] === 1,
           };
-        });
+        })
+        .filter(Boolean); // Remove nulls
+      
+      // Add grouped motors
+      Object.entries(motorGroups).forEach(([motorKey, states]) => {
+        const motorNumber = motorKey.replace('motor', '');
+        let status: 'forward' | 'reverse' | 'stop' = 'stop';
+        if (states.fw) status = 'forward';
+        else if (states.re) status = 'reverse';
+        
+        controls.push({
+          controlKey: motorKey,
+          name: `มอเตอร์ ${motorNumber}`,
+          type: 'motor',
+          icon: '⚙️',
+          status,
+        } as any);
+      });
       
       sendSuccess(res, {
         data: {

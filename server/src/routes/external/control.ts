@@ -57,15 +57,43 @@ router.post('/devices/:projectKey/:ghKey/control', async (req: Request, res: Res
       return;
     }
     
-    // Get control config
-    const control: any = db.prepare(`
-      SELECT * FROM control_configs 
-      WHERE greenhouse_id = ? AND control_key = ?
-    `).get(greenhouse.id, controlKey);
+    // Map controlKey to RPC method (instead of querying database)
+    const controlMapping: Record<string, { rpcMethod: string; nameTH: string; type: 'simple' | 'motor' }> = {
+      fan1:   { rpcMethod: 'set_fan_1_cmd',   nameTH: 'พัดลม 1',   type: 'simple' },
+      fan2:   { rpcMethod: 'set_fan_2_cmd',   nameTH: 'พัดลม 2',   type: 'simple' },
+      pump1:  { rpcMethod: 'set_pump_1_cmd',  nameTH: 'ปั๊มน้ำ 1', type: 'simple' },
+      valve2: { rpcMethod: 'set_valve_2_cmd', nameTH: 'วาล์ว 2',   type: 'simple' },
+      light1: { rpcMethod: 'set_light_1_cmd', nameTH: 'ไฟ 1',     type: 'simple' },
+      motor1: { rpcMethod: 'set_motor_1_status', nameTH: 'มอเตอร์ 1', type: 'motor' },
+      motor2: { rpcMethod: 'set_motor_2_status', nameTH: 'มอเตอร์ 2', type: 'motor' },
+      motor3: { rpcMethod: 'set_motor_3_status', nameTH: 'มอเตอร์ 3', type: 'motor' },
+      motor4: { rpcMethod: 'set_motor_4_status', nameTH: 'มอเตอร์ 4', type: 'motor' },
+    };
     
-    if (!control) {
+    const controlConfig = controlMapping[controlKey];
+    if (!controlConfig) {
       res.status(404).json({ success: false, error: 'Control device not found' });
       return;
+    }
+    
+    // Validate value based on type
+    let rpcParams: any;
+    if (controlConfig.type === 'simple') {
+      // Simple devices: true/false or 1/0
+      const boolValue = value === true || value === 1 || value === '1';
+      rpcParams = boolValue ? 1 : 0;
+    } else if (controlConfig.type === 'motor') {
+      // Motors: 0=stop, 1=forward, 2=reverse or "stop"/"forward"/"reverse"
+      if (value === 'stop' || value === 0 || value === '0') rpcParams = 0;
+      else if (value === 'forward' || value === 1 || value === '1') rpcParams = 1;
+      else if (value === 'reverse' || value === 2 || value === '2') rpcParams = 2;
+      else {
+        res.status(400).json({ 
+          success: false, 
+          error: 'Motor value must be 0/1/2 or stop/forward/reverse' 
+        });
+        return;
+      }
     }
     
     // Authenticate with ThingsBoard
@@ -78,10 +106,10 @@ router.post('/devices/:projectKey/:ghKey/control', async (req: Request, res: Res
     
     // Send RPC command
     const rpcResponse = await axios.post(
-      `${project.tb_base_url}/api/rpc/twoway/${greenhouse.tb_device_id}`,
+      `${project.tb_base_url}/api/rpc/twoway/${greenhouse.device_id}`,
       {
-        method: control.rpc_method,
-        params: { [controlKey]: value },
+        method: controlConfig.rpcMethod,
+        params: rpcParams,
         timeout: 5000
       },
       {
@@ -93,11 +121,18 @@ router.post('/devices/:projectKey/:ghKey/control', async (req: Request, res: Res
     );
     
     // Log the action
+    let actionText: string;
+    if (controlConfig.type === 'simple') {
+      actionText = rpcParams ? 'ON' : 'OFF';
+    } else {
+      actionText = rpcParams === 1 ? 'FORWARD' : rpcParams === 2 ? 'REVERSE' : 'STOP';
+    }
+    
     logDeviceControl({
       greenhouseId: greenhouse.id,
       controlKey,
-      controlName: control.name_th,
-      action: value ? 'ON' : 'OFF',
+      controlName: controlConfig.nameTH,
+      action: actionText,
       value: String(value),
       source: 'external_api',
       apiKeyPrefix,
