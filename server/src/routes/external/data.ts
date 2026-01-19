@@ -69,16 +69,33 @@ router.get('/greenhouses/:projectKey/:ghKey/latest', async (req: Request, res: R
     
     const { projectKey, ghKey } = parsed.data;
     
-    // Define keys to fetch
+    // Define keys to fetch - All 10 soil sensors with complete data + air sensors
     const keys = [
-      'soil1_moisture',
-      'soil1_temp',
-      'soil2_moisture',
-      'soil2_temp',
+      // Soil Sensor 1
+      'soil1_moisture', 'soil1_temp', 'soil1_ec', 'soil1_ph', 'soil1_n', 'soil1_p', 'soil1_k',
+      // Soil Sensor 2
+      'soil2_moisture', 'soil2_temp', 'soil2_ec', 'soil2_ph', 'soil2_n', 'soil2_p', 'soil2_k',
+      // Soil Sensor 3
+      'soil3_moisture', 'soil3_temp', 'soil3_ec', 'soil3_ph', 'soil3_n', 'soil3_p', 'soil3_k',
+      // Soil Sensor 4
+      'soil4_moisture', 'soil4_temp', 'soil4_ec', 'soil4_ph', 'soil4_n', 'soil4_p', 'soil4_k',
+      // Soil Sensor 5
+      'soil5_moisture', 'soil5_temp', 'soil5_ec', 'soil5_ph', 'soil5_n', 'soil5_p', 'soil5_k',
+      // Soil Sensor 6
+      'soil6_moisture', 'soil6_temp', 'soil6_ec', 'soil6_ph', 'soil6_n', 'soil6_p', 'soil6_k',
+      // Soil Sensor 7
+      'soil7_moisture', 'soil7_temp', 'soil7_ec', 'soil7_ph', 'soil7_n', 'soil7_p', 'soil7_k',
+      // Soil Sensor 8
+      'soil8_moisture', 'soil8_temp', 'soil8_ec', 'soil8_ph', 'soil8_n', 'soil8_p', 'soil8_k',
+      // Soil Sensor 9
+      'soil9_moisture', 'soil9_temp', 'soil9_ec', 'soil9_ph', 'soil9_n', 'soil9_p', 'soil9_k',
+      // Soil Sensor 10
+      'soil10_moisture', 'soil10_temp', 'soil10_ec', 'soil10_ph', 'soil10_n', 'soil10_p', 'soil10_k',
+      // Air Sensors (fixed keys to match ESP32)
       'air_temp',
       'air_humidity',
-      'light',
-      'co2',
+      'air_light',  // ✅ Fixed: was 'light'
+      'air_co2',    // ✅ Fixed: was 'co2'
     ];
     
     // Fetch latest telemetry from ThingsBoard
