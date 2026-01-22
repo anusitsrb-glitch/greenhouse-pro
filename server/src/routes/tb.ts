@@ -198,20 +198,10 @@ router.post('/rpc', requireOperator, async (req: Request, res: Response) => {
       return;
     }
 
-    // Check if device is online first
-    const isOnline = await tbService.isDeviceOnline(project, gh);
-    if (!isOnline) {
-      logAudit({
-        userId: req.session.userId ?? null,
-        action: AuditActions.RPC_FAILED,
-        projectKey: project,
-        ghKey: gh,
-        detail: { method, params, reason: 'Device offline' },
-      });
-      sendError(res, ThaiErrors.TB_DEVICE_OFFLINE, 503);
-      return;
-    }
-
+    // ✅ OPTIMIZATION: Skip device online check to improve speed
+    // If device is offline, RPC will timeout (5s) and we'll know
+    // This saves 500ms-1s on every command
+    
     // Log RPC attempt
     logAudit({
       userId: req.session.userId ?? null,

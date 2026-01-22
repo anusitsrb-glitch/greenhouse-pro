@@ -24,6 +24,9 @@ import passwordRoutes from './routes/password.js';
 import externalRoutes from './routes/external/index.js';
 import exportRoutes from './routes/export.js';
 
+// ✅ WebSocket import
+import { initWebSocket, getWebSocketStats } from './websocket/index.js';
+
 // ✅ ใช้ DB instance เพื่อทำ SQLite session store
 import { db } from './db/connection.js';
 
@@ -46,7 +49,7 @@ app.use(helmet({ contentSecurityPolicy: false }));
 
 // -------------------------------
 // ✅ CORS
-// - ถ้าโปรดักชัน “โดเมนเดียวกัน” (serve client+api จากโดเมนเดียว) => origin: true ได้เลย
+// - ถ้าโปรดักชัน "โดเมนเดียวกัน" (serve client+api จากโดเมนเดียว) => origin: true ได้เลย
 // - ถ้าอยากจำกัดหลายโดเมน ให้ตั้ง ENV: CORS_ORIGINS="https://a.com,https://b.com"
 //   แล้วระบบจะอ่านจาก process.env (ไม่ผูกกับ env.ts)
 // -------------------------------
@@ -72,7 +75,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // -------------------------------
-// ✅ SESSION: ใช้ SQLiteStore เพื่อ “จำล็อกอิน” แม้ Railway restart
+// ✅ SESSION: ใช้ SQLiteStore เพื่อ "จำล็อกอิน" แม้ Railway restart
 // -------------------------------
 const SqliteStore = BetterSqlite3SessionStore(session);
 
@@ -178,10 +181,11 @@ app.use(errorHandler);
 
 const PORT = Number(process.env.PORT) || env.PORT || 3000;
 
-app.listen(PORT, '0.0.0.0', () => {
+// ✅ CHANGED: Use app.listen to get server instance for WebSocket
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('════════════════════════════════════════════════════════');
-  console.log('🌿 GreenHouse Pro V5 Server');
+  console.log('🌿 GreenHouse Pro V5 Server (Optimized)');
   console.log('════════════════════════════════════════════════════════');
   console.log(`   Environment: ${env.NODE_ENV}`);
   console.log(`   Port: ${PORT}`);
@@ -189,6 +193,15 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   ThingsBoard: ${env.TB_BASE_URL}`);
   console.log('════════════════════════════════════════════════════════');
   console.log('');
+});
+
+// ✅ NEW: Initialize WebSocket Server
+const wss = initWebSocket(server);
+
+// ✅ NEW: WebSocket stats endpoint (optional - for monitoring)
+app.get('/api/ws/stats', (req, res) => {
+  const stats = getWebSocketStats();
+  res.json({ success: true, data: stats });
 });
 
 export default app;

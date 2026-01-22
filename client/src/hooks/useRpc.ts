@@ -137,7 +137,7 @@ export function useRpc({
 
     try {
       // ✅ FIX: ส่ง timeout parameter (30 วินาที - รองรับ device ช้า)
-      await tbApi.sendRpc(project, gh, method, params, 20000);
+      await tbApi.sendRpc(project, gh, method, params, 5000);
 
       // Start confirmation polling if we have an attribute to check
       if (expectedAttribute) {
@@ -231,7 +231,7 @@ export function useMotorRpc({
 
     try {
       // ✅ FIX: ส่ง timeout parameter (30 วินาที - รองรับ device ช้า)
-      await tbApi.sendRpc(project, gh, method, params, 20000);
+      await tbApi.sendRpc(project, gh, method, params, 5000);
 
       // Start confirmation polling
       const checkConfirmation = async () => {

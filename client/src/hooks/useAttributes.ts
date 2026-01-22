@@ -1,12 +1,10 @@
 /**
- * useAttributes Hook
+ * useAttributes Hook - OPTIMIZED with Adaptive Polling
  * Fetches and polls device attributes from ThingsBoard
- * Used for control states (relays, motors, auto modes, timers)
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { tbApi, AttributesResponse } from '@/lib/tbApi';
-import { normalizeBoolean } from '@/lib/utils';
 import { POLLING_INTERVALS } from '@/config/dataKeys';
 
 interface UseAttributesOptions {
@@ -37,8 +35,12 @@ export function useAttributes({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
-  
+  const [lastChangeTime, setLastChangeTime] = useState(Date.now());
+  const [isTabActive, setIsTabActive] = useState(true);
+
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const prevDataRef = useRef<string>('');
 
   const fetchData = useCallback(async () => {
     if (!project || !gh || keys.length === 0) {
@@ -46,17 +48,69 @@ export function useAttributes({
       return;
     }
 
+    // Cancel previous request if still running
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    abortControllerRef.current = new AbortController();
+
     try {
       const response = await tbApi.getAttributes(project, gh, keys);
+
+      // Check if data changed
+      const newDataStr = JSON.stringify(response);
+      if (newDataStr !== prevDataRef.current) {
+        setLastChangeTime(Date.now());
+        prevDataRef.current = newDataStr;
+      }
+
       setData(response);
       setError(null);
       setLastUpdated(Date.now());
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        // Request was cancelled, ignore
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Failed to fetch attributes');
     } finally {
       setIsLoading(false);
     }
   }, [project, gh, keys]);
+
+  // Monitor tab visibility
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const isActive = !document.hidden;
+      setIsTabActive(isActive);
+
+      // Resume polling immediately when tab becomes active
+      if (isActive && enabled) {
+        fetchData();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [enabled, fetchData]);
+
+  // Adaptive polling interval
+  const adaptiveInterval = useCallback(() => {
+    if (!isTabActive) {
+      return 30000; // Poll slowly when tab inactive (30s)
+    }
+
+    const timeSinceLastChange = Date.now() - lastChangeTime;
+
+    if (timeSinceLastChange < 30000) {
+      // Recent change (< 30s ago) → poll frequently
+      return Math.max(pollInterval, 2000);
+    } else {
+      // No recent changes → poll slowly
+      return Math.max(pollInterval * 2, 10000);
+    }
+  }, [isTabActive, lastChangeTime, pollInterval]);
 
   // Initial fetch and polling
   useEffect(() => {
@@ -68,19 +122,32 @@ export function useAttributes({
     // Initial fetch
     fetchData();
 
-    // Set up polling
-    if (pollInterval > 0) {
-      intervalRef.current = setInterval(fetchData, pollInterval);
-    }
+    // Set up adaptive polling
+    const startPolling = () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+
+      const interval = adaptiveInterval();
+      intervalRef.current = setInterval(() => {
+        fetchData();
+        startPolling(); // Restart with new adaptive interval
+      }, interval);
+    };
+
+    startPolling();
 
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
     };
-  }, [enabled, fetchData, pollInterval]);
+  }, [enabled, fetchData, adaptiveInterval]);
 
-  // Determine online status from attributes
+  // Determine online status
   const isOnline = (() => {
     const status = data.status;
     if (typeof status === 'string') {
@@ -97,62 +164,4 @@ export function useAttributes({
     lastUpdated,
     isOnline,
   };
-}
-
-/**
- * useBurstPoll Hook
- * For burst polling after RPC to confirm attribute changes
- */
-export function useBurstPoll(
-  project: string,
-  gh: string,
-  keys: string[],
-  onData: (data: AttributesResponse) => void
-) {
-  const burstIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const burstTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  const startBurst = useCallback(() => {
-    // Clear any existing burst
-    if (burstIntervalRef.current) clearInterval(burstIntervalRef.current);
-    if (burstTimeoutRef.current) clearTimeout(burstTimeoutRef.current);
-
-    // Start burst polling
-    burstIntervalRef.current = setInterval(async () => {
-      try {
-        const response = await tbApi.getAttributes(project, gh, keys);
-        onData(response);
-      } catch (err) {
-        console.error('Burst poll error:', err);
-      }
-    }, POLLING_INTERVALS.BURST_CONFIRM);
-
-    // Stop burst after duration
-    burstTimeoutRef.current = setTimeout(() => {
-      if (burstIntervalRef.current) {
-        clearInterval(burstIntervalRef.current);
-        burstIntervalRef.current = null;
-      }
-    }, POLLING_INTERVALS.BURST_DURATION);
-  }, [project, gh, keys, onData]);
-
-  const stopBurst = useCallback(() => {
-    if (burstIntervalRef.current) {
-      clearInterval(burstIntervalRef.current);
-      burstIntervalRef.current = null;
-    }
-    if (burstTimeoutRef.current) {
-      clearTimeout(burstTimeoutRef.current);
-      burstTimeoutRef.current = null;
-    }
-  }, []);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      stopBurst();
-    };
-  }, [stopBurst]);
-
-  return { startBurst, stopBurst };
 }

@@ -247,14 +247,14 @@ export const UNITS: Record<string, string> = {
 };
 
 // ============================================================
-// Polling Intervals (ms)
+// Polling Intervals (ms) - OPTIMIZED
 // ============================================================
 
 export const POLLING_INTERVALS = {
-  ATTRIBUTES: 3000,      // 3 seconds - for control states
-  TELEMETRY: 60000,      // 60 seconds - for sensor data
-  BURST_CONFIRM: 500,    // 500ms - after RPC for confirmation
-  BURST_DURATION: 6000,  // 6 seconds - how long to burst poll
+  ATTRIBUTES: 5000,      // 5 seconds (ช้าลง - มี WebSocket + Optimistic UI)
+  TELEMETRY: 60000,      // 60 seconds
+  BURST_CONFIRM: 1000,   // 1 second (ช้าลง - ประหยัด network)
+  BURST_DURATION: 5000,  // 5 seconds (สั้นลง)
 };
 
 // ============================================================
