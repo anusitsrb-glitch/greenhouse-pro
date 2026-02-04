@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { PageContainer } from '@/components/layout';
 import { 
@@ -10,6 +10,7 @@ import {
   DashboardTab,
   ChartsTab,
   TimersTab,
+  AutomationTab, // ← ชื่อเดิม ไม่ต้องเปลี่ยน
   TabKey 
 } from '@/components/greenhouse';
 import { Button, Loading } from '@/components/ui';
@@ -28,9 +29,23 @@ export function GreenhousePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState<boolean | null>(null);
+  const [lastStatusCheck, setLastStatusCheck] = useState<number>(Date.now());
   
   // Default tab is Soil (ค่าดิน)
   const [activeTab, setActiveTab] = useState<TabKey>('soil');
+
+  const checkDeviceStatus = useCallback(async () => {
+    if (!projectKey || !ghKey) return;
+    
+    try {
+      const status = await tbApi.getDeviceStatus(projectKey, ghKey);
+      setIsOnline(status.online);
+      setLastStatusCheck(Date.now());
+    } catch {
+      setIsOnline(false);
+      setLastStatusCheck(Date.now());
+    }
+  }, [projectKey, ghKey]);
 
   const fetchData = async () => {
     if (!projectKey || !ghKey) return;
@@ -45,12 +60,7 @@ export function GreenhousePage() {
       
       // Check device status if device is linked
       if (data.greenhouse.hasDevice) {
-        try {
-          const status = await tbApi.getDeviceStatus(projectKey, ghKey);
-          setIsOnline(status.online);
-        } catch {
-          setIsOnline(false);
-        }
+        await checkDeviceStatus();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูลได้');
@@ -62,6 +72,17 @@ export function GreenhousePage() {
   useEffect(() => {
     fetchData();
   }, [projectKey, ghKey]);
+
+  // หมายเลข 1: Polling สถานะออนไลน์/ออฟไลน์ทุก 30 วินาที
+  useEffect(() => {
+    if (!greenhouse?.hasDevice) return;
+
+    const interval = setInterval(() => {
+      checkDeviceStatus();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [greenhouse?.hasDevice, checkDeviceStatus]);
 
   // Determine if controls should be disabled
   const isDeveloping = greenhouse?.status === 'developing' || !greenhouse?.hasDevice;
@@ -99,6 +120,16 @@ export function GreenhousePage() {
       case 'timers':
         return (
           <TimersTab 
+            project={projectKey} 
+            gh={ghKey} 
+            isReady={isReady}
+            isOnline={deviceOnline}
+            userRole={userRole}
+          />
+        );
+      case 'automation': // NEW!
+        return (
+          <AutomationTab 
             project={projectKey} 
             gh={ghKey} 
             isReady={isReady}

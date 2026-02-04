@@ -247,11 +247,15 @@ async function tbRequest<T>(
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
         console.error(`ThingsBoard error [${response.status}]:`, errorText);
-        
-        if (response.status === 401 || response.status === 403) {
-          throw new Error(ThaiErrors.TB_AUTH_ERROR);
-        }
-        throw new Error(ThaiErrors.TB_CONNECTION_ERROR);
+
+        const err: any = new Error(
+          (response.status === 401 || response.status === 403)
+            ? ThaiErrors.TB_AUTH_ERROR
+            : ThaiErrors.TB_CONNECTION_ERROR
+        );
+        err.status = response.status;      // ✅ สำคัญ
+        err.tbBody = errorText;
+        throw err;
       }
 
       // Handle empty responses
@@ -264,7 +268,9 @@ async function tbRequest<T>(
     } catch (error) {
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
-          throw new Error(ThaiErrors.TB_TIMEOUT);
+          const err: any = new Error(ThaiErrors.TB_TIMEOUT);
+          err.status = 408;
+          throw err;
         }
         throw error;
       }
@@ -351,19 +357,44 @@ export async function getAttributes(
     throw new Error(ThaiErrors.GREENHOUSE_DEVELOPING);
   }
 
-  const keysParam = keys.join(',');
-  const endpoint = `/api/plugins/telemetry/DEVICE/${deviceId}/values/attributes?keys=${keysParam}`;
+  const wantsAll = !keys || keys.length === 0 || keys.includes('*');
+
+  const endpoint = wantsAll
+    ? `/api/plugins/telemetry/DEVICE/${deviceId}/values/attributes`
+    : `/api/plugins/telemetry/DEVICE/${deviceId}/values/attributes?keys=${keys.join(',')}`;
 
   const response = await tbRequest<TBAttributeValue[]>(projectKey, endpoint);
 
-  // Convert array to object
   const result: Record<string, unknown> = {};
   for (const attr of response) {
     result[attr.key] = attr.value;
   }
-
   return result;
 }
+
+
+
+export async function setAttributes(
+  projectKey: string,
+  ghKey: string,
+  attributes: Record<string, unknown>,
+  scope: 'SHARED_SCOPE' | 'SERVER_SCOPE' = 'SHARED_SCOPE'
+): Promise<void> {
+  const deviceId = getDeviceId(projectKey, ghKey);
+  if (!deviceId) {
+    throw new Error(ThaiErrors.GREENHOUSE_DEVELOPING);
+  }
+
+  const endpoint = `/api/plugins/telemetry/DEVICE/${deviceId}/attributes/${scope}`;
+
+  await tbRequest(projectKey, endpoint, {
+    method: 'POST',
+    body: JSON.stringify(attributes),
+  });
+}
+
+
+
 
 /**
  * Send RPC command to device (two-way)
@@ -374,50 +405,34 @@ export async function sendRpcCommand(
   ghKey: string,
   method: string,
   params: unknown,
-  timeout = 20000 // ✅ เพิ่มจาก 5s → 20s
+  timeout?: number // ✅ ไม่มี default แล้ว
 ): Promise<TBRpcResponse> {
   const deviceId = getDeviceId(projectKey, ghKey);
   if (!deviceId) {
     throw new Error(ThaiErrors.GREENHOUSE_DEVELOPING);
   }
 
-  const endpoint = `/api/rpc/twoway/${deviceId}`;
+  // ✅ ถ้าส่ง timeout มา = two-way (ต้องการ response)
+  // ✅ ถ้าไม่ส่ง timeout = one-way (ส่งแล้วจบ)
+  const isTwoWay = typeof timeout === 'number' && timeout > 0;
 
-  // ✅ เพิ่ม retry logic
-  let lastError: Error | null = null;
-  
-  for (let attempt = 1; attempt <= RPC_RETRY_ATTEMPTS; attempt++) {
-    try {
-      console.log(`🚀 Sending RPC to ${ghKey} (attempt ${attempt}/${RPC_RETRY_ATTEMPTS})...`);
-      
-      const result = await tbRequest<TBRpcResponse>(projectKey, endpoint, {
-        method: 'POST',
-        body: JSON.stringify({
-          method,
-          params,
-          timeout,
-        }),
-      });
+  const endpoint = isTwoWay
+    ? `/api/rpc/twoway/${deviceId}`
+    : `/api/rpc/oneway/${deviceId}`;
 
-      console.log(`✅ RPC success for ${ghKey}`);
-      return result;
-      
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error('Unknown error');
-      
-      if (lastError.message.includes('Timeout') && attempt < RPC_RETRY_ATTEMPTS) {
-        console.log(`⏱️  RPC timeout for ${ghKey}, retrying...`);
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        continue;
-      }
-      
-      break;
-    }
-  }
+  const body = isTwoWay
+    ? { method, params, timeout }
+    : { method, params };
 
-  console.error(`❌ RPC failed for ${ghKey} after ${RPC_RETRY_ATTEMPTS} attempts`);
-  throw lastError;
+  console.log(`🚀 RPC ${isTwoWay ? 'two-way' : 'one-way'} to ${ghKey}: ${method}`);
+
+  // ✅ ไม่ retry เพื่อกันสั่งซ้ำ (toggle จะเพี้ยนได้)
+  return tbRequest<TBRpcResponse>(projectKey, endpoint, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }
+
 
 // Alias for compatibility
 export const sendRpc = sendRpcCommand;
@@ -430,18 +445,79 @@ export async function isDeviceOnline(
   ghKey: string
 ): Promise<boolean> {
   try {
-    const attrs = await getAttributes(projectKey, ghKey, ['status']);
-    const status = attrs.status;
-    
-    if (typeof status === 'string') {
-      return status.toLowerCase() === 'online';
+    console.log(`🔍 [isDeviceOnline] Checking ${ghKey}...`);
+
+    const OFFLINE_THRESHOLD_SEC = 180; // 3 นาที
+
+    // 1) อ่าน attributes ก่อน
+    const attrs = await getAttributes(projectKey, ghKey, ['status', 'last_seen']);
+    console.log(`  📦 Attributes:`, attrs);
+
+    const statusRaw =
+      typeof attrs.status === 'string' ? attrs.status.trim().toLowerCase() : '';
+
+    // last_seen อาจเป็น number หรือ string → แปลงให้เป็น number
+    const lastSeenVal = (attrs as any).last_seen;
+    const lastSeenSec =
+      typeof lastSeenVal === 'number'
+        ? lastSeenVal
+        : typeof lastSeenVal === 'string'
+          ? Number(lastSeenVal)
+          : NaN;
+
+    // ✅ ถ้ามี last_seen ใช้เป็นหลัก
+    if (!Number.isNaN(lastSeenSec) && lastSeenSec > 0) {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const age = nowSec - lastSeenSec;
+
+      console.log(`  ⏰ Last seen: ${age}s ago (threshold: ${OFFLINE_THRESHOLD_SEC}s)`);
+
+      if (age <= OFFLINE_THRESHOLD_SEC) {
+        console.log(`  ✅ Final decision: ONLINE (by last_seen)`);
+        return true;
+      }
+
+      console.log(`  ❌ Final decision: OFFLINE (last_seen too old)`);
+      return false;
     }
-    
+
+    // ⚠️ ถ้าไม่มี last_seen: "ห้ามเชื่อ status อย่างเดียว"
+    if (statusRaw) {
+      console.log(`  ⚠️ Has status="${statusRaw}" but no last_seen → check telemetry...`);
+    } else {
+      console.log(`  ⚠️ No status in attributes, checking telemetry...`);
+    }
+
+    // 2) Fallback: telemetry status (ของเดิมคุณมีอยู่แล้ว แต่ปรับให้อยู่เสมอเมื่อไม่มี last_seen)
+    const telemetry = await getLatestTelemetry(projectKey, ghKey, ['status']);
+    console.log(`  📊 Telemetry:`, telemetry);
+
+    if (telemetry.status && telemetry.status.length > 0) {
+      const latest = telemetry.status[0];
+      const latestStatus = latest.value;
+      const lastUpdateTs = latest.ts; // ms
+      const nowMs = Date.now();
+      const FRESH_MS = 2 * 60 * 1000;
+
+      console.log(
+        `  📡 Status from telemetry: "${latestStatus}" (${Math.floor((nowMs - lastUpdateTs) / 1000)}s ago)`
+      );
+
+      if ((nowMs - lastUpdateTs) < FRESH_MS && typeof latestStatus === 'string') {
+        const ok = latestStatus.trim().toLowerCase() === 'online';
+        console.log(`  ✅ Final decision: ${ok ? 'ONLINE' : 'OFFLINE'} (by telemetry fresh)`);
+        return ok;
+      }
+    }
+
+    console.log(`  ❌ Final decision: OFFLINE (no fresh evidence)`);
     return false;
-  } catch {
+  } catch (error) {
+    console.error(`❌ Error checking device online status for ${ghKey}:`, error);
     return false;
   }
 }
+
 
 /**
  * Test ThingsBoard connection for a project
@@ -469,6 +545,7 @@ export const tbService = {
   getLatestTelemetry,
   getTelemetryTimeseries,
   getAttributes,
+  setAttributes, // ✅ เพิ่ม
   sendRpcCommand,
   sendRpc,
   isDeviceOnline,

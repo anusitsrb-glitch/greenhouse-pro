@@ -7,6 +7,7 @@ interface AuthContextType extends AuthState {
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   refreshUser: () => Promise<void>; // ✅ เพิ่มตัวนี้
+  updateUser: (patch: Partial<User>) => void; // ✅ เพิ่ม
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -17,6 +18,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading: true,
     isAuthenticated: false,
   });
+
+  const updateUser = useCallback((patch: Partial<User>) => {
+    setState(prev => {
+      if (!prev.user) return prev;
+      return {
+        ...prev,
+        user: { ...prev.user, ...patch } as User,
+      };
+    });
+  }, []);
+
 
   const checkAuth = useCallback(async () => {
     try {
@@ -113,10 +125,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [checkAuth]);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, checkAuth, refreshUser }}>
+    <AuthContext.Provider value={{ ...state, login, logout, checkAuth, refreshUser, updateUser }}>
+
       {children}
     </AuthContext.Provider>
   );
+
+  
+
 }
 
 export function useAuth() {

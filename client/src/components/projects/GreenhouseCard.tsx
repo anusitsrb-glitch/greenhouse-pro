@@ -1,12 +1,11 @@
 import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui';
-import { 
+import {
   Home,
-  Lock,
   ChevronRight,
   Wifi,
   WifiOff,
-  Construction
+  Construction,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Greenhouse } from '@/lib/projectsApi';
@@ -20,9 +19,29 @@ export function GreenhouseCard({ greenhouse, projectKey }: GreenhouseCardProps) 
   const isReady = greenhouse.status === 'ready';
   const hasDevice = greenhouse.hasDevice;
 
+  const deviceStatus = greenhouse.deviceStatus; // 'online' | 'offline' | undefined
+  const isOnline = deviceStatus === 'online';
+  const isUnknown = isReady && hasDevice && !deviceStatus;
+
   // Extract number from ghKey (e.g., "greenhouse8" -> 8)
   const numberMatch = greenhouse.ghKey.match(/\d+/);
   const number = numberMatch ? numberMatch[0] : '';
+
+  const statusClass = !isReady
+    ? 'bg-yellow-100 text-yellow-800'
+    : isOnline
+      ? 'bg-green-100 text-green-800'
+      : isUnknown
+        ? 'bg-gray-100 text-gray-700'
+        : 'bg-red-100 text-red-800';
+
+  const statusText = !isReady
+    ? greenhouse.statusText
+    : isOnline
+      ? 'พร้อมใช้งาน'
+      : isUnknown
+        ? 'กำลังตรวจสอบ'
+        : 'ออฟไลน์';
 
   const cardContent = (
     <Card
@@ -33,14 +52,19 @@ export function GreenhouseCard({ greenhouse, projectKey }: GreenhouseCardProps) 
       )}
     >
       <div className="flex items-center gap-4">
-        {/* Number badge */}
-        <div 
+        {/* Number badge (Home + number) */}
+        <div
           className={cn(
-            'w-14 h-14 rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-sm flex-shrink-0',
+            'w-14 h-14 rounded-xl flex items-center justify-center shadow-sm flex-shrink-0 relative',
             isReady ? 'bg-primary' : 'bg-gray-400'
           )}
         >
-          {number || <Home className="w-6 h-6" />}
+          <Home className="w-7 h-7 text-white" />
+          {number && (
+            <span className="absolute bottom-1 right-1 bg-white/90 text-gray-900 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+              {number}
+            </span>
+          )}
         </div>
 
         {/* Content */}
@@ -49,14 +73,17 @@ export function GreenhouseCard({ greenhouse, projectKey }: GreenhouseCardProps) 
             <h3 className="text-base font-semibold text-gray-900 truncate">
               {greenhouse.nameTh}
             </h3>
-            
-            {/* Device status indicator */}
+
+            {/* Wifi icon (only when ready) */}
             {isReady && (
-              <div className={cn(
-                'flex items-center gap-1 text-xs',
-                hasDevice ? 'text-green-600' : 'text-gray-400'
-              )}>
-                {hasDevice ? (
+              <div
+                className={cn(
+                  'flex items-center',
+                  isOnline ? 'text-green-600' : isUnknown ? 'text-gray-400' : 'text-red-500'
+                )}
+                title={statusText}
+              >
+                {isOnline ? (
                   <Wifi className="w-3 h-3" />
                 ) : (
                   <WifiOff className="w-3 h-3" />
@@ -65,17 +92,10 @@ export function GreenhouseCard({ greenhouse, projectKey }: GreenhouseCardProps) 
             )}
           </div>
 
-          {/* Status */}
+          {/* Status badge (single source of truth) */}
           <div className="flex items-center gap-2">
-            <span
-              className={cn(
-                'px-2 py-0.5 rounded-full text-xs font-medium',
-                isReady 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-yellow-100 text-yellow-800'
-              )}
-            >
-              {greenhouse.statusText}
+            <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', statusClass)}>
+              {statusText}
             </span>
 
             {!isReady && (
@@ -88,11 +108,11 @@ export function GreenhouseCard({ greenhouse, projectKey }: GreenhouseCardProps) 
         </div>
 
         {/* Arrow */}
-        <ChevronRight 
+        <ChevronRight
           className={cn(
             'w-5 h-5 text-gray-400 flex-shrink-0 transition-transform',
             isReady && 'group-hover:translate-x-1 group-hover:text-primary'
-          )} 
+          )}
         />
       </div>
 
@@ -105,12 +125,7 @@ export function GreenhouseCard({ greenhouse, projectKey }: GreenhouseCardProps) 
     </Card>
   );
 
-  // Always linkable, but show different UI inside greenhouse page
-  return (
-    <Link to={`/project/${projectKey}/${greenhouse.ghKey}`}>
-      {cardContent}
-    </Link>
-  );
+  return <Link to={`/project/${projectKey}/${greenhouse.ghKey}`}>{cardContent}</Link>;
 }
 
 // Skeleton for loading state

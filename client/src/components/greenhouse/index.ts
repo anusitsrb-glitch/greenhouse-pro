@@ -1,4 +1,5 @@
-export { GreenhouseTabs, GreenhouseTabsBottom } from './GreenhouseTabs';
+export { GreenhouseTabs } from './GreenhouseTabs';
+export { GreenhouseTabsBottom } from './GreenhouseTabsBottom';
 export type { TabKey } from './GreenhouseTabs';
 export { DevelopingBanner, OfflineBanner } from './DevelopingBanner';
 export { SoilTab } from './SoilTab';
@@ -12,3 +13,5 @@ export { AutoModeCard } from './AutoModeCard';
 export { ChartsTab } from './ChartsTab';
 export { TimersTab } from './TimersTab';
 export { ReportDownload } from './ReportDownload';
+export { default as AutomationTab } from './AutomationTab';
+export { AutoConfigTab } from './auto-config/AutoConfigTab';

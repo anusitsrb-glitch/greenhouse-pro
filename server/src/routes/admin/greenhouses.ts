@@ -4,6 +4,10 @@ import { sendSuccess, sendError, ThaiErrors } from '../../utils/response.js';
 import { requireAdmin } from '../../middleware/auth.js';
 import { logAudit, AuditActions } from '../../utils/audit.js';
 import { z } from 'zod';
+import { isDeviceOnline } from '../../services/thingsboard.js';
+
+
+
 
 const router = Router();
 
@@ -33,7 +37,7 @@ const linkDeviceSchema = z.object({
  * GET /api/admin/greenhouses
  * List all greenhouses across all projects
  */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     const { project_key } = req.query;
     
@@ -57,17 +61,44 @@ router.get('/', (req: Request, res: Response) => {
     
     const greenhouses = db.prepare(query).all(...params);
     
-    const formatted = greenhouses.map((g: any) => ({
-      id: g.id,
-      ghKey: g.gh_key,
-      nameTh: g.name_th,
-      status: g.status,
-      deviceId: g.tb_device_id,
-      projectKey: g.project_key,
-      projectName: g.project_name,
-      createdAt: g.created_at,
-      updatedAt: g.updated_at,
-    }));
+    const formatted = await Promise.all(
+      greenhouses.map(async (g: any) => {
+
+        let isOnline = false;
+
+        if (g.tb_device_id) {
+          try {
+            const status = await isDeviceOnline(g.project_key, g.gh_key);
+
+
+            const online =
+              typeof status === 'boolean'
+                ? status
+                : (status as any)?.isOnline === true;
+
+            isOnline = online;
+
+          } catch (err) {
+            console.error('TB status error:', err);
+          }
+        }
+
+        return {
+          id: g.id,
+          ghKey: g.gh_key,
+          nameTh: g.name_th,
+          status: g.status,
+          deviceId: g.tb_device_id,
+          isOnline, // ✅ เพิ่มตรงนี้
+          projectKey: g.project_key,
+          projectName: g.project_name,
+          createdAt: g.created_at,
+          updatedAt: g.updated_at,
+        };
+      })
+    );
+
+
     
     sendSuccess(res, { greenhouses: formatted });
   } catch (error) {

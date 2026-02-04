@@ -9,8 +9,12 @@ import {
   Search,
   UserPlus,
   Shield,
-  FolderKanban
+  FolderKanban,
+  KeyRound,
+  Eye,
+  EyeOff
 } from 'lucide-react';
+
 import { cn } from '@/lib/utils';
 import type { UserRole } from '@/types';
 
@@ -37,6 +41,7 @@ export function UsersPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [showAccessModal, setShowAccessModal] = useState<AdminUser | null>(null);
+  const [resetUser, setResetUser] = useState<AdminUser | null>(null);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -238,6 +243,17 @@ export function UsersPage() {
                             <Shield className="w-4 h-4" />
                           </Button>
 
+                          {/* ✅ Reset Password */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setResetUser(user)}
+                            disabled={actorRole !== 'superadmin'}  // ✅ ให้เฉพาะ superadmin ทำได้ตามที่คุณต้องการ (B)
+                            title={actorRole !== 'superadmin' ? 'เฉพาะ Super Admin เท่านั้นที่รีเซ็ตรหัสผ่านได้' : 'รีเซ็ตรหัสผ่าน'}
+                          >
+                            <KeyRound className="w-4 h-4" />
+                          </Button>
+
                           <Button
                             variant="ghost"
                             size="sm"
@@ -271,6 +287,7 @@ export function UsersPage() {
                             <Trash2 className="w-4 h-4" />
                           </Button>
                         </div>
+
                       </td>
                     </tr>
                   );
@@ -315,6 +332,18 @@ export function UsersPage() {
           }}
         />
       )}
+
+{resetUser && (
+  <ResetPasswordModal
+    user={resetUser}
+    onClose={() => setResetUser(null)}
+    onSuccess={() => {
+      setResetUser(null);
+      fetchData();
+    }}
+  />
+)}
+
     </AdminLayout>
   );
 }
@@ -747,3 +776,123 @@ function ProjectAccessModal({
     </div>
   );
 }
+
+
+function ResetPasswordModal({
+  user,
+  onClose,
+  onSuccess,
+}: {
+  user: AdminUser;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const { addToast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
+
+  const canSubmit =
+    newPassword.length >= 6 &&
+    confirmPassword.length >= 6 &&
+    newPassword === confirmPassword;
+
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (newPassword.length < 6) {
+      addToast({ type: 'error', message: 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร' });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      addToast({ type: 'error', message: 'รหัสผ่านใหม่ไม่ตรงกัน' });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await adminApi.resetUserPassword(user.id, newPassword);
+      addToast({ type: 'success', message: `รีเซ็ตรหัสผ่านของ ${user.username} สำเร็จ` });
+      onSuccess();
+    } catch (error) {
+      addToast({ type: 'error', message: error instanceof Error ? error.message : 'เกิดข้อผิดพลาด' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <Card className="w-full max-w-md">
+        <div className="p-6">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold">รีเซ็ตรหัสผ่าน</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                ผู้ใช้: <span className="font-medium text-gray-900">{user.username}</span>
+              </p>
+            </div>
+            <Button type="button" variant="ghost" onClick={onClose}>
+              ✕
+            </Button>
+          </div>
+
+          <form onSubmit={handleReset} className="space-y-4 mt-5">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                รหัสผ่านใหม่ <span className="text-red-600">*</span>
+              </label>
+              <div className="relative">
+                <Input
+                  type={showPw ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="อย่างน้อย 6 ตัวอักษร"
+                  autoComplete="new-password"
+                  disabled={isLoading}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPw((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  aria-label={showPw ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+                >
+                  {showPw ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                แนะนำ: ใช้ตัวอักษร + ตัวเลข เพื่อความปลอดภัย
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                ยืนยันรหัสผ่านใหม่ <span className="text-red-600">*</span>
+              </label>
+              <Input
+                type={showPw ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="กรอกซ้ำอีกครั้ง"
+                autoComplete="new-password"
+                disabled={isLoading}
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={onClose} className="flex-1" disabled={isLoading}>
+                ยกเลิก
+              </Button>
+              <Button type="submit" className="flex-1" isLoading={isLoading} disabled={!canSubmit || isLoading}>
+                รีเซ็ต
+              </Button>
+            </div>
+          </form>
+        </div>
+      </Card>
+    </div>
+  );
+}
+

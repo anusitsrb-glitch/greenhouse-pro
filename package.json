@@ -14,15 +14,20 @@
     "build": "npm run build:client && npm run build:server",
     "build:client": "npm run build --workspace=client && npm run copy:client",
     "build:server": "npm run build --workspace=server",
-    "copy:client": "rm -rf server/client-dist && cp -r client/dist server/client-dist",
+    "copy:client": "rimraf server/client-dist && cpx \"client/dist/**\" server/client-dist",
     "start": "npm run start --workspace=server",
     "lint": "npm run lint --workspace=client && npm run lint --workspace=server"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "cpx": "^1.5.0",
+    "rimraf": "^6.1.2"
   },
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
+  },
+  "dependencies": {
+    "date-fns-tz": "^3.2.0"
   }
 }
