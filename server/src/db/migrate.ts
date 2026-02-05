@@ -1,5 +1,21 @@
 import { db } from './connection.js';
 
+
+function listColumns(table: string): string[] {
+  // quote table name for safety
+  return db.prepare(`PRAGMA table_info("${table}")`).all().map((r: any) => r.name);
+}
+
+
+function addColumnIfMissing(table: string, column: string, definition: string) {
+  const cols = new Set(listColumns(table));
+  if (cols.has(column)) return;
+
+  db.exec(`ALTER TABLE "${table}" ADD COLUMN "${column}" ${definition}`);
+  console.log(`[DB] Added column: ${table}.${column} ${definition}`);
+}
+
+
 console.log('🔄 Running database migrations...');
 
 // Users table
@@ -52,12 +68,18 @@ db.exec(`
     tb_device_id TEXT,
     tags TEXT DEFAULT '[]',
     location TEXT,
+    device_status TEXT,
+    last_online_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     UNIQUE(project_id, gh_key)
   )
 `);
+
+// ✅ Ensure columns for online/offline status exist (Railway-safe)
+addColumnIfMissing('greenhouses', 'device_status', 'TEXT');
+addColumnIfMissing('greenhouses', 'last_online_at', 'TEXT');
 
 // ============================================================
 // NEW: Sensor Configuration Table (Dynamic Sensors)
@@ -82,8 +104,8 @@ db.exec(`
     calibration_date TEXT,
     sort_order INTEGER DEFAULT 0,
     is_active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
     FOREIGN KEY (greenhouse_id) REFERENCES greenhouses(id) ON DELETE CASCADE,
     UNIQUE(greenhouse_id, sensor_key)
   )
@@ -382,6 +404,7 @@ db.exec(`
     control_name TEXT,
     action TEXT NOT NULL,
     value TEXT,
+    ip_address TEXT,  -- เพิ่มบรรทัดนี้
     source TEXT NOT NULL CHECK (source IN ('manual', 'automation', 'schedule', 'scene')),
     source_id INTEGER,
     user_id INTEGER,
@@ -903,6 +926,7 @@ db.exec(`
   )
 `);
 
+
 // ============================================================
 // V4: Translations Table (i18n)
 // ============================================================
@@ -915,6 +939,29 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE(language, key)
+  )
+`);
+
+// ============================================================
+// V5: Control Logs Table (Activity Log for External API)
+// ============================================================
+db.exec(`
+  CREATE TABLE IF NOT EXISTS control_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_key TEXT NOT NULL,
+    gh_key TEXT NOT NULL,
+    device_name TEXT NOT NULL,
+    action TEXT NOT NULL,
+    value TEXT,
+    source TEXT NOT NULL CHECK (source IN ('webapp', 'external_api', 'automation', 'schedule')),
+    user_id INTEGER,
+    api_key_prefix TEXT,
+    ip_address TEXT,
+    user_agent TEXT,
+    success INTEGER NOT NULL DEFAULT 1,
+    error_message TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
   )
 `);
 
@@ -957,6 +1004,124 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_yield_records_greenhouse_id ON yield_records(greenhouse_id);
   CREATE INDEX IF NOT EXISTS idx_photo_gallery_greenhouse_id ON photo_gallery(greenhouse_id);
   CREATE INDEX IF NOT EXISTS idx_translations_language ON translations(language);
+  
+  CREATE INDEX IF NOT EXISTS idx_control_logs_project ON control_logs(project_key, gh_key);
+  CREATE INDEX IF NOT EXISTS idx_control_logs_device ON control_logs(device_name);
+  CREATE INDEX IF NOT EXISTS idx_control_logs_source ON control_logs(source);
+  CREATE INDEX IF NOT EXISTS idx_control_logs_created ON control_logs(created_at);
 `);
+
+// ============================================================
+// PHASE 1: Notification System
+// ============================================================
+
+console.log('🔄 Creating Phase 1 tables...');
+
+// 1. Notifications Table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    type TEXT NOT NULL CHECK (type IN (
+      'device_offline', 'device_online', 'sensor_alert',
+      'control_action', 'auto_mode_changed', 'system_error', 'info'
+    )),
+    severity TEXT NOT NULL CHECK (severity IN ('info', 'warning', 'critical')) DEFAULT 'info',
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    metadata TEXT DEFAULT '{}',
+    project_id INTEGER,
+    greenhouse_id INTEGER,
+    is_read INTEGER NOT NULL DEFAULT 0,
+    read_at TEXT,
+    auto_dismiss INTEGER NOT NULL DEFAULT 1,
+    dismiss_after_seconds INTEGER DEFAULT 300,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (greenhouse_id) REFERENCES greenhouses(id) ON DELETE CASCADE
+  )
+`);
+
+// 2. Notification Settings Table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS notification_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL UNIQUE,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    device_offline INTEGER NOT NULL DEFAULT 1,
+    device_online INTEGER NOT NULL DEFAULT 1,
+    sensor_alert INTEGER NOT NULL DEFAULT 1,
+    control_action INTEGER NOT NULL DEFAULT 1,
+    auto_mode_changed INTEGER NOT NULL DEFAULT 1,
+    system_error INTEGER NOT NULL DEFAULT 1,
+    show_info INTEGER NOT NULL DEFAULT 1,
+    show_warning INTEGER NOT NULL DEFAULT 1,
+    show_critical INTEGER NOT NULL DEFAULT 1,
+    project_filter TEXT DEFAULT '[]',
+    greenhouse_filter TEXT DEFAULT '[]',
+    in_app INTEGER NOT NULL DEFAULT 1,
+    email INTEGER NOT NULL DEFAULT 0,
+    line_notify INTEGER NOT NULL DEFAULT 0,
+    push INTEGER NOT NULL DEFAULT 0,
+    quiet_hours_enabled INTEGER NOT NULL DEFAULT 0,
+    quiet_hours_start TEXT DEFAULT '22:00',
+    quiet_hours_end TEXT DEFAULT '07:00',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )
+`);
+
+// 3. Device Status Logs Table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS device_status_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    greenhouse_id INTEGER NOT NULL,
+    previous_status TEXT NOT NULL CHECK (previous_status IN ('online', 'offline', 'unknown')),
+    new_status TEXT NOT NULL CHECK (new_status IN ('online', 'offline', 'unknown')),
+    reason TEXT,
+    signal_strength INTEGER,
+    wifi_ssid TEXT,
+    ip_address TEXT,
+    firmware_version TEXT,
+    offline_duration INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (greenhouse_id) REFERENCES greenhouses(id) ON DELETE CASCADE
+  )
+`);
+
+// 4. Indexes
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+  CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(type);
+  CREATE INDEX IF NOT EXISTS idx_notifications_severity ON notifications(severity);
+  CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
+  CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);
+  CREATE INDEX IF NOT EXISTS idx_notifications_greenhouse_id ON notifications(greenhouse_id);
+  
+  CREATE INDEX IF NOT EXISTS idx_device_status_logs_greenhouse_id ON device_status_logs(greenhouse_id);
+  CREATE INDEX IF NOT EXISTS idx_device_status_logs_created_at ON device_status_logs(created_at);
+  CREATE INDEX IF NOT EXISTS idx_device_status_logs_new_status ON device_status_logs(new_status);
+`);
+
+console.log('✅ Phase 1 tables created');
+
+
+await addColumnIfMissing(
+  'users',
+  'language',
+  "TEXT DEFAULT 'th'"
+);
+
+await addColumnIfMissing(
+  'users',
+  'theme',
+  "TEXT DEFAULT 'light'"
+);
+
+
+
+
 
 console.log('✅ Database migrations completed');

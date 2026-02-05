@@ -8,6 +8,7 @@ import { sendSuccess, sendError, ThaiErrors } from '../../utils/response.js';
 import { tbService } from '../../services/thingsboard.js';
 import { apiKeyAuth } from '../../middleware/apiKey.js';
 import { z } from 'zod';
+import { db } from '../../db/connection.js';
 
 const router = Router();
 
@@ -68,16 +69,33 @@ router.get('/greenhouses/:projectKey/:ghKey/latest', async (req: Request, res: R
     
     const { projectKey, ghKey } = parsed.data;
     
-    // Define keys to fetch
+    // Define keys to fetch - All 10 soil sensors with complete data + air sensors
     const keys = [
-      'soil1_moisture',
-      'soil1_temp',
-      'soil2_moisture',
-      'soil2_temp',
+      // Soil Sensor 1
+      'soil1_moisture', 'soil1_temp', 'soil1_ec', 'soil1_ph', 'soil1_n', 'soil1_p', 'soil1_k',
+      // Soil Sensor 2
+      'soil2_moisture', 'soil2_temp', 'soil2_ec', 'soil2_ph', 'soil2_n', 'soil2_p', 'soil2_k',
+      // Soil Sensor 3
+      'soil3_moisture', 'soil3_temp', 'soil3_ec', 'soil3_ph', 'soil3_n', 'soil3_p', 'soil3_k',
+      // Soil Sensor 4
+      'soil4_moisture', 'soil4_temp', 'soil4_ec', 'soil4_ph', 'soil4_n', 'soil4_p', 'soil4_k',
+      // Soil Sensor 5
+      'soil5_moisture', 'soil5_temp', 'soil5_ec', 'soil5_ph', 'soil5_n', 'soil5_p', 'soil5_k',
+      // Soil Sensor 6
+      'soil6_moisture', 'soil6_temp', 'soil6_ec', 'soil6_ph', 'soil6_n', 'soil6_p', 'soil6_k',
+      // Soil Sensor 7
+      'soil7_moisture', 'soil7_temp', 'soil7_ec', 'soil7_ph', 'soil7_n', 'soil7_p', 'soil7_k',
+      // Soil Sensor 8
+      'soil8_moisture', 'soil8_temp', 'soil8_ec', 'soil8_ph', 'soil8_n', 'soil8_p', 'soil8_k',
+      // Soil Sensor 9
+      'soil9_moisture', 'soil9_temp', 'soil9_ec', 'soil9_ph', 'soil9_n', 'soil9_p', 'soil9_k',
+      // Soil Sensor 10
+      'soil10_moisture', 'soil10_temp', 'soil10_ec', 'soil10_ph', 'soil10_n', 'soil10_p', 'soil10_k',
+      // Air Sensors (fixed keys to match ESP32)
       'air_temp',
       'air_humidity',
-      'light',
-      'co2',
+      'air_light',  // ✅ Fixed: was 'light'
+      'air_co2',    // ✅ Fixed: was 'co2'
     ];
     
     // Fetch latest telemetry from ThingsBoard
@@ -247,6 +265,166 @@ router.get('/devices/:projectKey/:ghKey/status', async (req: Request, res: Respo
     console.error('Error fetching device status:', error);
     const message = error instanceof Error ? error.message : ThaiErrors.TB_CONNECTION_ERROR;
     sendError(res, message, 502);
+  }
+});
+
+/**
+ * GET /api/external/v1/data/devices/:projectKey/:ghKey/controls
+ * Get list of controllable devices from ThingsBoard
+ * 
+ * Example:
+ * GET /api/external/v1/data/devices/maejard/greenhouse8/controls
+ * Headers: X-API-Key: ghp_readonly_abc123xyz789
+ * 
+ * Response:
+ * {
+ *   "success": true,
+ *   "data": {
+ *     "greenhouse": "โรงเรือน 8",
+ *     "controls": [
+ *       {
+ *         "controlKey": "pump1",
+ *         "name": "ปั๊มน้ำ 1",
+ *         "type": "pump",
+ *         "status": false
+ *       }
+ *     ]
+ *   }
+ * }
+ */
+router.get('/devices/:projectKey/:ghKey/controls', async (req: Request, res: Response) => {
+  try {
+    const parsed = deviceStatusSchema.safeParse(req.params);
+    
+    if (!parsed.success) {
+      sendError(res, 'Invalid parameters', 400);
+      return;
+    }
+    
+    const { projectKey, ghKey } = parsed.data;
+    
+    // Get project from database
+    const projectQuery = `SELECT * FROM projects WHERE key = ?`;
+    const project: any = db.prepare(projectQuery).get(projectKey);
+    
+    if (!project) {
+      sendError(res, 'Project not found', 404);
+      return;
+    }
+    
+    // Get greenhouse from database
+    const greenhouseQuery = `
+      SELECT * FROM greenhouses 
+      WHERE project_id = ? AND gh_key = ?
+    `;
+    const greenhouse: any = db.prepare(greenhouseQuery).get(project.id, ghKey);
+    
+    if (!greenhouse) {
+      sendError(res, 'Greenhouse not found', 404);
+      return;
+    }
+    
+    // Try to get control configurations from ThingsBoard
+    try {
+      // Get relay control + motor attributes from ThingsBoard
+      const attributes = await tbService.getAttributes(projectKey, ghKey, [
+        'fan_1_cmd', 'fan_2_cmd',
+        'pump_1_cmd',
+        'valve_2_cmd',
+        'light_1_cmd',
+        'motor_1_fw', 'motor_1_re',
+        'motor_2_fw', 'motor_2_re',
+        'motor_3_fw', 'motor_3_re',
+        'motor_4_fw', 'motor_4_re',
+      ]);
+      
+      // Map ThingsBoard keys to API response format
+      const controlMap: Record<string, { controlKey: string; type: string; icon: string; nameTH: string; state?: 'fw' | 're' }> = {
+        fan_1_cmd: { controlKey: 'fan1', type: 'fan', icon: '🌀', nameTH: 'พัดลม 1' },
+        fan_2_cmd: { controlKey: 'fan2', type: 'fan', icon: '🌀', nameTH: 'พัดลม 2' },
+        pump_1_cmd: { controlKey: 'pump1', type: 'pump', icon: '💧', nameTH: 'ปั๊มน้ำ 1' },
+        valve_2_cmd: { controlKey: 'valve2', type: 'valve', icon: '🚰', nameTH: 'วาล์ว 2' },
+        light_1_cmd: { controlKey: 'light1', type: 'light', icon: '💡', nameTH: 'ไฟ 1' },
+        motor_1_fw: { controlKey: 'motor1', type: 'motor', icon: '⚙️', nameTH: 'มอเตอร์ 1', state: 'fw' },
+        motor_1_re: { controlKey: 'motor1', type: 'motor', icon: '⚙️', nameTH: 'มอเตอร์ 1', state: 're' },
+        motor_2_fw: { controlKey: 'motor2', type: 'motor', icon: '⚙️', nameTH: 'มอเตอร์ 2', state: 'fw' },
+        motor_2_re: { controlKey: 'motor2', type: 'motor', icon: '⚙️', nameTH: 'มอเตอร์ 2', state: 're' },
+        motor_3_fw: { controlKey: 'motor3', type: 'motor', icon: '⚙️', nameTH: 'มอเตอร์ 3', state: 'fw' },
+        motor_3_re: { controlKey: 'motor3', type: 'motor', icon: '⚙️', nameTH: 'มอเตอร์ 3', state: 're' },
+        motor_4_fw: { controlKey: 'motor4', type: 'motor', icon: '⚙️', nameTH: 'มอเตอร์ 4', state: 'fw' },
+        motor_4_re: { controlKey: 'motor4', type: 'motor', icon: '⚙️', nameTH: 'มอเตอร์ 4', state: 're' },
+      };
+      
+      // Build controls list from available attributes
+      // Group motors (each motor has 2 attributes: fw & re)
+      const motorGroups: Record<string, { fw: boolean; re: boolean }> = {};
+      
+      const controls = Object.keys(attributes)
+        .filter(key => controlMap[key]) // Only include known control types
+        .map(key => {
+          const config = controlMap[key];
+          
+          // Handle motors specially (group fw/re into one control)
+          if (config.type === 'motor' && config.state) {
+            const motorKey = config.controlKey;
+            if (!motorGroups[motorKey]) {
+              motorGroups[motorKey] = { fw: false, re: false };
+            }
+            motorGroups[motorKey][config.state] = attributes[key] === true || attributes[key] === 'true' || attributes[key] === 1;
+            return null; // Will be added later
+          }
+          
+          // Simple devices (relay)
+          return {
+            controlKey: config.controlKey,
+            name: config.nameTH,
+            type: config.type,
+            icon: config.icon,
+            status: attributes[key] === true || attributes[key] === 'true' || attributes[key] === 1,
+          };
+        })
+        .filter(Boolean); // Remove nulls
+      
+      // Add grouped motors
+      Object.entries(motorGroups).forEach(([motorKey, states]) => {
+        const motorNumber = motorKey.replace('motor', '');
+        let status: 'forward' | 'reverse' | 'stop' = 'stop';
+        if (states.fw) status = 'forward';
+        else if (states.re) status = 'reverse';
+        
+        controls.push({
+          controlKey: motorKey,
+          name: `มอเตอร์ ${motorNumber}`,
+          type: 'motor',
+          icon: '⚙️',
+          status,
+        } as any);
+      });
+      
+      sendSuccess(res, {
+        data: {
+          greenhouse: greenhouse.name_th || greenhouse.name_en,
+          greenhouseKey: ghKey,
+          totalControls: controls.length,
+          controls,
+        },
+      });
+    } catch (tbError) {
+      // If ThingsBoard fails, return empty list instead of error
+      console.error('ThingsBoard error (returning empty controls):', tbError);
+      sendSuccess(res, {
+        data: {
+          greenhouse: greenhouse.name_th || greenhouse.name_en,
+          greenhouseKey: ghKey,
+          totalControls: 0,
+          controls: [],
+        },
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching controls list:', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch controls';
+    sendError(res, message, 500);
   }
 });
 

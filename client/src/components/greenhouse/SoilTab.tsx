@@ -85,6 +85,7 @@ export function SoilTab({ project, gh, isReady }: SoilTabProps) {
         </h2>
         <AirSensorCard
           data={airData.data}
+          timestamps={airData.timestamps}
           isLoading={airData.isLoading}
           isReady={isReady}
         />
@@ -102,6 +103,7 @@ export function SoilTab({ project, gh, isReady }: SoilTabProps) {
               key={i + 1}
               nodeIndex={i + 1}
               data={soilData.data}
+              timestamps={soilData.timestamps}
               isLoading={soilData.isLoading}
               isReady={isReady}
             />

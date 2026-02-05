@@ -1,6 +1,0 @@
-[build]
-builder = "nixpacks"
-buildCommand = "npm run build --prefix server"
-
-[deploy]
-startCommand = "npm start --prefix server"

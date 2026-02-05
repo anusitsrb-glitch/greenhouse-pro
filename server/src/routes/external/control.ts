@@ -1,301 +1,363 @@
 /**
  * External Control API
- * Provides device control access for third-party applications
- * Requires 'control' permission
+ * Third-party API for device control
  */
 
 import { Router, Request, Response } from 'express';
-import { sendSuccess, sendError, ThaiErrors } from '../../utils/response.js';
-import { tbService } from '../../services/thingsboard.js';
-import { apiKeyAuth } from '../../middleware/apiKey.js';
-import { z } from 'zod';
+import axios from 'axios';
+import { db } from '../../db/connection.js';
+import { logDeviceControl } from '../../services/activityLog.js';
+import { validateApiKey, requirePermission } from '../../middleware/apiKey.js'; // ✅ เปลี่ยนเป็น validateApiKey
 
 const router = Router();
 
-// Apply API Key authentication with 'control' permission to all routes
-router.use(apiKeyAuth('control'));
-
-// ============================================================
-// Validation Schemas
-// ============================================================
-
-const controlDeviceSchema = z.object({
-  projectKey: z.string().min(1),
-  ghKey: z.string().min(1),
-});
-
-const controlBodySchema = z.object({
-  device: z.enum(['pump', 'fan', 'light', 'motor']),
-  action: z.enum(['on', 'off']),
-  duration: z.number().optional(), // Duration in seconds (for timed control)
-});
-
-// ============================================================
-// Routes
-// ============================================================
+// Apply API key verification with control permission
+router.use(validateApiKey);
+router.use(requirePermission('control'));
 
 /**
  * POST /api/external/v1/control/devices/:projectKey/:ghKey/control
- * Send control command to device
+ * Control a single device
  * 
  * Body:
  * {
- *   "device": "pump" | "fan" | "light" | "motor",
- *   "action": "on" | "off",
- *   "duration": 300 (optional, in seconds)
- * }
- * 
- * Example:
- * POST /api/external/v1/control/devices/maejard/greenhouse8/control
- * Headers: 
- *   X-API-Key: ghp_fullaccess_xyz789abc123
- *   Content-Type: application/json
- * Body: 
- *   { "device": "pump", "action": "on" }
- * 
- * Response:
- * {
- *   "success": true,
- *   "data": {
- *     "device": "pump",
- *     "action": "on",
- *     "status": "success",
- *     "timestamp": 1705478400000
- *   },
- *   "message": "Device controlled successfully"
+ *   "controlKey": "pump1",
+ *   "value": true
  * }
  */
 router.post('/devices/:projectKey/:ghKey/control', async (req: Request, res: Response) => {
   try {
-    const paramsResult = controlDeviceSchema.safeParse(req.params);
-    const bodyResult = controlBodySchema.safeParse(req.body);
+    const { projectKey, ghKey } = req.params;
+    const { controlKey, value } = req.body;
+    const apiKeyPrefix = (req as any).apiKeyPrefix;
     
-    if (!paramsResult.success || !bodyResult.success) {
-      sendError(res, 'Invalid parameters or body', 400);
+    if (!controlKey || value === undefined) {
+      res.status(400).json({
+        success: false,
+        error: 'controlKey and value are required'
+      });
       return;
     }
     
-    const { projectKey, ghKey } = paramsResult.data;
-    const { device, action, duration } = bodyResult.data;
-    
-    // Check if device is online first
-    const isOnline = await tbService.isDeviceOnline(projectKey, ghKey);
-    
-    if (!isOnline) {
-      sendError(res, 'Device is offline. Cannot send control command.', 503);
+    // Get project
+    const project: any = db.prepare('SELECT * FROM projects WHERE key = ?').get(projectKey);
+    if (!project) {
+      res.status(404).json({ success: false, error: 'Project not found' });
       return;
     }
     
-    // Prepare RPC method and params
-    let rpcMethod = '';
-    let rpcParams: any = { action };
+    // Get greenhouse
+    const greenhouse: any = db.prepare(`
+      SELECT * FROM greenhouses 
+      WHERE project_id = ? AND gh_key = ?
+    `).get(project.id, ghKey);
     
-    switch (device) {
-      case 'pump':
-        rpcMethod = 'control_pump';
-        break;
-      case 'fan':
-        rpcMethod = 'control_fan';
-        break;
-      case 'light':
-        rpcMethod = 'control_light';
-        break;
-      case 'motor':
-        rpcMethod = 'control_motor';
-        break;
-      default:
-        sendError(res, 'Invalid device type', 400);
+    if (!greenhouse) {
+      res.status(404).json({ success: false, error: 'Greenhouse not found' });
+      return;
+    }
+    
+    // Map controlKey to RPC method (instead of querying database)
+    const controlMapping: Record<string, { rpcMethod: string; nameTH: string; type: 'simple' | 'motor' }> = {
+      fan1:   { rpcMethod: 'set_fan_1_cmd',   nameTH: 'พัดลม 1',   type: 'simple' },
+      fan2:   { rpcMethod: 'set_fan_2_cmd',   nameTH: 'พัดลม 2',   type: 'simple' },
+      pump1:  { rpcMethod: 'set_pump_1_cmd',  nameTH: 'ปั๊มน้ำ 1', type: 'simple' },
+      valve2: { rpcMethod: 'set_valve_2_cmd', nameTH: 'วาล์ว 2',   type: 'simple' },
+      light1: { rpcMethod: 'set_light_1_cmd', nameTH: 'ไฟ 1',     type: 'simple' },
+      motor1: { rpcMethod: 'set_motor_1_status', nameTH: 'มอเตอร์ 1', type: 'motor' },
+      motor2: { rpcMethod: 'set_motor_2_status', nameTH: 'มอเตอร์ 2', type: 'motor' },
+      motor3: { rpcMethod: 'set_motor_3_status', nameTH: 'มอเตอร์ 3', type: 'motor' },
+      motor4: { rpcMethod: 'set_motor_4_status', nameTH: 'มอเตอร์ 4', type: 'motor' },
+    };
+    
+    const controlConfig = controlMapping[controlKey];
+    if (!controlConfig) {
+      res.status(404).json({ success: false, error: 'Control device not found' });
+      return;
+    }
+    
+    // Validate value based on type
+    let rpcParams: any;
+    if (controlConfig.type === 'simple') {
+      // Simple devices: true/false or 1/0
+      const boolValue = value === true || value === 1 || value === '1';
+      rpcParams = boolValue ? 1 : 0;
+    } else if (controlConfig.type === 'motor') {
+      // Motors: 0=stop, 1=forward, 2=reverse or "stop"/"forward"/"reverse"
+      if (value === 'stop' || value === 0 || value === '0') rpcParams = 0;
+      else if (value === 'forward' || value === 1 || value === '1') rpcParams = 1;
+      else if (value === 'reverse' || value === 2 || value === '2') rpcParams = 2;
+      else {
+        res.status(400).json({ 
+          success: false, 
+          error: 'Motor value must be 0/1/2 or stop/forward/reverse' 
+        });
         return;
-    }
-    
-    // Add duration if specified
-    if (duration) {
-      rpcParams.duration = duration;
-    }
-    
-    // Send RPC command to device
-    console.log(`🚀 External API: Sending RPC to ${ghKey} - ${device} ${action}`);
-    
-    const rpcResponse = await tbService.sendRpcCommand(
-      projectKey,
-      ghKey,
-      rpcMethod,
-      rpcParams,
-      20000 // 20 second timeout
-    );
-    
-    console.log(`✅ External API: RPC success for ${ghKey}`);
-    
-    sendSuccess(res, {
-      data: {
-        device,
-        action,
-        status: 'success',
-        timestamp: Date.now(),
-        rpcResponse,
-      },
-      message: 'Device controlled successfully',
-    });
-  } catch (error) {
-    console.error('Error controlling device:', error);
-    
-    let message = ThaiErrors.TB_CONNECTION_ERROR;
-    let statusCode = 502;
-    
-    if (error instanceof Error) {
-      message = error.message;
-      
-      if (message.includes('Timeout')) {
-        statusCode = 504;
-        message = 'Device did not respond in time';
-      } else if (message.includes('offline')) {
-        statusCode = 503;
       }
     }
     
-    sendError(res, message, statusCode);
+    // Authenticate with ThingsBoard
+    const authResponse = await axios.post(`${project.tb_base_url}/api/auth/login`, {
+      username: project.tb_username,
+      password: project.tb_password
+    });
+    
+    const token = authResponse.data.token;
+    
+    // Send RPC command
+    const rpcResponse = await axios.post(
+      `${project.tb_base_url}/api/rpc/twoway/${greenhouse.tb_device_id}`,
+      {
+        method: controlConfig.rpcMethod,
+        params: rpcParams,
+        timeout: 5000
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Authorization': `Bearer ${token}`
+        }
+      }
+    );
+    
+    // Log the action
+    let actionText: string;
+    if (controlConfig.type === 'simple') {
+      actionText = rpcParams ? 'ON' : 'OFF';
+    } else {
+      actionText = rpcParams === 1 ? 'FORWARD' : rpcParams === 2 ? 'REVERSE' : 'STOP';
+    }
+    
+    logDeviceControl({
+      greenhouseId: greenhouse.id,
+      controlKey,
+      controlName: controlConfig.nameTH,
+      action: actionText,
+      value: String(value),
+      source: 'external_api',
+      apiKeyPrefix,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      success: true
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        controlKey,
+        value,
+        response: rpcResponse.data
+      }
+    });
+    
+  } catch (error: any) {
+    console.error('External control error:', error);
+    
+    // Log failure
+    const { projectKey, ghKey } = req.params;
+    const { controlKey, value } = req.body;
+    
+    if (controlKey) {
+      logDeviceControl({
+        greenhouseId: 0, // We might not have greenhouse_id at this point
+        controlKey,
+        action: 'FAILED',
+        value: String(value),
+        source: 'external_api',
+        apiKeyPrefix: (req as any).apiKeyPrefix,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        success: false,
+        errorMessage: error.message
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to control device'
+    });
   }
 });
 
 /**
  * POST /api/external/v1/control/devices/:projectKey/:ghKey/batch
- * Send multiple control commands at once
+ * Control multiple devices at once
  * 
  * Body:
  * {
- *   "commands": [
- *     { "device": "pump", "action": "on" },
- *     { "device": "fan", "action": "off" },
- *     ...
+ *   "controls": [
+ *     { "controlKey": "pump1", "value": true },
+ *     { "controlKey": "fan1", "value": false }
  *   ]
- * }
- * 
- * Example:
- * POST /api/external/v1/control/devices/maejard/greenhouse8/batch
- * Headers: X-API-Key: ghp_fullaccess_xyz789abc123
- * Body: 
- *   { "commands": [
- *       { "device": "pump", "action": "on" },
- *       { "device": "fan", "action": "off" }
- *     ]
- *   }
- * 
- * Response:
- * {
- *   "success": true,
- *   "data": {
- *     "results": [
- *       { "device": "pump", "action": "on", "status": "success" },
- *       { "device": "fan", "action": "off", "status": "success" }
- *     ],
- *     "successCount": 2,
- *     "failureCount": 0
- *   }
  * }
  */
 router.post('/devices/:projectKey/:ghKey/batch', async (req: Request, res: Response) => {
   try {
-    const paramsResult = controlDeviceSchema.safeParse(req.params);
+    const { projectKey, ghKey } = req.params;
+    const { controls } = req.body;
     
-    if (!paramsResult.success) {
-      sendError(res, 'Invalid parameters', 400);
+    if (!Array.isArray(controls) || controls.length === 0) {
+      res.status(400).json({
+        success: false,
+        error: 'controls array is required'
+      });
       return;
     }
     
-    const { projectKey, ghKey } = paramsResult.data;
-    const { commands } = req.body;
-    
-    if (!Array.isArray(commands) || commands.length === 0) {
-      sendError(res, 'Commands array is required', 400);
+    // Get project
+    const project: any = db.prepare('SELECT * FROM projects WHERE key = ?').get(projectKey);
+    if (!project) {
+      res.status(404).json({ success: false, error: 'Project not found' });
       return;
     }
     
-    if (commands.length > 10) {
-      sendError(res, 'Maximum 10 commands per batch', 400);
+    // Get greenhouse
+    const greenhouse: any = db.prepare(`
+      SELECT * FROM greenhouses 
+      WHERE project_id = ? AND gh_key = ?
+    `).get(project.id, ghKey);
+    
+    if (!greenhouse) {
+      res.status(404).json({ success: false, error: 'Greenhouse not found' });
       return;
     }
     
-    // Check if device is online
-    const isOnline = await tbService.isDeviceOnline(projectKey, ghKey);
+    // Authenticate with ThingsBoard
+    const authResponse = await axios.post(`${project.tb_base_url}/api/auth/login`, {
+      username: project.tb_username,
+      password: project.tb_password
+    });
     
-    if (!isOnline) {
-      sendError(res, 'Device is offline. Cannot send control commands.', 503);
-      return;
-    }
+    const token = authResponse.data.token;
     
-    // Process each command
+    // Map controlKey to RPC method (same as single control)
+    const controlMapping: Record<string, { rpcMethod: string; nameTH: string; type: 'simple' | 'motor' }> = {
+      fan1:   { rpcMethod: 'set_fan_1_cmd',   nameTH: 'พัดลม 1',   type: 'simple' },
+      fan2:   { rpcMethod: 'set_fan_2_cmd',   nameTH: 'พัดลม 2',   type: 'simple' },
+      pump1:  { rpcMethod: 'set_pump_1_cmd',  nameTH: 'ปั๊มน้ำ 1', type: 'simple' },
+      valve2: { rpcMethod: 'set_valve_2_cmd', nameTH: 'วาล์ว 2',   type: 'simple' },
+      light1: { rpcMethod: 'set_light_1_cmd', nameTH: 'ไฟ 1',     type: 'simple' },
+      motor1: { rpcMethod: 'set_motor_1_status', nameTH: 'มอเตอร์ 1', type: 'motor' },
+      motor2: { rpcMethod: 'set_motor_2_status', nameTH: 'มอเตอร์ 2', type: 'motor' },
+      motor3: { rpcMethod: 'set_motor_3_status', nameTH: 'มอเตอร์ 3', type: 'motor' },
+      motor4: { rpcMethod: 'set_motor_4_status', nameTH: 'มอเตอร์ 4', type: 'motor' },
+    };
+    
+    // Process each control
     const results = [];
-    let successCount = 0;
-    let failureCount = 0;
-    
-    for (const cmd of commands) {
-      const cmdResult = controlBodySchema.safeParse(cmd);
-      
-      if (!cmdResult.success) {
-        results.push({
-          device: cmd.device || 'unknown',
-          action: cmd.action || 'unknown',
-          status: 'failed',
-          error: 'Invalid command format',
-        });
-        failureCount++;
-        continue;
-      }
-      
-      const { device, action, duration } = cmdResult.data;
-      
+    for (const ctrl of controls) {
       try {
-        let rpcMethod = '';
+        // Get control config from mapping
+        const controlConfig = controlMapping[ctrl.controlKey];
         
-        switch (device) {
-          case 'pump':
-            rpcMethod = 'control_pump';
-            break;
-          case 'fan':
-            rpcMethod = 'control_fan';
-            break;
-          case 'light':
-            rpcMethod = 'control_light';
-            break;
-          case 'motor':
-            rpcMethod = 'control_motor';
-            break;
+        if (!controlConfig) {
+          results.push({
+            controlKey: ctrl.controlKey,
+            success: false,
+            error: 'Control device not found'
+          });
+          continue;
         }
         
-        const rpcParams: any = { action };
-        if (duration) rpcParams.duration = duration;
+        // Validate and transform value based on type
+        let rpcParams: any;
+        if (controlConfig.type === 'simple') {
+          // Simple devices: true/false or 1/0
+          const boolValue = ctrl.value === true || ctrl.value === 1 || ctrl.value === '1';
+          rpcParams = boolValue ? 1 : 0;
+        } else if (controlConfig.type === 'motor') {
+          // Motors: 0=stop, 1=forward, 2=reverse
+          if (ctrl.value === 'stop' || ctrl.value === 0 || ctrl.value === '0') rpcParams = 0;
+          else if (ctrl.value === 'forward' || ctrl.value === 1 || ctrl.value === '1') rpcParams = 1;
+          else if (ctrl.value === 'reverse' || ctrl.value === 2 || ctrl.value === '2') rpcParams = 2;
+          else {
+            results.push({
+              controlKey: ctrl.controlKey,
+              success: false,
+              error: 'Motor value must be 0/1/2 or stop/forward/reverse'
+            });
+            continue;
+          }
+        }
         
-        await tbService.sendRpcCommand(projectKey, ghKey, rpcMethod, rpcParams, 20000);
+        // Send RPC command
+        const rpcResponse = await axios.post(
+          `${project.tb_base_url}/api/rpc/twoway/${greenhouse.tb_device_id}`,
+          {
+            method: controlConfig.rpcMethod,
+            params: rpcParams,
+            timeout: 5000
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Authorization': `Bearer ${token}`
+            }
+          }
+        );
+        
+        // Determine action text
+        let actionText: string;
+        if (controlConfig.type === 'simple') {
+          actionText = rpcParams ? 'ON' : 'OFF';
+        } else {
+          actionText = rpcParams === 1 ? 'FORWARD' : rpcParams === 2 ? 'REVERSE' : 'STOP';
+        }
+        
+        // Log success
+        logDeviceControl({
+          greenhouseId: greenhouse.id,
+          controlKey: ctrl.controlKey,
+          controlName: controlConfig.nameTH,
+          action: actionText,
+          value: String(ctrl.value),
+          source: 'external_api',
+          apiKeyPrefix: (req as any).apiKeyPrefix,
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+          success: true
+        });
         
         results.push({
-          device,
-          action,
-          status: 'success',
+          controlKey: ctrl.controlKey,
+          success: true,
+          response: rpcResponse.data
         });
-        successCount++;
-      } catch (error) {
+        
+      } catch (error: any) {
+        // Log failure
+        logDeviceControl({
+          greenhouseId: greenhouse.id,
+          controlKey: ctrl.controlKey,
+          action: 'FAILED',
+          value: String(ctrl.value),
+          source: 'external_api',
+          apiKeyPrefix: (req as any).apiKeyPrefix,
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+          success: false,
+          errorMessage: error.message
+        });
+        
         results.push({
-          device,
-          action,
-          status: 'failed',
-          error: error instanceof Error ? error.message : 'Unknown error',
+          controlKey: ctrl.controlKey,
+          success: false,
+          error: error.message
         });
-        failureCount++;
       }
     }
     
-    sendSuccess(res, {
-      data: {
-        results,
-        successCount,
-        failureCount,
-      },
-      message: `Batch control completed: ${successCount} succeeded, ${failureCount} failed`,
+    res.json({
+      success: true,
+      data: results
     });
-  } catch (error) {
-    console.error('Error in batch control:', error);
-    const message = error instanceof Error ? error.message : ThaiErrors.TB_CONNECTION_ERROR;
-    sendError(res, message, 502);
+    
+  } catch (error: any) {
+    console.error('Batch control error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to control devices'
+    });
   }
 });
 

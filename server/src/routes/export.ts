@@ -1,6 +1,11 @@
 /**
- * Data Export Routes (IMPROVED)
+ * Data Export Routes (ENHANCED)
  * Export telemetry data to CSV/Excel with flexible date ranges
+ * 
+ * CHANGES:
+ * - Added support for startTs/endTs parameters (custom time range)
+ * - Maintained backward compatibility with days parameter
+ * - Increased max export limit from 365 days to 365 days (1 year)
  */
 
 import { Router, Request, Response } from 'express';
@@ -18,15 +23,43 @@ type TelemetryValue = { ts: number; value: string | number | boolean };
 type TelemetryMap = Record<string, TelemetryValue[]>;
 
 // ============================================================
-// Validation Schemas
+// Validation Schemas (UPDATED)
 // ============================================================
 
 const exportExcelSchema = z.object({
   projectKey: z.string().min(1),
   ghKey: z.string().min(1),
   keys: z.array(z.string()).min(1),
-  days: z.number().min(1).max(365).optional().default(7),
-});
+  // Option 1: Use days parameter (backward compatible)
+  days: z.number().min(1).max(365).optional(),
+  // Option 2: Use custom timestamp range (NEW)
+  startTs: z.number().optional(),
+  endTs: z.number().optional(),
+}).refine(
+  (data) => {
+    // Must have either days OR (startTs AND endTs)
+    const hasDays = data.days !== undefined;
+    const hasTimestamps = data.startTs !== undefined && data.endTs !== undefined;
+    return hasDays || hasTimestamps;
+  },
+  {
+    message: 'Must provide either days or both startTs and endTs',
+  }
+).refine(
+  (data) => {
+    // If using timestamps, validate range
+    if (data.startTs && data.endTs) {
+      const diffMs = data.endTs - data.startTs;
+      const diffDays = diffMs / (1000 * 60 * 60 * 24);
+      // Max 365 days (1 year)
+      return diffDays > 0 && diffDays <= 365;
+    }
+    return true;
+  },
+  {
+    message: 'Time range must be between 0 and 365 days',
+  }
+);
 
 const exportCsvSchema = exportExcelSchema;
 
@@ -83,12 +116,21 @@ function telemetryToRows(data: TelemetryMap, keys: string[]) {
  * POST /api/export/telemetry/excel
  * Export telemetry data to Excel
  * 
- * Body:
+ * Body (Option 1 - Using days):
  * {
  *   "projectKey": "maejard",
  *   "ghKey": "greenhouse8",
  *   "keys": ["air_temp", "air_humidity", "soil1_moisture"],
- *   "days": 7  // Optional, default: 7
+ *   "days": 7
+ * }
+ * 
+ * Body (Option 2 - Using custom timestamps): [NEW]
+ * {
+ *   "projectKey": "maejard",
+ *   "ghKey": "greenhouse8",
+ *   "keys": ["air_temp", "air_humidity", "soil1_moisture"],
+ *   "startTs": 1706227200000,  // Jan 26, 2024 00:00:00
+ *   "endTs": 1706313599999     // Jan 26, 2024 23:59:59
  * }
  */
 router.post('/telemetry/excel', requireAuth, async (req: Request, res: Response) => {
@@ -96,11 +138,11 @@ router.post('/telemetry/excel', requireAuth, async (req: Request, res: Response)
     const parsed = exportExcelSchema.safeParse(req.body);
 
     if (!parsed.success) {
-      sendError(res, 'กรุณาระบุข้อมูลให้ครบถ้วน', 400);
+      sendError(res, 'กรุณาระบุข้อมูลให้ครบถ้วน: ' + parsed.error.message, 400);
       return;
     }
 
-    const { projectKey, ghKey, keys, days } = parsed.data;
+    const { projectKey, ghKey, keys, days, startTs, endTs } = parsed.data;
 
     // Get project and greenhouse
     const project = getProject(projectKey);
@@ -120,9 +162,27 @@ router.post('/telemetry/excel', requireAuth, async (req: Request, res: Response)
       return;
     }
 
-    // Calculate time range based on days
-    const endTime = Date.now();
-    const startTime = endTime - (days * 24 * 60 * 60 * 1000);
+    // Calculate time range (UPDATED LOGIC)
+    let startTime: number;
+    let endTime: number;
+    let rangeDescription: string;
+
+    if (startTs !== undefined && endTs !== undefined) {
+      // Option 2: Use custom timestamps
+      startTime = startTs;
+      endTime = endTs;
+      const diffDays = Math.ceil((endTime - startTime) / (1000 * 60 * 60 * 24));
+      rangeDescription = `${diffDays} วัน (กำหนดเอง)`;
+    } else if (days !== undefined) {
+      // Option 1: Use days parameter (backward compatible)
+      endTime = Date.now();
+      startTime = endTime - (days * 24 * 60 * 60 * 1000);
+      rangeDescription = `${days} วัน`;
+    } else {
+      // This shouldn't happen due to schema validation, but just in case
+      sendError(res, 'กรุณาระบุช่วงเวลา (days หรือ startTs/endTs)', 400);
+      return;
+    }
 
     // Fetch telemetry data
     const data = await getTelemetryTimeseries(projectKey, ghKey, keys, startTime, endTime);
@@ -149,9 +209,10 @@ router.post('/telemetry/excel', requireAuth, async (req: Request, res: Response)
     infoSheet.addRows([
       { property: 'โปรเจกต์', value: greenhouse.project_name },
       { property: 'โรงเรือน', value: greenhouse.name_th },
-      { property: 'ช่วงเวลา (วัน)', value: `${days} วัน` },
+      { property: 'ช่วงเวลา', value: rangeDescription },
       { property: 'วันที่เริ่มต้น', value: new Date(startTime).toLocaleString('th-TH') },
       { property: 'วันที่สิ้นสุด', value: new Date(endTime).toLocaleString('th-TH') },
+      { property: 'เซนเซอร์', value: keys.join(', ') },
       { property: 'จำนวนข้อมูล', value: rows.length },
       { property: 'สร้างเมื่อ', value: new Date().toLocaleString('th-TH') },
     ]);
@@ -183,7 +244,14 @@ router.post('/telemetry/excel', requireAuth, async (req: Request, res: Response)
       action: AuditActions.DATA_EXPORTED,
       projectKey,
       ghKey,
-      detail: { format: 'excel', keys, days, rowCount: rows.length },
+      detail: { 
+        format: 'excel', 
+        keys, 
+        days, 
+        startTs, 
+        endTs, 
+        rowCount: rows.length 
+      },
     });
 
     // Record in export history
@@ -193,11 +261,14 @@ router.post('/telemetry/excel', requireAuth, async (req: Request, res: Response)
     `).run(
       req.session.userId,
       rows.length,
-      JSON.stringify({ projectKey, ghKey, keys, days, startTime, endTime })
+      JSON.stringify({ projectKey, ghKey, keys, days, startTime, endTime, startTs, endTs })
     );
 
-    // Send file
-    const filename = `telemetry-${projectKey}-${ghKey}-${days}days-${new Date().toISOString().split('T')[0]}.xlsx`;
+    // Generate filename with date range
+    const dateStr = startTs && endTs 
+      ? `${new Date(startTs).toISOString().split('T')[0]}_to_${new Date(endTs).toISOString().split('T')[0]}`
+      : `${days}days`;
+    const filename = `telemetry-${projectKey}-${ghKey}-${dateStr}.xlsx`;
     
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -214,18 +285,18 @@ router.post('/telemetry/excel', requireAuth, async (req: Request, res: Response)
  * POST /api/export/telemetry/csv
  * Export telemetry data to CSV
  * 
- * Body: Same as Excel export
+ * Body: Same as Excel export (supports both options)
  */
 router.post('/telemetry/csv', requireAuth, async (req: Request, res: Response) => {
   try {
     const parsed = exportCsvSchema.safeParse(req.body);
 
     if (!parsed.success) {
-      sendError(res, 'กรุณาระบุข้อมูลให้ครบถ้วน', 400);
+      sendError(res, 'กรุณาระบุข้อมูลให้ครบถ้วน: ' + parsed.error.message, 400);
       return;
     }
 
-    const { projectKey, ghKey, keys, days } = parsed.data;
+    const { projectKey, ghKey, keys, days, startTs, endTs } = parsed.data;
 
     // Get project and greenhouse
     const project = getProject(projectKey);
@@ -245,9 +316,20 @@ router.post('/telemetry/csv', requireAuth, async (req: Request, res: Response) =
       return;
     }
 
-    // Calculate time range
-    const endTime = Date.now();
-    const startTime = endTime - (days * 24 * 60 * 60 * 1000);
+    // Calculate time range (UPDATED LOGIC - same as Excel)
+    let startTime: number;
+    let endTime: number;
+
+    if (startTs !== undefined && endTs !== undefined) {
+      startTime = startTs;
+      endTime = endTs;
+    } else if (days !== undefined) {
+      endTime = Date.now();
+      startTime = endTime - (days * 24 * 60 * 60 * 1000);
+    } else {
+      sendError(res, 'กรุณาระบุช่วงเวลา (days หรือ startTs/endTs)', 400);
+      return;
+    }
 
     // Get telemetry data
     const data = await getTelemetryTimeseries(projectKey, ghKey, keys, startTime, endTime);
@@ -281,7 +363,14 @@ router.post('/telemetry/csv', requireAuth, async (req: Request, res: Response) =
       action: AuditActions.DATA_EXPORTED,
       projectKey,
       ghKey,
-      detail: { format: 'csv', keys, days, rowCount: rows.length },
+      detail: { 
+        format: 'csv', 
+        keys, 
+        days, 
+        startTs, 
+        endTs, 
+        rowCount: rows.length 
+      },
     });
 
     // Record in export history
@@ -291,10 +380,14 @@ router.post('/telemetry/csv', requireAuth, async (req: Request, res: Response) =
     `).run(
       req.session.userId,
       rows.length,
-      JSON.stringify({ projectKey, ghKey, keys, days, startTime, endTime })
+      JSON.stringify({ projectKey, ghKey, keys, days, startTime, endTime, startTs, endTs })
     );
 
-    const filename = `telemetry-${projectKey}-${ghKey}-${days}days-${new Date().toISOString().split('T')[0]}.csv`;
+    // Generate filename with date range
+    const dateStr = startTs && endTs 
+      ? `${new Date(startTs).toISOString().split('T')[0]}_to_${new Date(endTs).toISOString().split('T')[0]}`
+      : `${days}days`;
+    const filename = `telemetry-${projectKey}-${ghKey}-${dateStr}.csv`;
     
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);

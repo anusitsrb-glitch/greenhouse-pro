@@ -59,8 +59,11 @@ class ApiClient {
       const response = await fetch(`${API_BASE}${endpoint}`, {
         method: 'GET',
         credentials: 'include',
+        cache: 'no-store',
         headers: {
           'Accept': 'application/json',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
         },
       });
       return response.json();

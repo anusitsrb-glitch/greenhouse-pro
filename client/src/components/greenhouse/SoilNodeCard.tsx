@@ -1,13 +1,12 @@
-import { useState } from 'react';
 import { Card } from '@/components/ui';
-import { 
-  Droplets, 
-  Thermometer, 
-  Zap, 
+import {
+  Droplets,
+  Thermometer,
+  Zap,
   FlaskConical,
   Leaf,
-  ChevronDown,
-  ChevronUp
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { cn, formatNumber } from '@/lib/utils';
 import { getSoilKeys } from '@/config/dataKeys';
@@ -15,6 +14,7 @@ import { getSoilKeys } from '@/config/dataKeys';
 interface SoilNodeCardProps {
   nodeIndex: number;
   data: Record<string, number | null>;
+  timestamps: Record<string, number>;
   isLoading: boolean;
   isReady: boolean;
 }
@@ -40,170 +40,260 @@ function MiniSensor({
   isReady,
   decimals = 1,
 }: MiniSensorProps) {
-  const displayValue = !isReady ? '--' :
-    isLoading ? '...' :
-    value !== null ? formatNumber(value, decimals) : '--';
+  const displayValue = !isReady
+    ? '--'
+    : isLoading
+      ? '...'
+      : value !== null
+        ? formatNumber(value, decimals)
+        : '--';
 
   return (
     <div className="flex items-center justify-between py-2">
-      <div className="flex items-center gap-2">
-        <Icon className={cn('w-4 h-4', colorClass)} />
-        <span className="text-sm text-gray-600">{label}</span>
+      <div className="flex items-center gap-2 min-w-0">
+        <Icon className={cn('w-4 h-4 shrink-0', colorClass)} />
+        <span className="text-sm text-slate-600 truncate">{label}</span>
       </div>
-      <div className="text-sm font-semibold text-gray-900">
+      <div className="text-sm font-semibold text-slate-900 tabular-nums">
         {displayValue}
-        {displayValue !== '--' && displayValue !== '...' && (
-          <span className="font-normal text-gray-500 ml-0.5">{unit}</span>
+        {displayValue !== '--' && displayValue !== '...' && unit && (
+          <span className="font-normal text-slate-500 ml-1">{unit}</span>
         )}
       </div>
     </div>
   );
 }
 
-export function SoilNodeCard({ nodeIndex, data, isLoading, isReady }: SoilNodeCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+export function SoilNodeCard({
+  nodeIndex,
+  data,
+  timestamps,
+  isLoading,
+  isReady,
+}: SoilNodeCardProps) {
   const keys = getSoilKeys(nodeIndex);
 
-  // Primary values (always shown)
+  // All sensor values
   const moisture = data[keys.MOISTURE] ?? null;
   const temp = data[keys.TEMP] ?? null;
-
-  // Secondary values (shown when expanded)
   const ec = data[keys.EC] ?? null;
   const ph = data[keys.PH] ?? null;
   const n = data[keys.N] ?? null;
   const p = data[keys.P] ?? null;
   const k = data[keys.K] ?? null;
 
-  // Determine moisture status color
-  const getMoistureColor = (val: number | null) => {
-    if (val === null) return 'bg-gray-100';
-    if (val < 30) return 'bg-red-100'; // Too dry
-    if (val < 60) return 'bg-green-100'; // Optimal
-    return 'bg-blue-100'; // Too wet
+  // Online/offline
+  const checkNodeOnlineStatus = () => {
+    if (!isReady) return false;
+
+    const now = Date.now();
+    const maxAge = 5 * 60 * 1000; // 5 minutes
+
+    const moistureTs = timestamps[keys.MOISTURE] || 0;
+    const tempTs = timestamps[keys.TEMP] || 0;
+
+    const hasRecentData = now - moistureTs < maxAge || now - tempTs < maxAge;
+    const hasValue = moisture !== null || temp !== null;
+
+    return hasRecentData && hasValue;
   };
 
-  const displayMoisture = !isReady ? '--' :
-    isLoading ? '...' :
-    moisture !== null ? formatNumber(moisture, 1) : '--';
+  const isNodeOnline = checkNodeOnlineStatus();
 
-  const displayTemp = !isReady ? '--' :
-    isLoading ? '...' :
-    temp !== null ? formatNumber(temp, 1) : '--';
+  // Moisture tone
+  const getMoistureColor = (val: number | null) => {
+    if (val === null) return 'bg-slate-50 border-slate-200';
+    if (val < 30) return 'bg-rose-50 border-rose-200';
+    if (val < 60) return 'bg-emerald-50 border-emerald-200';
+    return 'bg-sky-50 border-sky-200';
+  };
+
+  const displayMoisture = !isReady
+    ? '--'
+    : isLoading
+      ? '...'
+      : moisture !== null
+        ? formatNumber(moisture, 1)
+        : '--';
+
+  const displayTemp = !isReady
+    ? '--'
+    : isLoading
+      ? '...'
+      : temp !== null
+        ? formatNumber(temp, 1)
+        : '--';
 
   return (
-    <Card className="overflow-hidden">
-      {/* Header with node number */}
-      <div className="bg-soil-600 px-4 py-2 flex items-center justify-between">
-        <span className="text-white font-semibold">จุดที่ {nodeIndex}</span>
-        <div className={cn(
-          'w-2 h-2 rounded-full',
-          isReady && !isLoading && moisture !== null ? 'bg-green-400' : 'bg-gray-400'
-        )} />
+    <Card
+      className={cn(
+        'group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm',
+        'hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200',
+        'hover:ring-4 hover:ring-soil-50'
+      )}
+    >
+      {/* Accent line + shimmer */}
+      <div className="relative h-1 bg-soil-600 overflow-hidden">
+        {isLoading && (
+          <div className="absolute inset-0 opacity-40">
+            <div className="h-full w-1/2 bg-white/70 animate-shimmer" />
+          </div>
+        )}
       </div>
 
-      {/* Main content */}
-      <div className="p-4">
-        {/* Primary metrics */}
-        <div className="grid grid-cols-2 gap-3 mb-3">
-          {/* Moisture */}
-          <div className={cn('p-3 rounded-lg', getMoistureColor(moisture))}>
-            <div className="flex items-center gap-1.5 mb-1">
-              <Droplets className="w-4 h-4 text-blue-600" />
-              <span className="text-xs text-gray-600">ความชื้น</span>
-            </div>
-            <p className="text-xl font-bold text-gray-900">
-              {displayMoisture}
-              {displayMoisture !== '--' && displayMoisture !== '...' && (
-                <span className="text-sm font-normal text-gray-500">%</span>
+      {/* Soft glow (subtle) */}
+      <div className="pointer-events-none absolute -top-6 -right-6 h-20 w-20 rounded-full bg-soil-100/40 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
+
+      {/* Header */}
+      <div className="px-3 sm:px-4 pt-4 pb-3 flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-soil-50 ring-1 ring-soil-200 transition-transform duration-200 group-hover:scale-[1.04]">
+            <span className="text-sm font-extrabold text-soil-800 tabular-nums">
+              {nodeIndex}
+            </span>
+          </div>
+
+          <span className="text-slate-900 font-semibold text-sm">
+            จุดที่ <span className="tabular-nums">{nodeIndex}</span>
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {isReady && (
+            <>
+              {isNodeOnline ? (
+                <div className="flex items-center gap-1.5 border border-emerald-200 bg-emerald-50 px-2.5 py-1 rounded-full">
+                  <span className="relative w-2 h-2 rounded-full bg-emerald-500">
+                    <span className="absolute inset-0 rounded-full bg-emerald-400 animate-pulse-soft opacity-70" />
+                  </span>
+                  <Wifi className="w-3.5 h-3.5 text-emerald-700" />
+                  <span className="text-xs font-medium text-emerald-700">ออนไลน์</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 border border-rose-200 bg-rose-50 px-2.5 py-1 rounded-full">
+                  <span className="w-2 h-2 rounded-full bg-rose-500" />
+                  <WifiOff className="w-3.5 h-3.5 text-rose-700" />
+                  <span className="text-xs font-medium text-rose-700">ออฟไลน์</span>
+                </div>
               )}
-            </p>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="px-3 sm:px-4 pb-4">
+        {/* Primary metrics */}
+        <div className="grid grid-cols-2 gap-1 mb-4">
+
+          {/* Moisture */}
+          <div
+            className={cn(
+              'p-3 rounded-xl border transition-colors',
+              // ✅ ล็อกความสูงสำหรับมือถือ/เดสก์ท็อปให้เท่ากันทุกใบ
+              'min-h-[96px] sm:min-h-[104px]',
+              getMoistureColor(moisture)
+            )}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Droplets className="w-4 h-4 text-sky-600" />
+              <span className="text-xs text-slate-600">ความชื้น</span>
+            </div>
+
+            {/* ✅ จุดแก้หลัก: ล็อกสูง + จัดกลางแนวตั้ง + unit ตำแหน่งคงที่ */}
+            <div className="h-[40px] sm:h-[44px] flex items-center justify-center gap-1">
+              <span className="font-extrabold text-slate-900 tabular-nums leading-none text-[20px] sm:text-[24px]">
+                {displayMoisture}
+              </span>
+
+              {displayMoisture !== '--' && displayMoisture !== '...' && (
+                <span className="text-sm text-slate-500 leading-none relative top-[1px]">%RH</span>
+              )}
+            </div>
           </div>
 
           {/* Temperature */}
-          <div className="p-3 rounded-lg bg-orange-50">
-            <div className="flex items-center gap-1.5 mb-1">
+          <div
+            className={cn(
+              'p-3 rounded-xl border border-slate-200 bg-slate-50 transition-colors',
+              'min-h-[96px] sm:min-h-[104px]'
+            )}
+          >
+            <div className="flex items-center gap-2 mb-2">
               <Thermometer className="w-4 h-4 text-orange-600" />
-              <span className="text-xs text-gray-600">อุณหภูมิ</span>
+              <span className="text-xs text-slate-600">อุณหภูมิ</span>
             </div>
-            <p className="text-xl font-bold text-gray-900">
-              {displayTemp}
+
+            {/* ✅ จุดแก้หลัก: เหมือนความชื้น */}
+            <div className="h-[40px] sm:h-[44px] flex items-center justify-center gap-1">
+              <span className="font-extrabold text-slate-900 tabular-nums leading-none text-[20px] sm:text-[24px]">
+                {displayTemp}
+              </span>
+
               {displayTemp !== '--' && displayTemp !== '...' && (
-                <span className="text-sm font-normal text-gray-500">°C</span>
+                <span className="text-sm text-slate-500 leading-none relative top-[1px]">°C</span>
               )}
-            </p>
+            </div>
           </div>
         </div>
 
-        {/* Expand toggle */}
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="w-full flex items-center justify-center gap-1 py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
-        >
-          {isExpanded ? (
-            <>
-              <span>ซ่อนรายละเอียด</span>
-              <ChevronUp className="w-4 h-4" />
-            </>
-          ) : (
-            <>
-              <span>ดูเพิ่มเติม</span>
-              <ChevronDown className="w-4 h-4" />
-            </>
-          )}
-        </button>
+        {/* Secondary metrics */}
+        <div className="space-y-1 border-t border-slate-200 pt-2">
+          <MiniSensor
+            icon={Zap}
+            label="EC"
+            value={ec}
+            unit="mS/cm"
+            colorClass="text-amber-600"
+            isLoading={isLoading}
+            isReady={isReady}
+            decimals={2}
+          />
 
-        {/* Expanded content */}
-        {isExpanded && (
-          <div className="pt-2 border-t border-gray-100 space-y-1">
-            <MiniSensor
-              icon={Zap}
-              label="EC"
-              value={ec}
-              unit="mS/cm"
-              colorClass="text-amber-500"
-              isLoading={isLoading}
-              isReady={isReady}
-              decimals={2}
-            />
-            <MiniSensor
-              icon={FlaskConical}
-              label="pH"
-              value={ph}
-              unit=""
-              colorClass="text-purple-500"
-              isLoading={isLoading}
-              isReady={isReady}
-              decimals={2}
-            />
-            <div className="pt-2 mt-2 border-t border-gray-100">
-              <p className="text-xs text-gray-500 mb-2 flex items-center gap-1">
-                <Leaf className="w-3 h-3" />
-                ธาตุอาหาร (mg/kg)
-              </p>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="bg-green-50 rounded-lg p-2">
-                  <p className="text-xs text-gray-500">N</p>
-                  <p className="text-sm font-semibold text-gray-900">
-                    {!isReady ? '--' : isLoading ? '...' : n !== null ? formatNumber(n, 0) : '--'}
-                  </p>
-                </div>
-                <div className="bg-blue-50 rounded-lg p-2">
-                  <p className="text-xs text-gray-500">P</p>
-                  <p className="text-sm font-semibold text-gray-900">
-                    {!isReady ? '--' : isLoading ? '...' : p !== null ? formatNumber(p, 0) : '--'}
-                  </p>
-                </div>
-                <div className="bg-orange-50 rounded-lg p-2">
-                  <p className="text-xs text-gray-500">K</p>
-                  <p className="text-sm font-semibold text-gray-900">
-                    {!isReady ? '--' : isLoading ? '...' : k !== null ? formatNumber(k, 0) : '--'}
-                  </p>
-                </div>
+          <div className="border-t border-slate-100" />
+
+          <MiniSensor
+            icon={FlaskConical}
+            label="pH"
+            value={ph}
+            unit=""
+            colorClass="text-violet-600"
+            isLoading={isLoading}
+            isReady={isReady}
+            decimals={2}
+          />
+
+          {/* Nutrients */}
+          <div className="pt-3 mt-2 border-t border-slate-200">
+            <p className="text-xs font-medium text-slate-600 mb-2 flex items-center gap-2">
+              <Leaf className="w-4 h-4 text-slate-500" />
+              ธาตุอาหาร (mg/kg)
+            </p>
+
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="bg-emerald-50 rounded-xl p-2 border border-emerald-200 transition-transform duration-200 group-hover:translate-y-[-1px]">
+                <p className="text-xs text-slate-600">N</p>
+                <p className="text-sm font-semibold text-slate-900 tabular-nums">
+                  {!isReady ? '--' : isLoading ? '...' : n !== null ? formatNumber(n, 0) : '--'}
+                </p>
+              </div>
+
+              <div className="bg-sky-50 rounded-xl p-2 border border-sky-200 transition-transform duration-200 group-hover:translate-y-[-1px]">
+                <p className="text-xs text-slate-600">P</p>
+                <p className="text-sm font-semibold text-slate-900 tabular-nums">
+                  {!isReady ? '--' : isLoading ? '...' : p !== null ? formatNumber(p, 0) : '--'}
+                </p>
+              </div>
+
+              <div className="bg-amber-50 rounded-xl p-2 border border-amber-200 transition-transform duration-200 group-hover:translate-y-[-1px]">
+                <p className="text-xs text-slate-600">K</p>
+                <p className="text-sm font-semibold text-slate-900 tabular-nums">
+                  {!isReady ? '--' : isLoading ? '...' : k !== null ? formatNumber(k, 0) : '--'}
+                </p>
               </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
     </Card>
   );

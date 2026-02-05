@@ -9,7 +9,9 @@ export interface ExportParams {
   projectKey: string;
   ghKey: string;
   keys: string[];
-  days: number;
+  days?: number;
+  startTs?: number;
+  endTs?: number;
 }
 
 /**
@@ -33,7 +35,10 @@ export async function exportToExcel(params: ExportParams): Promise<void> {
 
     // Get filename from Content-Disposition header
     const contentDisposition = response.headers.get('Content-Disposition');
-    let filename = `telemetry-${params.projectKey}-${params.ghKey}-${params.days}days.xlsx`;
+    const dateStr = params.startTs && params.endTs 
+      ? `${new Date(params.startTs).toISOString().split('T')[0]}_to_${new Date(params.endTs).toISOString().split('T')[0]}`
+      : `${params.days}days`;
+    let filename = `telemetry-${params.projectKey}-${params.ghKey}-${dateStr}.xlsx`;
     
     if (contentDisposition) {
       const filenameMatch = contentDisposition.match(/filename="(.+)"/);
@@ -78,7 +83,10 @@ export async function exportToCsv(params: ExportParams): Promise<void> {
 
     // Get filename from Content-Disposition header
     const contentDisposition = response.headers.get('Content-Disposition');
-    let filename = `telemetry-${params.projectKey}-${params.ghKey}-${params.days}days.csv`;
+    const dateStr = params.startTs && params.endTs 
+      ? `${new Date(params.startTs).toISOString().split('T')[0]}_to_${new Date(params.endTs).toISOString().split('T')[0]}`
+      : `${params.days}days`;
+    let filename = `telemetry-${params.projectKey}-${params.ghKey}-${dateStr}.csv`;
     
     if (contentDisposition) {
       const filenameMatch = contentDisposition.match(/filename="(.+)"/);
@@ -104,5 +112,6 @@ export async function exportToCsv(params: ExportParams): Promise<void> {
 
 export const exportApi = {
   toExcel: exportToExcel,
+  toCSV: exportToCsv,
   toCsv: exportToCsv,
 };
