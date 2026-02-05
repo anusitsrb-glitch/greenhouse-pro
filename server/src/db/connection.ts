@@ -13,6 +13,8 @@ fs.mkdirSync(path.dirname(dbFile), { recursive: true });
 // --- 2) เปิด DB ---
 export const db = new Database(dbFile);
 db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
+
 
 // -------------------------------
 // Helpers: schema / migration

@@ -549,40 +549,106 @@ router.post('/:id/activate', (req: Request, res: Response) => {
 router.delete('/:id', (req: Request, res: Response) => {
   try {
     const userId = parseInt(req.params.id, 10);
-    
+
     if (isNaN(userId)) {
       sendError(res, ThaiErrors.INVALID_INPUT, 400);
       return;
     }
-    
+
     // Prevent self-deletion
     if (userId === req.session.userId) {
       sendError(res, 'ไม่สามารถลบบัญชีตัวเองได้', 400);
       return;
     }
-    
-    const user = db.prepare('SELECT id, username, role FROM users WHERE id = ?')
+
+    const target = db
+      .prepare('SELECT id, username, role FROM users WHERE id = ?')
       .get(userId) as { id: number; username: string; role: UserRole } | undefined;
-    
-    if (!user) {
+
+    if (!target) {
       sendError(res, ThaiErrors.USER_NOT_FOUND, 404);
       return;
     }
 
-    // ✅ กัน admin แก้ superadmin
-    if (denyIfTargetIsSuperadmin(user.role, req, res)) return;
-    
-    // Soft delete (deactivate instead of hard delete)
-    db.prepare(`
-      UPDATE users SET is_active = 0, updated_at = datetime('now') WHERE id = ?
-    `).run(userId);
-    
-    logAudit({
-      userId: req.session.userId ?? null,
-      action: AuditActions.USER_DISABLED,
-      detail: { targetUserId: userId, targetUsername: user.username, reason: 'deleted' },
+    // ✅ กัน admin ลบ superadmin
+    if (denyIfTargetIsSuperadmin(target.role, req, res)) return;
+
+    // ✅ กันลบ superadmin คนสุดท้าย (กันระบบพัง)
+    if (target.role === 'superadmin') {
+      const cnt = db.prepare(`SELECT COUNT(*) as c FROM users WHERE role = 'superadmin'`).get() as any;
+      if ((cnt?.c ?? 0) <= 1) {
+        sendError(res, 'ไม่สามารถลบ Super Admin คนสุดท้ายได้', 400);
+        return;
+      }
+    }
+
+    // -------- helpers: เช็คตารางมีอยู่ไหม + ลบแบบไม่พัง --------
+    const tableExists = (name: string) => {
+      const row = db
+        .prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?`)
+        .get(name);
+      return !!row;
+    };
+
+    const safeDelete = (sql: string, params: any[] = []) => {
+      try {
+        db.prepare(sql).run(...params);
+      } catch (e: any) {
+        // ถ้าตารางไม่มี/คอลัมน์ไม่ตรง: ข้าม (เพื่อไม่ให้ลบผู้ใช้ fail)
+        const msg = String(e?.message ?? '').toLowerCase();
+        if (msg.includes('no such table') || msg.includes('no such column')) return;
+        throw e;
+      }
+    };
+
+    // ✅ ลบจริงแบบ transaction
+    const tx = db.transaction((uid: number) => {
+      // 1) ลบ mapping สิทธิ์โปรเจกต์
+      if (tableExists('user_project_access')) {
+        safeDelete('DELETE FROM user_project_access WHERE user_id = ?', [uid]);
+      }
+
+      // 2) ลบ session ของ user (ตารางชื่อ sessions)
+      if (tableExists('sessions')) {
+        // session store มักเก็บ sess เป็น JSON string -> อิง userId อยู่ในนั้น
+        // ใช้ LIKE เพื่อเคลียร์ session ของ user นี้
+        safeDelete(`DELETE FROM sessions WHERE sess LIKE ?`, [`%"userId":${uid}%`]);
+      }
+
+      // 3) ถ้ามี login_history / audit_log ให้ลบ/ทำให้เป็น null ตามนโยบาย
+      if (tableExists('login_history')) {
+        // บาง schema ใช้ user_id, บาง schema ใช้ userId -> ใช้ safeDelete ช่วย
+        safeDelete('DELETE FROM login_history WHERE user_id = ?', [uid]);
+        safeDelete('DELETE FROM login_history WHERE userId = ?', [uid]);
+      }
+
+      if (tableExists('audit_log')) {
+        // แนะนำ “ไม่ลบ” audit เพื่อหลักฐาน แต่ถ้าอยากลบจริง ให้เปิด 2 บรรทัดนี้
+        // safeDelete('DELETE FROM audit_log WHERE user_id = ?', [uid]);
+        // safeDelete('DELETE FROM audit_log WHERE userId = ?', [uid]);
+
+        // ทางเลือกที่ปลอดภัยกว่า: ทำให้ userId เป็น NULL (เก็บ log ไว้)
+        safeDelete('UPDATE audit_log SET user_id = NULL WHERE user_id = ?', [uid]);
+        safeDelete('UPDATE audit_log SET userId = NULL WHERE userId = ?', [uid]);
+      }
+
+      // 4) ลบ user จริง
+      safeDelete('DELETE FROM users WHERE id = ?', [uid]);
     });
-    
+
+    tx(userId);
+
+    // Audit การลบ (ถ้า audit_log ทำ NULL ได้ ก็ยังเก็บได้)
+    try {
+      logAudit({
+        userId: req.session.userId ?? null,
+        action: AuditActions.USER_DELETED,
+        detail: { targetUserId: userId, targetUsername: target.username },
+      });
+    } catch {
+      // ignore
+    }
+
     sendSuccess(res, { message: 'ลบผู้ใช้สำเร็จ' });
   } catch (error) {
     console.error('Error deleting user:', error);
