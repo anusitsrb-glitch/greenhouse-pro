@@ -1,217 +1,315 @@
 /**
- * Sensor Alert Monitor
- * ตรวจสอบค่าเซ็นเซอร์และสร้าง notification เมื่อผิดปกติ
+ * Sensor Monitor (Production)
+ * - Sensor Threshold Alerts: uses sensor_configs.alert_min/alert_max (matches UI)
+ * - Sensor Offline Alerts: checks telemetry last timestamp per sensor
  */
 
 import { db } from '../db/connection.js';
 import { tbService } from './thingsboard.js';
 import { notificationService } from './notificationService.js';
 
-interface SensorAlert {
-  id: number;
-  greenhouseId: number;
-  sensorKey: string;
-  sensorName: string;
-  conditionType: 'above' | 'below' | 'equal' | 'between' | 'outside';
-  thresholdValue: number | null;
-  thresholdMin: number | null;
-  thresholdMax: number | null;
-  severity: 'info' | 'warning' | 'critical';
-  cooldownMinutes: number;
-  lastTriggeredAt: string | null;
+// ============================================================
+// Config
+// ============================================================
+
+// Offline considered if last telemetry older than this (default 5 minutes)
+const SENSOR_OFFLINE_MS = 5 * 60 * 1000;
+
+// In-memory cooldown to prevent spam even if DB cooldown not present
+const MEM_COOLDOWN_MS = 5 * 60 * 1000;
+
+// Telemetry request keys are from sensor_configs.data_key
+// ============================================================
+
+// Track last triggered times in memory
+const memCooldown = new Map<string, number>();
+
+function memCooldownOk(key: string): boolean {
+  const last = memCooldown.get(key);
+  if (!last) return true;
+  return Date.now() - last >= MEM_COOLDOWN_MS;
 }
 
-/**
- * ตรวจสอบ sensor alerts ทั้งหมด
- */
+function setMemCooldown(key: string) {
+  memCooldown.set(key, Date.now());
+}
+
+// Create notification wrapper (support different method names)
+function createNotification(payload: any) {
+  const svc: any = notificationService as any;
+
+  if (typeof svc.create === 'function') return svc.create(payload);
+  if (typeof svc.createNotification === 'function') return svc.createNotification(payload);
+  if (typeof svc.createNotificationData === 'function') return svc.createNotificationData(payload);
+
+  // Fallback: try common names
+  if (typeof svc.createNotification === 'function') return svc.createNotification(payload);
+
+  console.error('❌ notificationService has no create/createNotification method');
+}
+
+// ============================================================
+// Types
+// ============================================================
+
+type Severity = 'info' | 'warning' | 'critical';
+
+interface SensorConfigRow {
+  sensor_config_id: number;
+  greenhouse_id: number;
+  project_id: number;
+
+  project_key: string;
+  gh_key: string;
+
+  greenhouse_name: string;
+
+  sensor_key: string;      // logical id
+  sensor_name: string;     // display name
+  data_key: string;        // TB telemetry key
+  unit: string | null;
+
+  alert_min: number | null;
+  alert_max: number | null;
+
+  // optional if you have columns; safe to read as any
+  last_alert_at?: string | null;
+  alert_cooldown_min?: number | null;
+}
+
+type ThresholdResult = 'low' | 'high' | null;
+
+// ============================================================
+// Main entry
+// ============================================================
+
 export async function checkAllSensorAlerts(): Promise<void> {
   try {
-    // ดึง alert rules ที่ active
-    const alerts = db.prepare(`
-      SELECT ar.*, g.name_th as greenhouse_name, g.gh_key, p.key as project_key, p.id as project_id
-      FROM alert_rules ar
-      JOIN greenhouses g ON ar.greenhouse_id = g.id
+    const sensors = db.prepare(`
+      SELECT
+        sc.id as sensor_config_id,
+        sc.greenhouse_id,
+        p.id as project_id,
+        p.key as project_key,
+        g.gh_key,
+        g.name_th as greenhouse_name,
+
+        sc.sensor_key,
+        sc.name_th as sensor_name,
+        sc.data_key,
+        sc.unit,
+
+        sc.alert_min,
+        sc.alert_max
+
+      FROM sensor_configs sc
+      JOIN greenhouses g ON sc.greenhouse_id = g.id
       JOIN projects p ON g.project_id = p.id
-      WHERE ar.is_active = 1 AND g.status = 'ready'
-    `).all() as Array<SensorAlert & { 
-      greenhouse_name: string; 
-      gh_key: string; 
-      project_key: string;
-      project_id: number;
-    }>;
 
-    console.log(`🔍 Checking ${alerts.length} sensor alerts...`);
+      WHERE sc.is_active = 1
+        AND g.status = 'ready'
+        AND sc.data_key IS NOT NULL
+        AND TRIM(sc.data_key) != ''
+        AND (
+          sc.alert_min IS NOT NULL
+          OR sc.alert_max IS NOT NULL
+          OR 1 = 1
+        )
+    `).all() as SensorConfigRow[];
 
-    for (const alert of alerts) {
-      await checkSensorAlert(alert);
+    // NOTE: we also do offline checks even if alert_min/max is null
+    console.log(`🔍 [sensorMonitor] Checking sensors: ${sensors.length}`);
+
+    for (const s of sensors) {
+      await checkOneSensor(s);
     }
   } catch (error) {
-    console.error('❌ Error checking sensor alerts:', error);
+    console.error('❌ [sensorMonitor] Error checking sensors:', error);
   }
 }
 
-/**
- * ตรวจสอบ alert rule ตัวเดียว
- */
-async function checkSensorAlert(
-  alert: SensorAlert & { 
-    greenhouse_name: string; 
-    gh_key: string; 
-    project_key: string;
-    project_id: number;
-  }
-): Promise<void> {
+// ============================================================
+// Per sensor check (offline + threshold)
+// ============================================================
+
+async function checkOneSensor(s: SensorConfigRow): Promise<void> {
   try {
-    // เช็ค cooldown
-    if (alert.lastTriggeredAt) {
-      const lastTriggered = new Date(alert.lastTriggeredAt).getTime();
-      const now = Date.now();
-      const cooldown = alert.cooldownMinutes * 60 * 1000;
-      
-      if (now - lastTriggered < cooldown) {
-        return; // ยังอยู่ใน cooldown period
-      }
-    }
-
-    // ดึงค่า sensor ล่าสุด
+    // Fetch latest telemetry for this sensor key
     const telemetry = await tbService.getLatestTelemetry(
-      alert.project_key,
-      alert.gh_key,
-      [alert.sensorKey]
+      s.project_key,
+      s.gh_key,
+      [s.data_key]
     );
 
-    const sensorData = telemetry[alert.sensorKey];
-    if (!sensorData || sensorData.length === 0) {
-      return; // ไม่มีข้อมูล
-    }
+    const arr = telemetry?.[s.data_key];
 
-    const currentValue = Number(sensorData[0].value);
-    
-    // เช็คว่าเกินเงื่อนไขหรือไม่
-    const isTriggered = checkCondition(
-      currentValue,
-      alert.conditionType,
-      alert.thresholdValue,
-      alert.thresholdMin,
-      alert.thresholdMax
-    );
+    // ----------------------------
+    // 1) Offline check
+    // ----------------------------
+    await checkOffline(s, arr);
 
-    if (isTriggered) {
-      // สร้าง notification
-      const message = buildAlertMessage(
-        alert.sensorName || alert.sensorKey,
+    // If no telemetry, cannot threshold-check
+    if (!arr || arr.length === 0) return;
+
+    const currentValue = Number(arr[0]?.value);
+    const ts = Number(arr[0]?.ts ?? 0);
+
+    if (Number.isNaN(currentValue)) return;
+
+    // ----------------------------
+    // 2) Threshold check
+    // ----------------------------
+    const th = checkThreshold(currentValue, s.alert_min, s.alert_max);
+    if (!th) return;
+
+    const memKey = `sensor_alert:${s.greenhouse_id}:${s.sensor_key}:${th}`;
+    if (!memCooldownOk(memKey)) return;
+
+    const unit = s.unit ? ` ${s.unit}` : '';
+    const name = s.sensor_name || s.sensor_key;
+
+    const msg =
+      th === 'low'
+        ? `${name} ต่ำกว่ากำหนด (${fmt(currentValue)}${unit} < ${fmt(s.alert_min)}${unit})`
+        : `${name} สูงกว่ากำหนด (${fmt(currentValue)}${unit} > ${fmt(s.alert_max)}${unit})`;
+
+    createNotification({
+      type: 'sensor_alert',
+      severity: 'warning' as Severity,
+      title: `⚠️ ${name} ผิดปกติ`,
+      message: `${s.greenhouse_name}: ${msg}`,
+      metadata: {
+        greenhouseId: s.greenhouse_id,
+        greenhouseName: s.greenhouse_name,
+        sensorConfigId: s.sensor_config_id,
+        sensorKey: s.sensor_key,
+        sensorName: name,
+        dataKey: s.data_key,
         currentValue,
-        alert.conditionType,
-        alert.thresholdValue,
-        alert.thresholdMin,
-        alert.thresholdMax
-      );
+        alertMin: s.alert_min,
+        alertMax: s.alert_max,
+        triggered: th,
+        ts,
+      },
+      projectId: s.project_id,
+      greenhouseId: s.greenhouse_id,
+      autoDismiss: false,
+    });
 
-      notificationService.create({
-        type: 'sensor_alert',
-        severity: alert.severity,
-        title: `⚠️ ${alert.sensorName || alert.sensorKey} ผิดปกติ`,
-        message: `${alert.greenhouse_name}: ${message}`,
-        metadata: {
-          greenhouseName: alert.greenhouse_name,
-          sensorKey: alert.sensorKey,
-          sensorName: alert.sensorName,
-          currentValue,
-          threshold: alert.thresholdValue,
-          thresholdMin: alert.thresholdMin,
-          thresholdMax: alert.thresholdMax,
-          conditionType: alert.conditionType,
-        },
-        projectId: alert.project_id,
-        greenhouseId: alert.greenhouseId,
-        autoDismiss: alert.severity === 'info',
-      });
-
-      // อัพเดท last_triggered_at
-      db.prepare(`
-        UPDATE alert_rules 
-        SET last_triggered_at = datetime('now')
-        WHERE id = ?
-      `).run(alert.id);
-
-      console.log(`🚨 Sensor alert triggered: ${alert.greenhouse_name} - ${alert.sensorKey}`);
-    }
+    setMemCooldown(memKey);
+    console.log(`🚨 [sensorMonitor] Threshold triggered: ${s.greenhouse_name} - ${s.sensor_key} (${th})`);
   } catch (error) {
-    console.error(`❌ Error checking alert ${alert.id}:`, error);
+    console.error(`❌ [sensorMonitor] Error sensor ${s.sensor_key} (GH ${s.greenhouse_id}):`, error);
   }
 }
 
-/**
- * ตรวจสอบเงื่อนไข
- */
-function checkCondition(
-  value: number,
-  type: string,
-  threshold: number | null,
-  min: number | null,
-  max: number | null
-): boolean {
-  switch (type) {
-    case 'above':
-      return threshold !== null && value > threshold;
-    case 'below':
-      return threshold !== null && value < threshold;
-    case 'equal':
-      return threshold !== null && value === threshold;
-    case 'between':
-      return min !== null && max !== null && value >= min && value <= max;
-    case 'outside':
-      return min !== null && max !== null && (value < min || value > max);
-    default:
-      return false;
+// ============================================================
+// Offline detector
+// ============================================================
+
+async function checkOffline(s: SensorConfigRow, arr: any[] | undefined): Promise<void> {
+  const name = s.sensor_name || s.sensor_key;
+
+  // No data at all => offline (nodata)
+  if (!arr || arr.length === 0) {
+    const memKey = `sensor_offline:${s.greenhouse_id}:${s.sensor_key}:nodata`;
+    if (!memCooldownOk(memKey)) return;
+
+    createNotification({
+      type: 'sensor_offline',
+      severity: 'warning' as Severity,
+      title: `📡 เซ็นเซอร์ออฟไลน์`,
+      message: `${s.greenhouse_name}: ${name} ไม่มีข้อมูลล่าสุด`,
+      metadata: {
+        greenhouseId: s.greenhouse_id,
+        greenhouseName: s.greenhouse_name,
+        sensorConfigId: s.sensor_config_id,
+        sensorKey: s.sensor_key,
+        sensorName: name,
+        dataKey: s.data_key,
+        reason: 'no_data',
+      },
+      projectId: s.project_id,
+      greenhouseId: s.greenhouse_id,
+      autoDismiss: false,
+    });
+
+    setMemCooldown(memKey);
+    console.log(`📴 [sensorMonitor] Offline (no data): ${s.greenhouse_name} - ${s.sensor_key}`);
+    return;
   }
+
+  const ts = Number(arr[0]?.ts ?? 0);
+  if (!ts) return;
+
+  const age = Date.now() - ts;
+  if (age <= SENSOR_OFFLINE_MS) return;
+
+  const memKey = `sensor_offline:${s.greenhouse_id}:${s.sensor_key}:stale`;
+  if (!memCooldownOk(memKey)) return;
+
+  const mins = Math.round(SENSOR_OFFLINE_MS / 60000);
+
+  createNotification({
+    type: 'sensor_offline',
+    severity: 'warning' as Severity,
+    title: `📡 เซ็นเซอร์ออฟไลน์`,
+    message: `${s.greenhouse_name}: ${name} ไม่อัปเดตเกิน ${mins} นาที`,
+    metadata: {
+      greenhouseId: s.greenhouse_id,
+      greenhouseName: s.greenhouse_name,
+      sensorConfigId: s.sensor_config_id,
+      sensorKey: s.sensor_key,
+      sensorName: name,
+      dataKey: s.data_key,
+      lastTs: ts,
+      ageMs: age,
+      offlineMs: SENSOR_OFFLINE_MS,
+      reason: 'stale_ts',
+    },
+    projectId: s.project_id,
+    greenhouseId: s.greenhouse_id,
+    autoDismiss: false,
+  });
+
+  setMemCooldown(memKey);
+  console.log(`📴 [sensorMonitor] Offline (stale): ${s.greenhouse_name} - ${s.sensor_key} (${Math.round(age / 60000)}m)`);
 }
 
-/**
- * สร้างข้อความแจ้งเตือน
- */
-function buildAlertMessage(
-  sensorName: string,
-  currentValue: number,
-  type: string,
-  threshold: number | null,
-  min: number | null,
-  max: number | null
-): string {
-  const valueStr = currentValue.toFixed(2);
-  
-  switch (type) {
-    case 'above':
-      return `${sensorName} สูงกว่ากำหนด (${valueStr} > ${threshold})`;
-    case 'below':
-      return `${sensorName} ต่ำกว่ากำหนด (${valueStr} < ${threshold})`;
-    case 'equal':
-      return `${sensorName} เท่ากับ ${threshold}`;
-    case 'between':
-      return `${sensorName} อยู่ในช่วง ${min}-${max} (${valueStr})`;
-    case 'outside':
-      return `${sensorName} นอกช่วงปกติ (${valueStr}, ควรอยู่ ${min}-${max})`;
-    default:
-      return `${sensorName} = ${valueStr}`;
-  }
+// ============================================================
+// Helpers
+// ============================================================
+
+function checkThreshold(value: number, min: number | null, max: number | null): ThresholdResult {
+  if (min !== null && typeof min === 'number' && value < min) return 'low';
+  if (max !== null && typeof max === 'number' && value > max) return 'high';
+  return null;
 }
 
-/**
- * เริ่มต้น monitoring (เรียกทุก 1 นาที)
- */
+function fmt(v: any): string {
+  if (v === null || v === undefined) return '-';
+  const n = Number(v);
+  if (Number.isNaN(n)) return String(v);
+  // keep nice format
+  if (Math.abs(n) >= 100) return n.toFixed(1);
+  if (Math.abs(n) >= 10) return n.toFixed(2);
+  return n.toFixed(2);
+}
+
+// ============================================================
+// Scheduler
+// ============================================================
+
 export function startSensorMonitoring(intervalSeconds: number = 60): void {
-  console.log(`🚀 Starting sensor alert monitoring (every ${intervalSeconds}s)...`);
-  
-  // Check ทันที
+  console.log(`🚀 Starting sensor monitoring (every ${intervalSeconds}s)...`);
   checkAllSensorAlerts();
-  
-  // ตั้ง interval
+
   setInterval(() => {
     checkAllSensorAlerts();
   }, intervalSeconds * 1000);
 }
 
-// Export สำหรับ testing
+// Export for testing
 export const sensorMonitor = {
   start: startSensorMonitoring,
   checkAll: checkAllSensorAlerts,

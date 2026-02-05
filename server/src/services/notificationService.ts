@@ -13,6 +13,7 @@ export type NotificationType =
   | 'device_offline'
   | 'device_online'
   | 'sensor_alert'
+    'sensor_offline' // ✅ เพิ่ม
   | 'control_action'
   | 'auto_mode_changed'
   | 'system_error'

@@ -6,6 +6,7 @@ export type NotificationType =
   | 'device_offline'
   | 'device_online'
   | 'sensor_alert'
+  | 'sensor_offline' // ✅ เพิ่มตรงนี้
   | 'control_action'
   | 'auto_mode_changed'
   | 'system_error'
@@ -37,6 +38,7 @@ export interface NotificationSettings {
   device_offline: boolean;
   device_online: boolean;
   sensor_alert: boolean;
+  sensor_offline: boolean; // ✅ เพิ่มตรงนี้
   control_action: boolean;
   auto_mode_changed: boolean;
   system_error: boolean;
