@@ -1,4 +1,4 @@
- /**
+/**
  * ThingsBoard Proxy Routes
  * All TB requests go through backend to protect credentials
  */
@@ -15,7 +15,6 @@ import { notificationService } from '../services/notificationService.js';
 
 const router = Router();
 
-
 // Apply auth middleware
 router.use(requireAuth);
 
@@ -28,7 +27,7 @@ router.post('/attributes', requireOperator, setAttributesHandler);
 const latestQuerySchema = z.object({
   project: z.string().min(1),
   gh: z.string().min(1),
-  keys: z.string().min(1), // comma-separated
+  keys: z.string().min(1),
 });
 
 const timeseriesQuerySchema = z.object({
@@ -60,7 +59,11 @@ const rpcBodySchema = z.object({
 // Helper: Check Project Access
 // ============================================================
 
-function hasProjectAccess(userId: number, userRole: string, projectKey: string): boolean {
+function hasProjectAccess(
+  userId: number,
+  userRole: string,
+  projectKey: string
+): boolean {
   if (userRole === 'admin' || userRole === 'superadmin') return true;
 
   const access = db.prepare(`
@@ -78,7 +81,6 @@ function hasProjectAccess(userId: number, userRole: string, projectKey: string):
 
 /**
  * GET /api/tb/latest
- * Get latest telemetry values
  */
 router.get('/latest', async (req: Request, res: Response) => {
   try {
@@ -91,26 +93,31 @@ router.get('/latest', async (req: Request, res: Response) => {
 
     const { project, gh, keys } = parsed.data;
 
-    // Check access
     if (!hasProjectAccess(req.session.userId!, req.session.role!, project)) {
       sendError(res, ThaiErrors.NO_PROJECT_ACCESS, 403);
       return;
     }
 
-    const keysArray = keys.split(',').map(k => k.trim()).filter(Boolean);
+    const keysArray = keys
+      .split(',')
+      .map(k => k.trim())
+      .filter(Boolean);
+
     const data = await tbService.getLatestTelemetry(project, gh, keysArray);
 
     sendSuccess(res, { telemetry: data });
   } catch (error) {
     console.error('Error fetching latest telemetry:', error);
-    const message = error instanceof Error ? error.message : ThaiErrors.TB_CONNECTION_ERROR;
-    sendError(res, message, 502);
+
+    const errMsg =
+      error instanceof Error ? error.message : String(error);
+
+    sendError(res, errMsg, 502);
   }
 });
 
 /**
  * GET /api/tb/timeseries
- * Get telemetry timeseries for charts
  */
 router.get('/timeseries', async (req: Request, res: Response) => {
   try {
@@ -121,15 +128,27 @@ router.get('/timeseries', async (req: Request, res: Response) => {
       return;
     }
 
-    const { project, gh, keys, startTs, endTs, interval, agg, limit } = parsed.data;
+    const {
+      project,
+      gh,
+      keys,
+      startTs,
+      endTs,
+      interval,
+      agg,
+      limit,
+    } = parsed.data;
 
-    // Check access
     if (!hasProjectAccess(req.session.userId!, req.session.role!, project)) {
       sendError(res, ThaiErrors.NO_PROJECT_ACCESS, 403);
       return;
     }
 
-    const keysArray = keys.split(',').map(k => k.trim()).filter(Boolean);
+    const keysArray = keys
+      .split(',')
+      .map(k => k.trim())
+      .filter(Boolean);
+
     const data = await tbService.getTelemetryTimeseries(
       project,
       gh,
@@ -144,14 +163,16 @@ router.get('/timeseries', async (req: Request, res: Response) => {
     sendSuccess(res, { timeseries: data });
   } catch (error) {
     console.error('Error fetching timeseries:', error);
-    const message = error instanceof Error ? error.message : ThaiErrors.TB_CONNECTION_ERROR;
-    sendError(res, message, 502);
+
+    const errMsg =
+      error instanceof Error ? error.message : String(error);
+
+    sendError(res, errMsg, 502);
   }
 });
 
 /**
  * GET /api/tb/attributes
- * Get device attributes
  */
 router.get('/attributes', async (req: Request, res: Response) => {
   try {
@@ -164,27 +185,31 @@ router.get('/attributes', async (req: Request, res: Response) => {
 
     const { project, gh, keys } = parsed.data;
 
-    // Check access
     if (!hasProjectAccess(req.session.userId!, req.session.role!, project)) {
       sendError(res, ThaiErrors.NO_PROJECT_ACCESS, 403);
       return;
     }
 
-    const keysArray = keys.split(',').map(k => k.trim()).filter(Boolean);
+    const keysArray = keys
+      .split(',')
+      .map(k => k.trim())
+      .filter(Boolean);
+
     const data = await tbService.getAttributes(project, gh, keysArray);
 
     sendSuccess(res, { attributes: data });
   } catch (error) {
     console.error('Error fetching attributes:', error);
-    const message = error instanceof Error ? error.message : ThaiErrors.TB_CONNECTION_ERROR;
-    sendError(res, message, 502);
+
+    const errMsg =
+      error instanceof Error ? error.message : String(error);
+
+    sendError(res, errMsg, 502);
   }
 });
 
 /**
  * POST /api/tb/rpc
- * Send RPC command to device
- * Requires operator or admin role
  */
 router.post('/rpc', requireOperator, async (req: Request, res: Response) => {
   try {
@@ -197,14 +222,13 @@ router.post('/rpc', requireOperator, async (req: Request, res: Response) => {
 
     const { project, gh, method, params, timeout } = parsed.data;
 
-    // ✅ Check access ก่อน
     if (!hasProjectAccess(req.session.userId!, req.session.role!, project)) {
       sendError(res, ThaiErrors.NO_PROJECT_ACCESS, 403);
       return;
     }
 
-    // ✅ Check if device is online ก่อน
     const isOnline = await tbService.isDeviceOnline(project, gh);
+
     if (!isOnline) {
       logAudit({
         userId: req.session.userId ?? null,
@@ -213,11 +237,11 @@ router.post('/rpc', requireOperator, async (req: Request, res: Response) => {
         ghKey: gh,
         detail: { method, params, reason: 'Device offline' },
       });
+
       sendError(res, ThaiErrors.TB_DEVICE_OFFLINE, 503);
       return;
     }
 
-    // ✅ Log RPC attempt
     logAudit({
       userId: req.session.userId ?? null,
       action: AuditActions.RPC_SENT,
@@ -226,24 +250,36 @@ router.post('/rpc', requireOperator, async (req: Request, res: Response) => {
       detail: { method, params },
     });
 
-    // ✅ คำสั่งสั่งงาน/ตั้งค่า → บังคับ one-way กัน 504
     const forceOneWay =
       /_cmd$|_auto$|_time$|_condition_auto$|_interval_auto$/.test(method) ||
       method.startsWith('set_global_') ||
-      /^set_motor_\d+_status$/.test(method);  // ✅ เพิ่มบรรทัดนี้
+      /^set_motor_\d+_status$/.test(method);
 
     const effectiveTimeout = forceOneWay ? undefined : timeout;
 
-    // ✅ Send RPC “ครั้งเดียว” เท่านั้น
-    const rpcResponse = await tbService.sendRpc(project, gh, method, params, effectiveTimeout);
+    const rpcResponse = await tbService.sendRpc(
+      project,
+      gh,
+      method,
+      params,
+      effectiveTimeout
+    );
 
     const greenhouseId = getGreenhouseId(project, gh);
+
     if (greenhouseId) {
       const { controlKey, action, value } = parseRpcMethod(method, params);
-      logControlAction(req, greenhouseId, controlKey, action, value, true);
+
+      logControlAction(
+        req,
+        greenhouseId,
+        controlKey,
+        action,
+        value,
+        true
+      );
     }
 
-    // ✅ Log success
     logAudit({
       userId: req.session.userId ?? null,
       action: AuditActions.RPC_SUCCESS,
@@ -258,13 +294,32 @@ router.post('/rpc', requireOperator, async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error sending RPC:', error);
-    const greenhouseId = getGreenhouseId(req.body?.project, req.body?.gh);
+
+    const errMsg =
+      error instanceof Error ? error.message : String(error);
+
+    const greenhouseId = getGreenhouseId(
+      req.body?.project,
+      req.body?.gh
+    );
+
     if (greenhouseId) {
-      const { controlKey, action, value } = parseRpcMethod(req.body?.method, req.body?.params);
-      logControlAction(req, greenhouseId, controlKey, action, value, false, error.message);
+      const { controlKey, action, value } = parseRpcMethod(
+        req.body?.method,
+        req.body?.params
+      );
+
+      logControlAction(
+        req,
+        greenhouseId,
+        controlKey,
+        action,
+        value,
+        false,
+        errMsg
+      );
     }
 
-    // Log failure
     logAudit({
       userId: req.session.userId ?? null,
       action: AuditActions.RPC_FAILED,
@@ -273,13 +328,17 @@ router.post('/rpc', requireOperator, async (req: Request, res: Response) => {
       detail: {
         method: req.body?.method,
         params: req.body?.params,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errMsg,
       },
     });
 
     const anyErr: any = error;
     const status = anyErr?.status ?? anyErr?.response?.status;
-    const msg = error instanceof Error ? error.message : ThaiErrors.TB_CONNECTION_ERROR;
+
+    const msg =
+      error instanceof Error
+        ? error.message
+        : ThaiErrors.TB_CONNECTION_ERROR;
 
     const isSoftTimeout =
       status === 504 ||
@@ -289,7 +348,8 @@ router.post('/rpc', requireOperator, async (req: Request, res: Response) => {
     if (isSoftTimeout) {
       sendSuccess(res, {
         rpcResponse: {},
-        message: 'ส่งคำสั่งแล้ว (ThingsBoard ตอบช้า) รอซิงค์สถานะจากอุปกรณ์...',
+        message:
+          'ส่งคำสั่งแล้ว (ThingsBoard ตอบช้า) รอซิงค์สถานะจากอุปกรณ์...',
       });
       return;
     }
@@ -298,22 +358,23 @@ router.post('/rpc', requireOperator, async (req: Request, res: Response) => {
   }
 });
 
-
-
 /**
  * GET /api/tb/device-status
- * Check device online status
  */
 router.get('/device-status', async (req: Request, res: Response) => {
   try {
     const { project, gh } = req.query;
 
-    if (!project || !gh || typeof project !== 'string' || typeof gh !== 'string') {
+    if (
+      !project ||
+      !gh ||
+      typeof project !== 'string' ||
+      typeof gh !== 'string'
+    ) {
       sendError(res, ThaiErrors.INVALID_INPUT, 400);
       return;
     }
 
-    // Check access
     if (!hasProjectAccess(req.session.userId!, req.session.role!, project)) {
       sendError(res, ThaiErrors.NO_PROJECT_ACCESS, 403);
       return;
@@ -328,63 +389,91 @@ router.get('/device-status', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error checking device status:', error);
-    const message = error instanceof Error ? error.message : ThaiErrors.TB_CONNECTION_ERROR;
-    sendError(res, message, 502);
+
+    const msg =
+      error instanceof Error
+        ? error.message
+        : ThaiErrors.TB_CONNECTION_ERROR;
+
+    sendError(res, msg, 502);
   }
 });
 
+// ============================================================
+// Helpers
+// ============================================================
 
-
-function getGreenhouseId(projectKey: string, ghKey: string): number | null {
+function getGreenhouseId(
+  projectKey: string,
+  ghKey: string
+): number | null {
   try {
     const result = db.prepare(`
       SELECT g.id FROM greenhouses g
       JOIN projects p ON g.project_id = p.id
       WHERE p.key = ? AND g.gh_key = ?
     `).get(projectKey, ghKey) as { id: number } | undefined;
+
     return result?.id || null;
   } catch {
     return null;
   }
 }
 
-function parseRpcMethod(method: string, params: any): {
+function parseRpcMethod(
+  method: string,
+  params: any
+): {
   controlKey: string;
   action: string;
   value: string | number;
 } {
   const lowerMethod = method.toLowerCase();
-  
-  // ✅ แก้ไขให้ดักจับชื่อที่ถูกต้อง
-  if (lowerMethod.includes('valve1') || lowerMethod.includes('valve_1')) 
+
+  if (lowerMethod.includes('valve1') || lowerMethod.includes('valve_1'))
     return { controlKey: 'valve_1', action: 'set', value: params };
-  if (lowerMethod.includes('valve2') || lowerMethod.includes('valve_2')) 
+  if (lowerMethod.includes('valve2') || lowerMethod.includes('valve_2'))
     return { controlKey: 'valve_2', action: 'set', value: params };
-  if (lowerMethod.includes('valve3') || lowerMethod.includes('valve_3')) 
+  if (lowerMethod.includes('valve3') || lowerMethod.includes('valve_3'))
     return { controlKey: 'valve_3', action: 'set', value: params };
-  if (lowerMethod.includes('valve4') || lowerMethod.includes('valve_4')) 
+  if (lowerMethod.includes('valve4') || lowerMethod.includes('valve_4'))
     return { controlKey: 'valve_4', action: 'set', value: params };
-  
-  if (lowerMethod.includes('fan1') || lowerMethod.includes('fan_1')) 
+
+  if (lowerMethod.includes('fan1') || lowerMethod.includes('fan_1'))
     return { controlKey: 'fan_1', action: 'set', value: params };
-  if (lowerMethod.includes('fan2') || lowerMethod.includes('fan_2')) 
+  if (lowerMethod.includes('fan2') || lowerMethod.includes('fan_2'))
     return { controlKey: 'fan_2', action: 'set', value: params };
-  
-  if (lowerMethod.includes('light')) 
+
+  if (lowerMethod.includes('light'))
     return { controlKey: 'light_1', action: 'set', value: params };
-  
+
   const motorMatch = lowerMethod.match(/motor[_]?(\d)/);
+
   if (motorMatch) {
     const motorNum = motorMatch[1];
-    if (lowerMethod.includes('forward')) 
-      return { controlKey: `motor_${motorNum}`, action: 'setForward', value: params };
-    if (lowerMethod.includes('reverse')) 
-      return { controlKey: `motor_${motorNum}`, action: 'setReverse', value: params };
-    if (lowerMethod.includes('stop')) 
-      return { controlKey: `motor_${motorNum}`, action: 'stop', value: 0 };
+
+    if (lowerMethod.includes('forward'))
+      return {
+        controlKey: `motor_${motorNum}`,
+        action: 'setForward',
+        value: params,
+      };
+
+    if (lowerMethod.includes('reverse'))
+      return {
+        controlKey: `motor_${motorNum}`,
+        action: 'setReverse',
+        value: params,
+      };
+
+    if (lowerMethod.includes('stop'))
+      return {
+        controlKey: `motor_${motorNum}`,
+        action: 'stop',
+        value: 0,
+      };
   }
-  
-  // Fallback: ใช้ method name เป็น controlKey
+
   return { controlKey: method, action: 'set', value: params };
 }
 
@@ -399,38 +488,41 @@ function logControlAction(
 ): void {
   try {
     const userId = req.session.userId || null;
-    
-    // แมพชื่ออุปกรณ์
+
     const deviceMap: Record<string, string> = {
-      fan_1: 'พัดลม 1', fan_2: 'พัดลม 2', 
-      valve_1: 'วาล์ว 1', valve_2: 'วาล์ว 2', 
-      valve_3: 'วาล์ว 3', valve_4: 'วาล์ว 4',
+      fan_1: 'พัดลม 1',
+      fan_2: 'พัดลม 2',
+      valve_1: 'วาล์ว 1',
+      valve_2: 'วาล์ว 2',
+      valve_3: 'วาล์ว 3',
+      valve_4: 'วาล์ว 4',
       light_1: 'ไฟ',
-      motor_1: 'มอเตอร์ 1', motor_2: 'มอเตอร์ 2',
-      motor_3: 'มอเตอร์ 3', motor_4: 'มอเตอร์ 4',
+      motor_1: 'มอเตอร์ 1',
+      motor_2: 'มอเตอร์ 2',
+      motor_3: 'มอเตอร์ 3',
+      motor_4: 'มอเตอร์ 4',
     };
+
     const controlName = deviceMap[controlKey] || controlKey;
 
-    // บันทึก control history
     db.prepare(`
       INSERT INTO control_history (
         greenhouse_id, control_key, control_name, action, value, source,
         user_id, ip_address, success, error_message
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      greenhouseId, 
-      controlKey, 
+      greenhouseId,
+      controlKey,
       controlName,
-      action, 
-      String(value), 
+      action,
+      String(value),
       'manual',
-      userId, 
+      userId,
       req.ip || null,
-      success ? 1 : 0, 
+      success ? 1 : 0,
       errorMessage || null
     );
 
-    // ดึงข้อมูลโรงเรือนและผู้ใช้
     const info = db.prepare(`
       SELECT g.name_th as greenhouse_name, p.id as project_id, u.username
       FROM greenhouses g
@@ -442,16 +534,15 @@ function logControlAction(
     if (info && success) {
       const actionText = value ? 'เปิด' : 'ปิด';
 
-      // สร้าง notification
       notificationService.create({
         type: 'control_action',
         severity: 'info',
         title: `${actionText}${controlName}`,
         message: `${info.username || 'ระบบ'} ${actionText}${controlName} ที่ ${info.greenhouse_name}`,
-        metadata: { 
-          controlKey, 
+        metadata: {
+          controlKey,
           controlName,
-          action, 
+          action,
           value,
           greenhouseName: info.greenhouse_name,
           userName: info.username,
@@ -469,13 +560,8 @@ function logControlAction(
   }
 }
 
-
-
-
-
 /**
  * POST /api/tb/test-connection
- * Test ThingsBoard connection (admin only)
  */
 router.post('/test-connection', async (req: Request, res: Response) => {
   try {
@@ -486,12 +572,13 @@ router.post('/test-connection', async (req: Request, res: Response) => {
       return;
     }
 
-    // Only admin can test connection
-    if (req.session.role !== 'admin' && req.session.role !== 'superadmin') {
+    if (
+      req.session.role !== 'admin' &&
+      req.session.role !== 'superadmin'
+    ) {
       sendError(res, ThaiErrors.FORBIDDEN, 403);
       return;
     }
-
 
     const result = await tbService.testConnection(project);
 
@@ -500,12 +587,16 @@ router.post('/test-connection', async (req: Request, res: Response) => {
     } else {
       sendError(res, result.message, 502);
     }
-    } catch (error) {
+  } catch (error) {
     console.error('Error testing connection:', error);
-    const msg = error instanceof Error ? error.message : ThaiErrors.TB_CONNECTION_ERROR;
+
+    const msg =
+      error instanceof Error
+        ? error.message
+        : ThaiErrors.TB_CONNECTION_ERROR;
+
     sendError(res, msg, 502);
   }
-
 });
 
 export default router;

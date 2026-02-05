@@ -71,7 +71,12 @@ router.get('/', async (req: Request, res: Response) => {
             const status = await isDeviceOnline(g.project_key, g.gh_key);
 
 
-            isOnline = status?.isOnline || false;
+            const online =
+              typeof status === 'boolean'
+                ? status
+                : (status as any)?.isOnline === true;
+
+            isOnline = online;
 
           } catch (err) {
             console.error('TB status error:', err);

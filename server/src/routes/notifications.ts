@@ -379,19 +379,24 @@ router.post('/test', (req, res) => {
   res.json({ success: true });
 });
 
-router.post('/control-history/notify', async (req, res) => {
-  const { greenhouse_key, control_name, action, source } = req.body;
-  
-  // หา greenhouse จาก key
+router.post('/control-history/notify', (req: Request, res: Response) => {
+  const { greenhouse_key, control_name, action, source } = req.body as {
+    greenhouse_key: string;
+    control_name: string;
+    action: string;
+    source?: 'manual' | 'auto' | string;
+  };
+
+  // ✅ NOTE: ตารางคุณใช้ gh_key ไม่ใช่ key (จากไฟล์อื่น ๆ)
   const greenhouse = db.prepare(`
-    SELECT id, project_id, name_th FROM greenhouses WHERE key = ?
-  `).get(greenhouse_key);
-  
+    SELECT id, project_id, name_th FROM greenhouses WHERE gh_key = ?
+  `).get(greenhouse_key) as { id: number; project_id: number; name_th: string } | undefined;
+
   if (!greenhouse) {
-    return res.status(404).json({ error: 'Greenhouse not found' });
+    res.status(404).json({ error: 'Greenhouse not found' });
+    return;
   }
-  
-  // สร้าง notification
+
   notificationService.create({
     type: 'control_action',
     severity: 'info',
@@ -400,9 +405,10 @@ router.post('/control-history/notify', async (req, res) => {
     projectId: greenhouse.project_id,
     greenhouseId: greenhouse.id,
   });
-  
+
   res.json({ success: true });
 });
+
 
 
 export default router;
