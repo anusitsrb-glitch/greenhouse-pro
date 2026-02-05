@@ -45,6 +45,7 @@ export interface AdminGreenhouse {
   nameTh: string;
   status: 'ready' | 'developing';
   tbDeviceId: string | null;
+  isOnline: boolean; // ✅ เพิ่ม
   createdAt: string;
   updatedAt: string;
 }
@@ -128,6 +129,14 @@ export async function deleteUser(id: number): Promise<void> {
   }
 }
 
+
+export async function resetUserPassword(id: number, newPassword: string): Promise<void> {
+  const response = await api.post(`/password/reset/${id}`, { newPassword });
+  if (!response.success) {
+    throw new Error(response.error || 'Failed to reset password');
+  }
+}
+
 // ============================================================
 // Project Management
 // ============================================================
@@ -191,10 +200,15 @@ export async function getAdminGreenhouses(projectKey?: string): Promise<AdminGre
   const url = projectKey 
     ? `/admin/greenhouses?project_key=${projectKey}`
     : '/admin/greenhouses';
-  const response = await api.get<{ greenhouses: AdminGreenhouse[] }>(url);
+  const response = await api.get<{ greenhouses: any[] }>(url);
   if (response.success && response.data) {
-    return response.data.greenhouses;
+    return (response.data.greenhouses ?? []).map((g: any) => ({
+      ...g,
+      tbDeviceId: g.deviceId ?? g.tbDeviceId ?? null, // ✅ รับจาก server: deviceId
+      isOnline: !!g.isOnline,                          // ✅ บังคับเป็น boolean
+    })) as AdminGreenhouse[];
   }
+
   throw new Error(response.error || 'Failed to fetch greenhouses');
 }
 
@@ -304,6 +318,7 @@ export const adminApi = {
   updateUser,
   updateUserProjectAccess,
   deleteUser,
+  resetUserPassword, // ✅ เพิ่มบรรทัดนี้
   
   // Projects
   getAdminProjects,

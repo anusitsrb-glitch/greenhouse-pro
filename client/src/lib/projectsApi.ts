@@ -27,6 +27,8 @@ export interface Greenhouse {
   statusText: string;
   hasDevice: boolean;
   deviceId?: string;
+  deviceStatus?: 'online' | 'offline';
+
 }
 
 export interface ProjectDetail {
@@ -116,10 +118,11 @@ export async function getGreenhouse(
   throw new Error(response.error || 'Failed to fetch greenhouse');
 }
 
-// Export as object
+// Export as object (✅ return parsed data, not ApiResponse)
 export const projectsApi = {
   getProjects,
   getProject,
   getGreenhouses,
   getGreenhouse,
 };
+

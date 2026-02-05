@@ -2,6 +2,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui';
 import { Leaf, LogOut, User, ChevronRight, Settings, Sprout, Bell, LayoutDashboard } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+import { NotificationBell } from '@/components/notifications';
 
 interface Breadcrumb {
   label: string;
@@ -100,19 +101,11 @@ export function Header({ breadcrumbs }: HeaderProps) {
               <span className="hidden sm:inline">การเกษตร</span>
             </Link>
 
-            {/* Alerts Menu - visible to all */}
-            <Link
-              to="/alerts"
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                location.pathname === '/alerts' 
-                  ? 'text-primary bg-primary/10' 
-                  : 'text-gray-600 hover:text-primary hover:bg-primary/5'
-              }`}
-            >
-              <Bell className="w-4 h-4" />
-              <span className="hidden sm:inline">แจ้งเตือน</span>
-            </Link>
-
+            
+            
+            {/* 🆕 Notification Bell - Phase 1 */}
+            <NotificationBell />
+            
             {/* Admin Link - only for admin/superadmin */}
             {isAdmin && (
               <Link

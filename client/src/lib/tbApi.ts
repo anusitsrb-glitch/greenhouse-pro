@@ -1,6 +1,6 @@
 /**
- * ThingsBoard API Client for Frontend
- * All TB requests go through our backend proxy
+ * ThingsBoard API Client for Frontend (UPDATED)
+ * Added setAttributes for WebApp-based Auto Config
  */
 
 import { api } from './api';
@@ -126,6 +126,29 @@ export async function getAttributes(
 }
 
 /**
+ * 🆕 Set device attributes (CLIENT_SCOPE)
+ * For WebApp-based configuration
+ */
+export async function setAttributes(
+  project: string,
+  gh: string,
+  attributes: Record<string, unknown>
+): Promise<void> {
+  const response = await api.post<{ success: boolean; message?: string }>(
+    '/tb/attributes',
+    {
+      project,
+      gh,
+      attributes,
+    }
+  );
+
+  if (!response.success) {
+    throw new Error(response.error || 'Failed to set attributes');
+  }
+}
+
+/**
  * Get device online status
  */
 export async function getDeviceStatus(
@@ -190,12 +213,55 @@ export async function testConnection(project: string): Promise<{
   };
 }
 
+/**
+ * Send RPC command (new interface for hooks)
+ * Takes deviceId in format "project_gh"
+ */
+export async function sendRPCCommand(
+  deviceId: string,
+  method: string,
+  params: unknown,
+  timeoutMs?: number
+): Promise<RpcResponse> {
+  const parts = deviceId.split('_');
+  const project = parts.shift();
+  const gh = parts.join('_');
+
+  if (!project || !gh) {
+    throw new Error('Invalid deviceId format. Expected: "project_gh"');
+  }
+
+  return sendRpc(project, gh, method, params, timeoutMs);
+}
+
+/**
+ * Get device attributes (new interface for hooks)
+ * Takes deviceId in format "project_gh"
+ */
+export async function getDeviceAttributes(
+  deviceId: string
+): Promise<AttributesResponse> {
+  const parts = deviceId.split('_');
+  const project = parts.shift();
+  const gh = parts.join('_');
+
+  if (!project || !gh) {
+    throw new Error('Invalid deviceId format. Expected: "project_gh"');
+  }
+
+  const keys = ['*'];
+  return getAttributes(project, gh, keys);
+}
+
 // Export as object
 export const tbApi = {
   getLatestTelemetry,
   getTimeseries,
   getAttributes,
+  setAttributes, // 🆕 NEW
   getDeviceStatus,
   sendRpc,
   testConnection,
+  sendRPCCommand,
+  getDeviceAttributes,
 };

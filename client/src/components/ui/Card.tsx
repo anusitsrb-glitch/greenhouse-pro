@@ -10,10 +10,11 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
 const Card = forwardRef<HTMLDivElement, CardProps>(
   ({ className, variant = 'default', gradient, hover = false, children, style, ...props }, ref) => {
     const variants = {
-      default: 'bg-white shadow-card',
+      default: 'bg-white text-gray-900 shadow-card dark:bg-gray-900 dark:text-gray-100',
       gradient: 'text-white shadow-soft',
-      glass: 'bg-white/70 backdrop-blur-md shadow-soft',
+      glass: 'bg-white/70 text-gray-900 backdrop-blur-md shadow-soft dark:bg-gray-900/60 dark:text-gray-100',
     };
+
     
     const gradientStyle = variant === 'gradient' && gradient 
       ? { background: gradient, ...style } 
@@ -63,9 +64,14 @@ CardContent.displayName = 'CardContent';
 
 const CardFooter = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn('mt-4 pt-4 border-t border-gray-200', className)} {...props} />
+    <div
+      ref={ref}
+      className={cn('mt-4 pt-4 border-t border-gray-200 dark:border-gray-700', className)}
+      {...props}
+    />
   )
 );
+
 CardFooter.displayName = 'CardFooter';
 
 export { Card, CardHeader, CardTitle, CardContent, CardFooter };

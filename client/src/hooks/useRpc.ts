@@ -1,14 +1,15 @@
 /**
- * useRpc Hook - FIXED VERSION
- * Sends RPC commands and handles confirmation via attribute polling
- * 
- * FIX: ส่ง timeout parameter ไปด้วย
+ * useRpc Hook - FINAL LIGHT CONFIRM VERSION
+ * - ลด request: confirm แบบ 2 ครั้งด้วย setTimeout (ไม่มี setInterval)
+ * - timer แยกต่อ method / motorKey กันชนกัน
+ * - compare ปลอดภัย (ไม่ normalize string เวลา)
+ * - TTL แยก รีเลย์/มอเตอร์
+ * - กัน setState หลัง unmount
  */
 
-import { useState, useCallback, useRef } from 'react';
-import { tbApi, AttributesResponse } from '@/lib/tbApi';
-import { RPC_CONFIRM_MAP, POLLING_INTERVALS } from '@/config/dataKeys';
-import { normalizeBoolean } from '@/lib/utils';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { tbApi } from '@/lib/tbApi';
+import { RPC_CONFIRM_MAP } from '@/config/dataKeys';
 
 interface PendingCommand {
   method: string;
@@ -32,276 +33,316 @@ interface UseRpcResult {
   pendingMethods: string[];
 }
 
-export function useRpc({
-  project,
-  gh,
-  onSuccess,
-  onTimeout,
-  onError,
-}: UseRpcOptions): UseRpcResult {
+const CONFIRM_DELAYS_MS = [1200, 2800]; // เช็ค 2 ครั้งพอ
+const RELAY_TTL_MS = 8000;              // กันค้างสำหรับรีเลย์/auto/time
+const MOTOR_TTL_MS = 12000;             // มอเตอร์เผื่อหน่วง
+
+// ✅ เปลี่ยนค่าทั้งสองฝั่งให้ "เทียบกันได้" แบบปลอดภัย
+function toComparable(v: any): string | boolean {
+  if (v === true || v === false) return v;
+
+  // รองรับ 1/0 และ "1"/"0"
+  if (v === 1 || v === 0) return Boolean(v);
+  if (v === '1' || v === '0') return v === '1';
+
+  // ส่วนอื่น ๆ เทียบเป็น string (เช่น "07:00", "18:00", "Online")
+  return String(v);
+}
+
+export function useRpc({ project, gh, onSuccess, onTimeout, onError }: UseRpcOptions): UseRpcResult {
   const [pendingCommands, setPendingCommands] = useState<Map<string, PendingCommand>>(new Map());
-  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Start burst polling to confirm command
-  const startConfirmPolling = useCallback((pending: PendingCommand) => {
-    // Clear existing polling
-    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-    if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+  // timers per method
+  const timersRef = useRef<Map<string, number[]>>(new Map());
 
-    const checkConfirmation = async () => {
-      try {
-        const attrs = await tbApi.getAttributes(project, gh, [pending.expectedAttribute]);
-        const currentValue = attrs[pending.expectedAttribute];
-        
-        // Normalize for comparison
-        const normalizedCurrent = typeof currentValue === 'boolean' 
-          ? currentValue 
-          : normalizeBoolean(currentValue);
-        const normalizedExpected = typeof pending.expectedValue === 'boolean'
-          ? pending.expectedValue
-          : normalizeBoolean(pending.expectedValue);
-
-        // Check if value matches expected
-        const isConfirmed = normalizedCurrent === normalizedExpected ||
-          currentValue === pending.expectedValue ||
-          String(currentValue) === String(pending.expectedValue);
-
-        if (isConfirmed) {
-          // Success!
-          setPendingCommands(prev => {
-            const next = new Map(prev);
-            next.delete(pending.method);
-            return next;
-          });
-          
-          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-          if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
-          
-          onSuccess?.(pending.method);
-          return true;
-        }
-      } catch (err) {
-        console.error('Confirmation poll error:', err);
-      }
-      return false;
+  // ✅ กัน setState หลัง unmount
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
     };
+  }, []);
 
-    // Initial check
-    checkConfirmation();
+  const clearTimers = useCallback((method: string) => {
+    const timers = timersRef.current.get(method);
+    if (timers) {
+      timers.forEach((id) => window.clearTimeout(id));
+      timersRef.current.delete(method);
+    }
+  }, []);
 
-    // Burst polling
-    pollIntervalRef.current = setInterval(checkConfirmation, POLLING_INTERVALS.BURST_CONFIRM);
+  useEffect(() => {
+    return () => {
+      // cleanup all timers on unmount
+      for (const [method, timers] of timersRef.current.entries()) {
+        timers.forEach((id) => window.clearTimeout(id));
+        timersRef.current.delete(method);
+      }
+    };
+  }, []);
 
-    // Timeout
-    pollTimeoutRef.current = setTimeout(() => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-      
-      // Remove from pending and notify timeout
-      setPendingCommands(prev => {
+  const markDone = useCallback((method: string) => {
+    clearTimers(method);
+    if (!mountedRef.current) return;
+
+    setPendingCommands((prev) => {
+      if (!prev.has(method)) return prev;
+      const next = new Map(prev);
+      next.delete(method);
+      return next;
+    });
+  }, [clearTimers]);
+
+  const confirmOnce = useCallback(async (pending: PendingCommand) => {
+    try {
+      const attrs = await tbApi.getAttributes(project, gh, [pending.expectedAttribute]);
+      const currentValue = attrs[pending.expectedAttribute];
+
+      return toComparable(currentValue) === toComparable(pending.expectedValue);
+    } catch {
+      return false;
+    }
+  }, [project, gh]);
+
+  const scheduleConfirm = useCallback((pending: PendingCommand) => {
+    clearTimers(pending.method);
+
+    const ids: number[] = [];
+
+    for (const delay of CONFIRM_DELAYS_MS) {
+      const id = window.setTimeout(async () => {
+        const ok = await confirmOnce(pending);
+        if (!ok) return;
+
+        if (!mountedRef.current) return;
+
+        // remove pending only if it still exists
+        let removed = false;
+        setPendingCommands((prev) => {
+          if (!prev.has(pending.method)) return prev;
+          const next = new Map(prev);
+          next.delete(pending.method);
+          removed = true;
+          return next;
+        });
+
+        if (removed) {
+          clearTimers(pending.method);
+          onSuccess?.(pending.method);
+        }
+      }, delay);
+
+      ids.push(id);
+    }
+
+    // TTL กันค้าง (รีเลย์)
+    const ttlId = window.setTimeout(() => {
+      if (!mountedRef.current) return;
+
+      let timedOut = false;
+      setPendingCommands((prev) => {
+        if (!prev.has(pending.method)) return prev;
         const next = new Map(prev);
         next.delete(pending.method);
+        timedOut = true;
         return next;
       });
-      
-      onTimeout?.(pending.method);
-    }, POLLING_INTERVALS.BURST_DURATION);
-  }, [project, gh, onSuccess, onTimeout]);
+
+      clearTimers(pending.method);
+      if (timedOut) onTimeout?.(pending.method);
+    }, RELAY_TTL_MS);
+
+    ids.push(ttlId);
+    timersRef.current.set(pending.method, ids);
+  }, [clearTimers, confirmOnce, onSuccess, onTimeout]);
 
   const sendCommand = useCallback(async (
     method: string,
     params: unknown,
     expectedValue?: unknown
   ): Promise<boolean> => {
-    // Determine expected attribute and value
     const expectedAttribute = RPC_CONFIRM_MAP[method];
-    const finalExpectedValue = expectedValue ?? (params === 1 || params === '1' || params === true);
 
-    if (!expectedAttribute) {
-      console.warn(`No confirmation mapping for RPC method: ${method}`);
-    }
+    // default expected: 1/true (แต่ถ้า caller ส่ง expectedValue มา ก็ใช้ตามนั้น)
+    const finalExpectedValue =
+      expectedValue ??
+      (params === 1 || params === '1' || params === true);
 
-    // Mark as pending
     const pending: PendingCommand = {
       method,
-      expectedAttribute: expectedAttribute || method,
+      expectedAttribute: expectedAttribute || '',
       expectedValue: finalExpectedValue,
       startedAt: Date.now(),
     };
 
-    setPendingCommands(prev => {
-      const next = new Map(prev);
-      next.set(method, pending);
-      return next;
-    });
+    // mark pending
+    if (mountedRef.current) {
+      setPendingCommands((prev) => {
+        const next = new Map(prev);
+        next.set(method, pending);
+        return next;
+      });
+    }
 
     try {
-      // ✅ FIX: ส่ง timeout parameter (30 วินาที - รองรับ device ช้า)
-      await tbApi.sendRpc(project, gh, method, params, 20000);
+      // ✅ ไม่ต้องส่ง timeout ตายตัว (backend เลือก one-way ให้ตาม method)
+      await tbApi.sendRpc(project, gh, method, params);
 
-      // Start confirmation polling if we have an attribute to check
       if (expectedAttribute) {
-        startConfirmPolling(pending);
+        scheduleConfirm({ ...pending, expectedAttribute });
       } else {
-        // No confirmation mapping - just remove from pending after a short delay
-        setTimeout(() => {
-          setPendingCommands(prev => {
-            const next = new Map(prev);
-            next.delete(method);
-            return next;
-          });
-          onSuccess?.(method);
-        }, 1000);
+        // ไม่มี mapping: เคลียร์เองแบบเร็วๆ
+        window.setTimeout(() => {
+          markDone(method);
+          if (mountedRef.current) onSuccess?.(method);
+        }, 800);
       }
 
       return true;
     } catch (err) {
-      // Remove from pending
-      setPendingCommands(prev => {
-        const next = new Map(prev);
-        next.delete(method);
-        return next;
-      });
-
-      const errorMessage = err instanceof Error ? err.message : 'RPC failed';
-      onError?.(method, errorMessage);
+      markDone(method);
+      const msg = err instanceof Error ? err.message : 'RPC failed';
+      if (mountedRef.current) onError?.(method, msg);
       return false;
     }
-  }, [project, gh, startConfirmPolling, onSuccess, onError]);
+  }, [project, gh, scheduleConfirm, markDone, onSuccess, onError]);
 
-  const isPending = useCallback((method: string): boolean => {
-    return pendingCommands.has(method);
-  }, [pendingCommands]);
-
-  const isAnyPending = pendingCommands.size > 0;
-  const pendingMethods = Array.from(pendingCommands.keys());
+  const isPending = useCallback((method: string) => pendingCommands.has(method), [pendingCommands]);
 
   return {
     sendCommand,
     isPending,
-    isAnyPending,
-    pendingMethods,
+    isAnyPending: pendingCommands.size > 0,
+    pendingMethods: Array.from(pendingCommands.keys()),
   };
 }
 
 /**
- * useMotorRpc Hook - FIXED VERSION
- * Special hook for motor commands that need different confirmation logic
+ * useMotorRpc - FINAL LIGHT CONFIRM VERSION
+ * - confirm 2 ครั้ง (ไม่มี interval)
+ * - timer แยกต่อ motorKey
+ * - TTL มอเตอร์นานกว่า
+ * - กัน setState หลัง unmount
  */
-export function useMotorRpc({
-  project,
-  gh,
-  onSuccess,
-  onTimeout,
-  onError,
-}: UseRpcOptions) {
+export function useMotorRpc({ project, gh, onSuccess, onTimeout, onError }: UseRpcOptions) {
   const [pendingMotors, setPendingMotors] = useState<Set<string>>(new Set());
-  const pollRefs = useRef<Map<string, { interval: NodeJS.Timeout; timeout: NodeJS.Timeout }>>(new Map());
+  const timersRef = useRef<Map<string, number[]>>(new Map());
+
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const clearTimers = useCallback((motorKey: string) => {
+    const timers = timersRef.current.get(motorKey);
+    if (timers) {
+      timers.forEach((id) => window.clearTimeout(id));
+      timersRef.current.delete(motorKey);
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      for (const [k, timers] of timersRef.current.entries()) {
+        timers.forEach((id) => window.clearTimeout(id));
+        timersRef.current.delete(k);
+      }
+    };
+  }, []);
 
   const sendMotorCommand = useCallback(async (
     motorKey: string,
     method: string,
     params: number // 0=stop, 1=forward, 2=reverse
   ): Promise<boolean> => {
-    // Clear existing polling for this motor
-    const existing = pollRefs.current.get(motorKey);
-    if (existing) {
-      clearInterval(existing.interval);
-      clearTimeout(existing.timeout);
+    clearTimers(motorKey);
+
+    if (mountedRef.current) {
+      setPendingMotors((prev) => new Set(prev).add(motorKey));
     }
 
-    // Mark as pending
-    setPendingMotors(prev => new Set(prev).add(motorKey));
-
-    // Determine expected state
     const fwKey = `${motorKey}_fw`;
     const reKey = `${motorKey}_re`;
-    
-    let expectedFw = false;
-    let expectedRe = false;
-    
-    if (params === 1) { // Forward/Down
-      expectedFw = true;
-      expectedRe = false;
-    } else if (params === 2) { // Reverse/Up
-      expectedFw = false;
-      expectedRe = true;
-    }
-    // params === 0: both false (stop)
+
+    const expectedFw = params === 1;
+    const expectedRe = params === 2;
 
     try {
-      // ✅ FIX: ส่ง timeout parameter (30 วินาที - รองรับ device ช้า)
-      await tbApi.sendRpc(project, gh, method, params, 20000);
+      await tbApi.sendRpc(project, gh, method, params);
 
-      // Start confirmation polling
-      const checkConfirmation = async () => {
+      const ids: number[] = [];
+
+      const confirm = async () => {
         try {
           const attrs = await tbApi.getAttributes(project, gh, [fwKey, reKey]);
-          const currentFw = normalizeBoolean(attrs[fwKey]);
-          const currentRe = normalizeBoolean(attrs[reKey]);
+          const currentFw = toComparable(attrs[fwKey]) === true;
+          const currentRe = toComparable(attrs[reKey]) === true;
 
-          if (currentFw === expectedFw && currentRe === expectedRe) {
-            // Confirmed!
-            const refs = pollRefs.current.get(motorKey);
-            if (refs) {
-              clearInterval(refs.interval);
-              clearTimeout(refs.timeout);
-              pollRefs.current.delete(motorKey);
-            }
-            
-            setPendingMotors(prev => {
-              const next = new Set(prev);
-              next.delete(motorKey);
-              return next;
-            });
-            
-            onSuccess?.(method);
-            return true;
-          }
-        } catch (err) {
-          console.error('Motor confirmation poll error:', err);
+          return currentFw === expectedFw && currentRe === expectedRe;
+        } catch {
+          return false;
         }
-        return false;
       };
 
-      // Initial check
-      checkConfirmation();
+      for (const delay of CONFIRM_DELAYS_MS) {
+        const id = window.setTimeout(async () => {
+          const ok = await confirm();
+          if (!ok) return;
 
-      // Burst polling
-      const interval = setInterval(checkConfirmation, POLLING_INTERVALS.BURST_CONFIRM);
-      
-      const timeout = setTimeout(() => {
-        clearInterval(interval);
-        pollRefs.current.delete(motorKey);
-        
-        setPendingMotors(prev => {
+          clearTimers(motorKey);
+
+          if (!mountedRef.current) return;
+
+          setPendingMotors((prev) => {
+            const next = new Set(prev);
+            next.delete(motorKey);
+            return next;
+          });
+
+          onSuccess?.(method);
+        }, delay);
+
+        ids.push(id);
+      }
+
+      const ttlId = window.setTimeout(() => {
+        clearTimers(motorKey);
+
+        if (!mountedRef.current) return;
+
+        setPendingMotors((prev) => {
           const next = new Set(prev);
           next.delete(motorKey);
           return next;
         });
-        
-        onTimeout?.(method);
-      }, POLLING_INTERVALS.BURST_DURATION);
 
-      pollRefs.current.set(motorKey, { interval, timeout });
+        onTimeout?.(method);
+      }, MOTOR_TTL_MS);
+
+      ids.push(ttlId);
+      timersRef.current.set(motorKey, ids);
 
       return true;
     } catch (err) {
-      setPendingMotors(prev => {
-        const next = new Set(prev);
-        next.delete(motorKey);
-        return next;
-      });
+      clearTimers(motorKey);
 
-      const errorMessage = err instanceof Error ? err.message : 'Motor RPC failed';
-      onError?.(method, errorMessage);
+      if (mountedRef.current) {
+        setPendingMotors((prev) => {
+          const next = new Set(prev);
+          next.delete(motorKey);
+          return next;
+        });
+      }
+
+      const msg = err instanceof Error ? err.message : 'Motor RPC failed';
+      if (mountedRef.current) onError?.(method, msg);
       return false;
     }
-  }, [project, gh, onSuccess, onTimeout, onError]);
+  }, [project, gh, clearTimers, onSuccess, onTimeout, onError]);
 
-  const isMotorPending = useCallback((motorKey: string): boolean => {
-    return pendingMotors.has(motorKey);
-  }, [pendingMotors]);
+  const isMotorPending = useCallback((motorKey: string): boolean => pendingMotors.has(motorKey), [pendingMotors]);
 
   return {
     sendMotorCommand,
