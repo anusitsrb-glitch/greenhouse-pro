@@ -105,6 +105,31 @@ export default function AutomationTab({
     pollingMs: 5000,
   });
 
+  const getDeviceStatus = (device: any) => {
+    let isActive = false;
+    let autoModeCode = 0;
+
+    // เช็คเปิด/ปิด (Active)
+    if (device.id === 'water') {
+      isActive = attributes['valve_1_cmd'] === true || attributes['valve_2_cmd'] === true || 
+                attributes['valve_3_cmd'] === true || attributes['valve_4_cmd'] === true;
+    } else if (device.id === 'motor') {
+      isActive = attributes['motor_1_fw'] === true || attributes['motor_1_re'] === true;
+    } else {
+      isActive = attributes[`${device.id}_cmd`] === true;
+    }
+
+    // เช็คโหมด (Auto Mode) ตาม Firmware v2.3
+    if (device.id === 'water') autoModeCode = attributes['water_mode'] ?? (attributes['valve_1_auto'] ? 1 : 0);
+    else if (device.id === 'motor') autoModeCode = attributes['motor_mode'] ?? (attributes['global_motor_auto'] ? 1 : 0);
+    else {
+      const modeKey = device.id.replace('_', '') + '_mode'; // แปลง fan_1 เป็น fan1_mode
+      autoModeCode = attributes[modeKey] ?? (attributes[`${device.id}_auto`] ? 1 : 0);
+    }
+
+    return { isActive, autoModeCode };
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -159,7 +184,7 @@ export default function AutomationTab({
             </div>
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400">Daily Schedule</p>
-              <p className="text-lg font-bold text-blue-600 dark:text-blue-400">ตั้งเวลา</p>
+              <p className="text-lg font-bold text-blue-600 dark:text-blue-400">ตั้งเวลาเปิด/ปิด</p>
             </div>
           </div>
         </div>
@@ -170,8 +195,8 @@ export default function AutomationTab({
               <Activity className="w-5 h-5 text-white" />
             </div>
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Condition-based</p>
-              <p className="text-lg font-bold text-green-600 dark:text-green-400">ตามเงื่อนไข</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Smart Rules</p>
+              <p className="text-lg font-bold text-green-600 dark:text-green-400">การทำงานตามเงื่อนไข</p>
             </div>
           </div>
         </div>
@@ -182,8 +207,8 @@ export default function AutomationTab({
               <Zap className="w-5 h-5 text-white" />
             </div>
             <div>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Interval Loop</p>
-              <p className="text-lg font-bold text-purple-600 dark:text-purple-400">รอบเวลา</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Cycle Timer</p>
+              <p className="text-lg font-bold text-purple-600 dark:text-purple-400">การทํางานเป็นรอบ</p>
             </div>
           </div>
         </div>
@@ -192,14 +217,84 @@ export default function AutomationTab({
       {/* Content */}
       {activeMode === 'overview' && (
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-            สถานะระบบ Auto
-          </h3>
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
-            <p className="text-gray-600 dark:text-gray-400 text-center py-8">
-              กำลังพัฒนา... (แสดงสถานะการทำงานแบบ real-time)
-            </p>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
+              สถานะการทำงานแบบ Real-time
+            </h3>
+            {isAttrLoading && (
+              <div className="flex items-center gap-2 text-sm text-gray-400 animate-pulse">
+                <Activity className="w-4 h-4" />
+                <span>กำลังอัปเดต...</span>
+              </div>
+            )}
           </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {AUTO_DEVICES.map((device) => {
+              const { isActive, autoModeCode } = getDeviceStatus(device);
+              const isAutoEnabled = autoModeCode > 0;
+
+              const modeNames = ["Manual", "ตั้งเวลา (Daily)", "การทำงานตามเงื่อนไข", "การทํางานเป็นรอบ"];
+              const currentModeName = modeNames[autoModeCode] || "Manual";
+
+              return (
+                <div key={device.id} className={`relative overflow-hidden rounded-2xl p-4 border transition-all ${
+                  isActive ? 'bg-white border-emerald-200 shadow-md' : 'bg-slate-50 border-slate-200'
+                }`}>
+
+                  {/* 👇👇👇 วางโค้ดตรงนี้เลยครับ (บรรทัดแรกสุดในการ์ด) 👇👇👇 */}
+                  <div className="absolute top-4 right-4 flex items-center gap-2">
+                    <span className={`text-[10px] font-bold uppercase ${isActive ? 'text-emerald-600' : 'text-slate-400'}`}>
+                      {isActive ? 'Working' : 'Idle'}
+                    </span>
+                    <span className={`flex h-2.5 w-2.5 rounded-full ${
+                      isActive ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-300'
+                    }`} />
+                  </div>
+                  {/* 👆👆👆 จบโค้ดที่แทรก 👆👆👆 */}
+
+                  {/* แทนที่คอมเมนต์ ... ส่วนแสดงผล Icon และ Name เหมือนเดิม ... ด้วยโค้ดนี้ */}
+                  <div className="flex items-start gap-4 mb-3">
+                    <div className={`p-3 rounded-xl flex items-center justify-center transition-colors ${
+                      isActive ? `bg-${device.color}-100 text-${device.color}-600` : 'bg-slate-200 text-slate-500'
+                    }`}>
+                      <device.icon className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-800 dark:text-gray-100 text-lg leading-tight">
+                        {device.name}
+                      </h4>
+                      <p className="text-[10px] text-gray-400 mt-1 font-mono uppercase tracking-widest">
+                        {device.id}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* ส่วนป้ายโหมดด้านล่างที่ต้องแก้ */}
+                  <div className="mt-4 pt-3 border-t">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-gray-500">ระบบควบคุม</span>
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                        isAutoEnabled ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'
+                      }`}>
+                        {isAutoEnabled ? currentModeName : 'Manual'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {!isOnline && (
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-center gap-3 text-rose-700 shadow-sm">
+              <Zap className="w-5 h-5 fill-rose-500" />
+              <div className="text-sm">
+                <p className="font-bold leading-none mb-1">อุปกรณ์ออฟไลน์</p>
+                <p className="opacity-80">ระบบอัตโนมัติจะทำงานตามค่าล่าสุดที่บันทึกไว้ในตัวเครื่อง</p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -118,8 +118,8 @@ export default function AutoDeviceCard({
     // water_mode: 1=Daily(Valve), 2=Interval(Sequential)
     return modeValue === 2 ? 'interval' : 'daily';
   }
-  if (modeValue === 2) return 'condition';
-  if (modeValue === 3) return 'interval';
+  if (modeValue === 2) return 'Smart Rules';
+  if (modeValue === 3) return 'Cycle Timer';
   return 'daily';
   }, [modeValue, device.id]);
 
@@ -128,19 +128,19 @@ export default function AutoDeviceCard({
     if (modeValue === undefined) return 'ไม่ทราบ';
     if (modeValue === 255) return 'Manual/Override';
     if (device.id === 'water') {
-      if (modeValue === 2) return 'Interval (Sequential)';
+      if (modeValue === 2) return 'Cycle Timer (Sequential)';
       if (modeValue === 1) return 'Daily (Valve)';
       return 'OFF';
     }
     if (device.id === 'motor') {
-      if (modeValue === 3) return 'Interval';
-      if (modeValue === 2) return 'Condition';
+      if (modeValue === 3) return 'Cycle Timer';
+      if (modeValue === 2) return 'Smart Rules';
       if (modeValue === 1) return 'Global/Daily';
       return 'OFF';
     }
     // Fan/Light
-    if (modeValue === 3) return 'Interval';
-    if (modeValue === 2) return 'Condition';
+    if (modeValue === 3) return 'Cycle Timer';
+    if (modeValue === 2) return 'Smart Rules';
     if (modeValue === 1) return 'Daily';
     return 'OFF';
   }, [device.id, modeValue]);

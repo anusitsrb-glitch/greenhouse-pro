@@ -186,52 +186,55 @@ export function SoilNodeCard({
         {/* Primary metrics */}
         <div className="grid grid-cols-2 gap-1 mb-4">
 
-          {/* Moisture */}
+          {/* Moisture (ความชื้น) */}
           <div
             className={cn(
-              'p-3 rounded-xl border transition-colors',
-              // ✅ ล็อกความสูงสำหรับมือถือ/เดสก์ท็อปให้เท่ากันทุกใบ
+              'p-2 rounded-xl border transition-colors flex flex-col justify-between', // ลด padding เป็น p-2
               'min-h-[96px] sm:min-h-[104px]',
               getMoistureColor(moisture)
             )}
           >
-            <div className="flex items-center gap-2 mb-2">
-              <Droplets className="w-4 h-4 text-sky-600" />
-              <span className="text-xs text-slate-600">ความชื้น</span>
+            <div className="flex items-center justify-center gap-1.5 mb-1 opacity-80">
+              <Droplets className="w-3.5 h-3.5 text-sky-700" />
+              <span className="text-[11px] font-medium text-slate-700">ความชื้น</span>
             </div>
 
-            {/* ✅ จุดแก้หลัก: ล็อกสูง + จัดกลางแนวตั้ง + unit ตำแหน่งคงที่ */}
-            <div className="h-[40px] sm:h-[44px] flex items-center justify-center gap-1">
-              <span className="font-extrabold text-slate-900 tabular-nums leading-none text-[20px] sm:text-[24px]">
+            {/* ปรับเป็นแนวตั้ง (flex-col) : ตัวเลขอยู่บน หน่วยอยู่ล่าง */}
+            <div className="flex-1 flex flex-col items-center justify-center -mt-1">
+              <span className="font-extrabold text-slate-900 tabular-nums leading-none text-2xl sm:text-3xl tracking-tight">
                 {displayMoisture}
               </span>
-
+              
               {displayMoisture !== '--' && displayMoisture !== '...' && (
-                <span className="text-sm text-slate-500 leading-none relative top-[1px]">%RH</span>
+                <span className="text-[10px] sm:text-[11px] font-semibold text-slate-600 mt-1">
+                  %RH
+                </span>
               )}
             </div>
           </div>
 
-          {/* Temperature */}
+          {/* Temperature (อุณหภูมิ) */}
           <div
             className={cn(
-              'p-3 rounded-xl border border-slate-200 bg-slate-50 transition-colors',
+              'p-2 rounded-xl border border-slate-200 bg-slate-50 transition-colors flex flex-col justify-between', // ลด padding เป็น p-2
               'min-h-[96px] sm:min-h-[104px]'
             )}
           >
-            <div className="flex items-center gap-2 mb-2">
-              <Thermometer className="w-4 h-4 text-orange-600" />
-              <span className="text-xs text-slate-600">อุณหภูมิ</span>
+            <div className="flex items-center justify-center gap-1.5 mb-1 opacity-80">
+              <Thermometer className="w-3.5 h-3.5 text-orange-700" />
+              <span className="text-[11px] font-medium text-slate-700">อุณหภูมิ</span>
             </div>
 
-            {/* ✅ จุดแก้หลัก: เหมือนความชื้น */}
-            <div className="h-[40px] sm:h-[44px] flex items-center justify-center gap-1">
-              <span className="font-extrabold text-slate-900 tabular-nums leading-none text-[20px] sm:text-[24px]">
+            {/* ปรับเป็นแนวตั้ง (flex-col) : ตัวเลขอยู่บน หน่วยอยู่ล่าง */}
+            <div className="flex-1 flex flex-col items-center justify-center -mt-1">
+              <span className="font-extrabold text-slate-900 tabular-nums leading-none text-2xl sm:text-3xl tracking-tight">
                 {displayTemp}
               </span>
 
               {displayTemp !== '--' && displayTemp !== '...' && (
-                <span className="text-sm text-slate-500 leading-none relative top-[1px]">°C</span>
+                <span className="text-[10px] sm:text-[11px] font-semibold text-slate-600 mt-1">
+                  °C
+                </span>
               )}
             </div>
           </div>
@@ -243,7 +246,7 @@ export function SoilNodeCard({
             icon={Zap}
             label="EC"
             value={ec}
-            unit="mS/cm"
+            unit="us/cm"
             colorClass="text-amber-600"
             isLoading={isLoading}
             isReady={isReady}
