@@ -9,6 +9,13 @@ const router = Router();
 router.use(requireAuth);
 
 /**
+ * Helper: treat admin + superadmin as admin
+ */
+function isAdminRole(role?: string): boolean {
+  return role === 'admin' || role === 'superadmin';
+}
+
+/**
  * GET /api/projects
  * List projects accessible to current user
  */
@@ -16,10 +23,11 @@ router.get('/', (req: Request, res: Response) => {
   try {
     const userId = req.session.userId;
     const userRole = req.session.role;
-    
-    let projects;
-    
-    if (userRole === 'admin') {
+    const isAdmin = isAdminRole(userRole);
+
+    let projects: any[];
+
+    if (isAdmin) {
       // Admin sees all projects
       projects = db.prepare(`
         SELECT 
@@ -30,7 +38,7 @@ router.get('/', (req: Request, res: Response) => {
         LEFT JOIN greenhouses g ON p.id = g.project_id
         GROUP BY p.id
         ORDER BY p.created_at ASC
-      `).all();
+      `).all() as any[];
     } else {
       // Non-admin sees only accessible projects
       projects = db.prepare(`
@@ -44,9 +52,9 @@ router.get('/', (req: Request, res: Response) => {
         WHERE upa.user_id = ?
         GROUP BY p.id
         ORDER BY p.created_at ASC
-      `).all(userId);
+      `).all(userId) as any[];
     }
-    
+
     const formatted = projects.map((p: any) => ({
       id: p.id,
       key: p.key,
@@ -57,10 +65,7 @@ router.get('/', (req: Request, res: Response) => {
       readyGreenhouseCount: p.ready_greenhouse_count,
       hasAccess: true,
     }));
-    
-    // For admin, also include projects they don't have explicit access to (for UI purposes)
-    // This is already handled above since admin sees all
-    
+
     sendSuccess(res, { projects: formatted });
   } catch (error) {
     console.error('Error listing projects:', error);
@@ -77,30 +82,31 @@ router.get('/:projectKey', (req: Request, res: Response) => {
     const { projectKey } = req.params;
     const userId = req.session.userId;
     const userRole = req.session.role;
-    
+    const isAdmin = isAdminRole(userRole);
+
     // Check project exists
     const project = db.prepare(`
       SELECT id, key, name_th, status
       FROM projects WHERE key = ?
     `).get(projectKey) as { id: number; key: string; name_th: string; status: string } | undefined;
-    
+
     if (!project) {
       sendError(res, ThaiErrors.PROJECT_NOT_FOUND, 404);
       return;
     }
-    
-    // Check access (admin has access to all)
-    if (userRole !== 'admin') {
+
+    // Check access (admin/superadmin has access to all)
+    if (!isAdmin) {
       const hasAccess = db.prepare(`
         SELECT 1 FROM user_project_access WHERE user_id = ? AND project_id = ?
       `).get(userId, project.id);
-      
+
       if (!hasAccess) {
         sendError(res, ThaiErrors.NO_PROJECT_ACCESS, 403);
         return;
       }
     }
-    
+
     sendSuccess(res, {
       project: {
         id: project.id,
@@ -125,38 +131,47 @@ router.get('/:projectKey/greenhouses', (req: Request, res: Response) => {
     const { projectKey } = req.params;
     const userId = req.session.userId;
     const userRole = req.session.role;
-    
+    const isAdmin = isAdminRole(userRole);
+    const canSeeDeviceId = isAdmin;
+
     // Check project exists
     const project = db.prepare(`
       SELECT id, key, name_th, status
       FROM projects WHERE key = ?
     `).get(projectKey) as { id: number; key: string; name_th: string; status: string } | undefined;
-    
+
     if (!project) {
       sendError(res, ThaiErrors.PROJECT_NOT_FOUND, 404);
       return;
     }
-    
-    // Check access (admin has access to all)
-    if (userRole !== 'admin') {
+
+    // Check access (admin/superadmin has access to all)
+    if (!isAdmin) {
       const hasAccess = db.prepare(`
         SELECT 1 FROM user_project_access WHERE user_id = ? AND project_id = ?
       `).get(userId, project.id);
-      
+
       if (!hasAccess) {
         sendError(res, ThaiErrors.NO_PROJECT_ACCESS, 403);
         return;
       }
     }
-    
-    // Get greenhouses
+
+    // Get greenhouses (✅ include device_status)
     const greenhouses = db.prepare(`
-      SELECT id, gh_key, name_th, status, tb_device_id
+      SELECT 
+        id,
+        gh_key,
+        name_th,
+        status,
+        tb_device_id,
+        device_status
       FROM greenhouses
       WHERE project_id = ?
-      ORDER BY gh_key ASC
-    `).all(project.id);
-    
+      ORDER BY CAST(REPLACE(gh_key,'greenhouse','') AS INTEGER) ASC
+
+    `).all(project.id) as any[];
+
     const formatted = greenhouses.map((g: any) => ({
       id: g.id,
       ghKey: g.gh_key,
@@ -164,10 +179,14 @@ router.get('/:projectKey/greenhouses', (req: Request, res: Response) => {
       status: g.status,
       statusText: g.status === 'ready' ? 'พร้อมใช้งาน' : 'กำลังพัฒนา',
       hasDevice: !!g.tb_device_id,
+
+      // ✅ key that the client uses
+      deviceStatus: g.device_status ?? undefined,
+
       // Don't expose actual device ID to non-admin
-      deviceId: userRole === 'admin' ? g.tb_device_id : undefined,
+      deviceId: canSeeDeviceId ? g.tb_device_id : undefined,
     }));
-    
+
     sendSuccess(res, {
       project: {
         key: project.key,
@@ -191,34 +210,43 @@ router.get('/:projectKey/greenhouses/:ghKey', (req: Request, res: Response) => {
     const { projectKey, ghKey } = req.params;
     const userId = req.session.userId;
     const userRole = req.session.role;
-    
+    const isAdmin = isAdminRole(userRole);
+
     // Check project exists and get greenhouse
     const result = db.prepare(`
       SELECT 
-        g.id, g.gh_key, g.name_th, g.status, g.tb_device_id,
-        p.id as project_id, p.key as project_key, p.name_th as project_name, p.status as project_status
+        g.id,
+        g.gh_key,
+        g.name_th,
+        g.status,
+        g.tb_device_id,
+        g.device_status,
+        p.id as project_id,
+        p.key as project_key,
+        p.name_th as project_name,
+        p.status as project_status
       FROM greenhouses g
       JOIN projects p ON g.project_id = p.id
       WHERE p.key = ? AND g.gh_key = ?
     `).get(projectKey, ghKey) as any | undefined;
-    
+
     if (!result) {
       sendError(res, ThaiErrors.GREENHOUSE_NOT_FOUND, 404);
       return;
     }
-    
-    // Check access (admin has access to all)
-    if (userRole !== 'admin') {
+
+    // Check access (admin/superadmin has access to all)
+    if (!isAdmin) {
       const hasAccess = db.prepare(`
         SELECT 1 FROM user_project_access WHERE user_id = ? AND project_id = ?
       `).get(userId, result.project_id);
-      
+
       if (!hasAccess) {
         sendError(res, ThaiErrors.NO_PROJECT_ACCESS, 403);
         return;
       }
     }
-    
+
     sendSuccess(res, {
       greenhouse: {
         id: result.id,
@@ -227,7 +255,11 @@ router.get('/:projectKey/greenhouses/:ghKey', (req: Request, res: Response) => {
         status: result.status,
         statusText: result.status === 'ready' ? 'พร้อมใช้งาน' : 'กำลังพัฒนา',
         hasDevice: !!result.tb_device_id,
-        deviceId: userRole === 'admin' ? result.tb_device_id : undefined,
+
+        // ✅ include status for detail too (optional but nice)
+        deviceStatus: result.device_status ?? undefined,
+
+        deviceId: isAdmin ? result.tb_device_id : undefined,
       },
       project: {
         key: result.project_key,

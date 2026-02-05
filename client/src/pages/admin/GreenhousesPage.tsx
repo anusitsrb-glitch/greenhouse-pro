@@ -6,6 +6,8 @@ import { useToast } from '@/hooks/useToast';
 import { Pencil, Trash2, Search, Plus, Link, Unlink, Wifi, WifiOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+
+
 export function GreenhousesPage() {
   const { addToast } = useToast();
   const [greenhouses, setGreenhouses] = useState<AdminGreenhouse[]>([]);
@@ -32,7 +34,18 @@ export function GreenhousesPage() {
     }
   };
 
-  useEffect(() => { fetchData(); }, [filterProject]);
+  useEffect(() => {
+
+    fetchData();
+
+    const timer = setInterval(() => {
+      fetchData();
+    }, 30000); // 30 วิ
+
+    return () => clearInterval(timer);
+
+  }, [filterProject]);
+
 
   const filteredGreenhouses = greenhouses.filter(gh =>
     gh.nameTh.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -100,18 +113,49 @@ export function GreenhousesPage() {
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">{gh.projectName}</td>
                   <td className="px-4 py-3">
+
                     {gh.tbDeviceId ? (
-                      <div className="flex items-center gap-2">
-                        <Wifi className="w-4 h-4 text-green-500" />
-                        <span className="text-sm font-mono text-gray-600">{gh.tbDeviceId.substring(0, 8)}...</span>
+
+                      <div className="flex flex-col gap-1">
+
+                        {/* Device ID */}
+                        <div className="flex items-center gap-2">
+                          <Wifi className="w-4 h-4 text-green-500" />
+                          <span className="text-sm font-mono text-gray-600">
+                            {gh.tbDeviceId.substring(0, 8)}...
+                          </span>
+                        </div>
+
+                        {/* Online / Offline */}
+                        <div className="flex items-center gap-2 text-xs">
+
+                          {gh.isOnline ? (
+                            <>
+                              <span className="w-2 h-2 bg-green-500 rounded-full" />
+                              <span className="text-green-600">ออนไลน์</span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="w-2 h-2 bg-gray-400 rounded-full" />
+                              <span className="text-gray-500">ออฟไลน์</span>
+                            </>
+                          )}
+
+                        </div>
+
                       </div>
+
                     ) : (
+
                       <div className="flex items-center gap-2 text-gray-400">
                         <WifiOff className="w-4 h-4" />
                         <span className="text-sm">ยังไม่เชื่อมต่อ</span>
                       </div>
+
                     )}
+
                   </td>
+
                   <td className="px-4 py-3">
                     <Badge variant={gh.status === 'ready' ? 'success' : 'warning'}>
                       {gh.status === 'ready' ? 'พร้อม' : 'กำลังพัฒนา'}

@@ -52,8 +52,10 @@ export const ATTRIBUTE_KEYS = {
   RELAY: {
     FAN_1_CMD: 'fan_1_cmd',
     FAN_2_CMD: 'fan_2_cmd',
+    VALVE_1_CMD: 'valve_1_cmd',
     VALVE_2_CMD: 'valve_2_cmd',
-    PUMP_1_CMD: 'pump_1_cmd',
+    VALVE_3_CMD: 'valve_3_cmd',
+    VALVE_4_CMD: 'valve_4_cmd',
     LIGHT_1_CMD: 'light_1_cmd',
   },
   
@@ -71,8 +73,10 @@ export const ATTRIBUTE_KEYS = {
   AUTO: {
     FAN_1_AUTO: 'fan_1_auto',
     FAN_2_AUTO: 'fan_2_auto',
+    VALVE_1_AUTO: 'valve_1_auto',
     VALVE_2_AUTO: 'valve_2_auto',
-    PUMP_1_AUTO: 'pump_1_auto',
+    VALVE_3_AUTO: 'valve_3_auto',
+    VALVE_4_AUTO: 'valve_4_auto',
     LIGHT_1_AUTO: 'light_1_auto',
     GLOBAL_MOTOR_AUTO: 'global_motor_auto',
   },
@@ -82,10 +86,14 @@ export const ATTRIBUTE_KEYS = {
     FAN_1_OFF: 'fan_1_off',
     FAN_2_ON: 'fan_2_on',
     FAN_2_OFF: 'fan_2_off',
+    VALVE_1_ON: 'valve_1_on',
+    VALVE_1_OFF: 'valve_1_off',
     VALVE_2_ON: 'valve_2_on',
     VALVE_2_OFF: 'valve_2_off',
-    PUMP_1_ON: 'pump_1_on',
-    PUMP_1_OFF: 'pump_1_off',
+    VALVE_3_ON: 'valve_3_on',
+    VALVE_3_OFF: 'valve_3_off',
+    VALVE_4_ON: 'valve_4_on',
+    VALVE_4_OFF: 'valve_4_off',
     LIGHT_1_ON: 'light_1_on',
     LIGHT_1_OFF: 'light_1_off',
     GLOBAL_FW_TIME: 'global_fw_time',
@@ -114,8 +122,10 @@ export const RPC_METHODS = {
   RELAY: {
     SET_FAN_1_CMD: 'set_fan_1_cmd',
     SET_FAN_2_CMD: 'set_fan_2_cmd',
+    SET_VALVE_1_CMD: 'set_valve_1_cmd',
     SET_VALVE_2_CMD: 'set_valve_2_cmd',
-    SET_PUMP_1_CMD: 'set_pump_1_cmd',
+    SET_VALVE_3_CMD: 'set_valve_3_cmd',
+    SET_VALVE_4_CMD: 'set_valve_4_cmd',
     SET_LIGHT_1_CMD: 'set_light_1_cmd',
   },
   
@@ -129,8 +139,10 @@ export const RPC_METHODS = {
   AUTO: {
     SET_FAN_1_AUTO: 'set_fan_1_auto',
     SET_FAN_2_AUTO: 'set_fan_2_auto',
+    SET_VALVE_1_AUTO: 'set_valve_1_auto',
     SET_VALVE_2_AUTO: 'set_valve_2_auto',
-    SET_PUMP_1_AUTO: 'set_pump_1_auto',
+    SET_VALVE_3_AUTO: 'set_valve_3_auto',
+    SET_VALVE_4_AUTO: 'set_valve_4_auto',
     SET_LIGHT_1_AUTO: 'set_light_1_auto',
     SET_GLOBAL_MOTOR_AUTO: 'set_global_motor_auto',
   },
@@ -140,14 +152,35 @@ export const RPC_METHODS = {
     SET_FAN_1_OFF_TIME: 'set_fan_1_off_time',
     SET_FAN_2_ON_TIME: 'set_fan_2_on_time',
     SET_FAN_2_OFF_TIME: 'set_fan_2_off_time',
+    SET_VALVE_1_ON_TIME: 'set_valve_1_on_time',
+    SET_VALVE_1_OFF_TIME: 'set_valve_1_off_time',
     SET_VALVE_2_ON_TIME: 'set_valve_2_on_time',
     SET_VALVE_2_OFF_TIME: 'set_valve_2_off_time',
-    SET_PUMP_1_ON_TIME: 'set_pump_1_on_time',
-    SET_PUMP_1_OFF_TIME: 'set_pump_1_off_time',
+    SET_VALVE_3_ON_TIME: 'set_valve_3_on_time',
+    SET_VALVE_3_OFF_TIME: 'set_valve_3_off_time',
+    SET_VALVE_4_ON_TIME: 'set_valve_4_on_time',
+    SET_VALVE_4_OFF_TIME: 'set_valve_4_off_time',
     SET_LIGHT_1_ON_TIME: 'set_light_1_on_time',
     SET_LIGHT_1_OFF_TIME: 'set_light_1_off_time',
     SET_GLOBAL_FW_TIME: 'set_global_fw_time',
     SET_GLOBAL_RE_TIME: 'set_global_re_time',
+  },
+  
+  // Advanced Auto - Condition-based
+  CONDITION: {
+    SET_FAN_1_CONDITION: 'set_fan_1_condition_auto',
+    SET_FAN_2_CONDITION: 'set_fan_2_condition_auto',
+    SET_LIGHT_1_CONDITION: 'set_light_1_condition_auto',
+    SET_MOTOR_CONDITION: 'set_motor_condition_auto',
+  },
+  
+  // Advanced Auto - Interval Loop
+  INTERVAL: {
+    SET_FAN_1_INTERVAL: 'set_fan_1_interval_auto',
+    SET_FAN_2_INTERVAL: 'set_fan_2_interval_auto',
+    SET_WATER_INTERVAL: 'set_water_interval_auto',
+    SET_LIGHT_1_INTERVAL: 'set_light_1_interval_auto',
+    SET_MOTOR_INTERVAL: 'set_motor_interval_auto',
   },
 } as const;
 
@@ -159,15 +192,19 @@ export const RPC_CONFIRM_MAP: Record<string, string> = {
   // Relay
   [RPC_METHODS.RELAY.SET_FAN_1_CMD]: ATTRIBUTE_KEYS.RELAY.FAN_1_CMD,
   [RPC_METHODS.RELAY.SET_FAN_2_CMD]: ATTRIBUTE_KEYS.RELAY.FAN_2_CMD,
+  [RPC_METHODS.RELAY.SET_VALVE_1_CMD]: ATTRIBUTE_KEYS.RELAY.VALVE_1_CMD,
   [RPC_METHODS.RELAY.SET_VALVE_2_CMD]: ATTRIBUTE_KEYS.RELAY.VALVE_2_CMD,
-  [RPC_METHODS.RELAY.SET_PUMP_1_CMD]: ATTRIBUTE_KEYS.RELAY.PUMP_1_CMD,
+  [RPC_METHODS.RELAY.SET_VALVE_3_CMD]: ATTRIBUTE_KEYS.RELAY.VALVE_3_CMD,
+  [RPC_METHODS.RELAY.SET_VALVE_4_CMD]: ATTRIBUTE_KEYS.RELAY.VALVE_4_CMD,
   [RPC_METHODS.RELAY.SET_LIGHT_1_CMD]: ATTRIBUTE_KEYS.RELAY.LIGHT_1_CMD,
   
   // Auto
   [RPC_METHODS.AUTO.SET_FAN_1_AUTO]: ATTRIBUTE_KEYS.AUTO.FAN_1_AUTO,
   [RPC_METHODS.AUTO.SET_FAN_2_AUTO]: ATTRIBUTE_KEYS.AUTO.FAN_2_AUTO,
+  [RPC_METHODS.AUTO.SET_VALVE_1_AUTO]: ATTRIBUTE_KEYS.AUTO.VALVE_1_AUTO,
   [RPC_METHODS.AUTO.SET_VALVE_2_AUTO]: ATTRIBUTE_KEYS.AUTO.VALVE_2_AUTO,
-  [RPC_METHODS.AUTO.SET_PUMP_1_AUTO]: ATTRIBUTE_KEYS.AUTO.PUMP_1_AUTO,
+  [RPC_METHODS.AUTO.SET_VALVE_3_AUTO]: ATTRIBUTE_KEYS.AUTO.VALVE_3_AUTO,
+  [RPC_METHODS.AUTO.SET_VALVE_4_AUTO]: ATTRIBUTE_KEYS.AUTO.VALVE_4_AUTO,
   [RPC_METHODS.AUTO.SET_LIGHT_1_AUTO]: ATTRIBUTE_KEYS.AUTO.LIGHT_1_AUTO,
   [RPC_METHODS.AUTO.SET_GLOBAL_MOTOR_AUTO]: ATTRIBUTE_KEYS.AUTO.GLOBAL_MOTOR_AUTO,
   
@@ -176,10 +213,14 @@ export const RPC_CONFIRM_MAP: Record<string, string> = {
   [RPC_METHODS.TIMER.SET_FAN_1_OFF_TIME]: ATTRIBUTE_KEYS.TIMER.FAN_1_OFF,
   [RPC_METHODS.TIMER.SET_FAN_2_ON_TIME]: ATTRIBUTE_KEYS.TIMER.FAN_2_ON,
   [RPC_METHODS.TIMER.SET_FAN_2_OFF_TIME]: ATTRIBUTE_KEYS.TIMER.FAN_2_OFF,
+  [RPC_METHODS.TIMER.SET_VALVE_1_ON_TIME]: ATTRIBUTE_KEYS.TIMER.VALVE_1_ON,
+  [RPC_METHODS.TIMER.SET_VALVE_1_OFF_TIME]: ATTRIBUTE_KEYS.TIMER.VALVE_1_OFF,
   [RPC_METHODS.TIMER.SET_VALVE_2_ON_TIME]: ATTRIBUTE_KEYS.TIMER.VALVE_2_ON,
   [RPC_METHODS.TIMER.SET_VALVE_2_OFF_TIME]: ATTRIBUTE_KEYS.TIMER.VALVE_2_OFF,
-  [RPC_METHODS.TIMER.SET_PUMP_1_ON_TIME]: ATTRIBUTE_KEYS.TIMER.PUMP_1_ON,
-  [RPC_METHODS.TIMER.SET_PUMP_1_OFF_TIME]: ATTRIBUTE_KEYS.TIMER.PUMP_1_OFF,
+  [RPC_METHODS.TIMER.SET_VALVE_3_ON_TIME]: ATTRIBUTE_KEYS.TIMER.VALVE_3_ON,
+  [RPC_METHODS.TIMER.SET_VALVE_3_OFF_TIME]: ATTRIBUTE_KEYS.TIMER.VALVE_3_OFF,
+  [RPC_METHODS.TIMER.SET_VALVE_4_ON_TIME]: ATTRIBUTE_KEYS.TIMER.VALVE_4_ON,
+  [RPC_METHODS.TIMER.SET_VALVE_4_OFF_TIME]: ATTRIBUTE_KEYS.TIMER.VALVE_4_OFF,
   [RPC_METHODS.TIMER.SET_LIGHT_1_ON_TIME]: ATTRIBUTE_KEYS.TIMER.LIGHT_1_ON,
   [RPC_METHODS.TIMER.SET_LIGHT_1_OFF_TIME]: ATTRIBUTE_KEYS.TIMER.LIGHT_1_OFF,
   [RPC_METHODS.TIMER.SET_GLOBAL_FW_TIME]: ATTRIBUTE_KEYS.TIMER.GLOBAL_FW_TIME,
@@ -207,17 +248,23 @@ export const DISPLAY_NAMES: Record<string, string> = {
   k: 'โพแทสเซียม (K)',
   
   // Relays
-  fan_1: 'พัดลม 1',
-  fan_2: 'พัดลม 2',
-  valve_2: 'วาล์ว 2',
-  pump_1: 'ปั๊ม 1',
-  light_1: 'ไฟ 1',
+  fan_1_cmd: 'พัดลมใหญ่',
+  fan_2_cmd: 'พัดลมกวนอากาศ',
+  valve_1_cmd: 'น้ำโซน 1',
+  valve_2_cmd: 'น้ำโซน 2',
+  valve_3_cmd: 'น้ำโซน 3',
+  valve_4_cmd: 'น้ำโซน 4',
+  light_1_cmd: 'แสงเสริม',
   
   // Motors
-  motor_1: 'มอเตอร์ 1',
-  motor_2: 'มอเตอร์ 2',
-  motor_3: 'มอเตอร์ 3',
-  motor_4: 'มอเตอร์ 4',
+  motor_1_fw: 'มอเตอร์ 1 เดินหน้า',
+  motor_1_re: 'มอเตอร์ 1 ถอยหลัง',
+  motor_2_fw: 'มอเตอร์ 2 เดินหน้า',
+  motor_2_re: 'มอเตอร์ 2 ถอยหลัง',
+  motor_3_fw: 'มอเตอร์ 3 เดินหน้า',
+  motor_3_re: 'มอเตอร์ 3 ถอยหลัง',
+  motor_4_fw: 'มอเตอร์ 4 เดินหน้า',
+  motor_4_re: 'มอเตอร์ 4 ถอยหลัง',
   
   // System
   wifi_ssid: 'WiFi SSID',
@@ -258,31 +305,33 @@ export const POLLING_INTERVALS = {
 };
 
 // ============================================================
-// Relay Configurations
+// Relay Configurations (7 อุปกรณ์ - ตาม firmware v2.0)
 // ============================================================
 
 export const RELAY_CONFIG = [
-  { key: 'fan_1', name: 'พัดลม 1', icon: 'Fan', cmdKey: 'fan_1_cmd', autoKey: 'fan_1_auto', rpcMethod: 'set_fan_1_cmd' },
-  { key: 'fan_2', name: 'พัดลม 2', icon: 'Fan', cmdKey: 'fan_2_cmd', autoKey: 'fan_2_auto', rpcMethod: 'set_fan_2_cmd' },
-  { key: 'valve_2', name: 'วาล์ว 2', icon: 'Droplets', cmdKey: 'valve_2_cmd', autoKey: 'valve_2_auto', rpcMethod: 'set_valve_2_cmd' },
-  { key: 'pump_1', name: 'ปั๊ม 1', icon: 'Waves', cmdKey: 'pump_1_cmd', autoKey: 'pump_1_auto', rpcMethod: 'set_pump_1_cmd' },
-  { key: 'light_1', name: 'ไฟ 1', icon: 'Lightbulb', cmdKey: 'light_1_cmd', autoKey: 'light_1_auto', rpcMethod: 'set_light_1_cmd' },
+  { key: 'fan_1', name: 'พัดลมใหญ่', icon: 'Fan', cmdKey: 'fan_1_cmd', autoKey: 'fan_1_auto', rpcMethod: 'set_fan_1_cmd' },
+  { key: 'fan_2', name: 'พัดลมกวนอากาศ', icon: 'Fan', cmdKey: 'fan_2_cmd', autoKey: 'fan_2_auto', rpcMethod: 'set_fan_2_cmd' },
+  { key: 'valve_1', name: 'เปิดน้ำโซน 1', icon: 'Droplets', cmdKey: 'valve_1_cmd', autoKey: 'valve_1_auto', rpcMethod: 'set_valve_1_cmd' },
+  { key: 'valve_2', name: 'เปิดน้ำโซน 2', icon: 'Droplets', cmdKey: 'valve_2_cmd', autoKey: 'valve_2_auto', rpcMethod: 'set_valve_2_cmd' },
+  { key: 'valve_3', name: 'เปิดน้ำโซน 3', icon: 'Droplets', cmdKey: 'valve_3_cmd', autoKey: 'valve_3_auto', rpcMethod: 'set_valve_3_cmd' },
+  { key: 'valve_4', name: 'เปิดน้ำโซน 4', icon: 'Droplets', cmdKey: 'valve_4_cmd', autoKey: 'valve_4_auto', rpcMethod: 'set_valve_4_cmd' },
+  { key: 'light_1', name: 'แสงเสริม', icon: 'Lightbulb', cmdKey: 'light_1_cmd', autoKey: 'light_1_auto', rpcMethod: 'set_light_1_cmd' },
 ] as const;
 
 // ============================================================
-// Motor Configurations
+// Motor Configurations (ระบบพรางแสง)
 // ============================================================
 
 export const MOTOR_CONFIG = [
-  { key: 'motor_1', name: 'มอเตอร์ 1', fwKey: 'motor_1_fw', reKey: 'motor_1_re', rpcMethod: 'set_motor_1_status' },
-  { key: 'motor_2', name: 'มอเตอร์ 2', fwKey: 'motor_2_fw', reKey: 'motor_2_re', rpcMethod: 'set_motor_2_status' },
-  { key: 'motor_3', name: 'มอเตอร์ 3', fwKey: 'motor_3_fw', reKey: 'motor_3_re', rpcMethod: 'set_motor_3_status' },
-  { key: 'motor_4', name: 'มอเตอร์ 4', fwKey: 'motor_4_fw', reKey: 'motor_4_re', rpcMethod: 'set_motor_4_status' },
+  { key: 'motor_1', name: 'พรางแสงโซนที่ 1', fwKey: 'motor_1_fw', reKey: 'motor_1_re', rpcMethod: 'set_motor_1_status' },
+  { key: 'motor_2', name: 'พรางแสงโซนที่ 2', fwKey: 'motor_2_fw', reKey: 'motor_2_re', rpcMethod: 'set_motor_2_status' },
+  { key: 'motor_3', name: 'พรางแสงโซนที่ 3', fwKey: 'motor_3_fw', reKey: 'motor_3_re', rpcMethod: 'set_motor_3_status' },
+  { key: 'motor_4', name: 'พรางแสงโซนที่ 4', fwKey: 'motor_4_fw', reKey: 'motor_4_re', rpcMethod: 'set_motor_4_status' },
 ] as const;
 
 // Motor command values
 export const MOTOR_COMMANDS = {
-  FORWARD: 1,  // Down
-  REVERSE: 2,  // Up
+  FORWARD: 1,  // พรางแสง (ลง)
+  REVERSE: 2,  // ไม่พรางแสง (ขึ้น)
   STOP: 0,
 } as const;

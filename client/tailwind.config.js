@@ -1,10 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  darkMode: ["class"],
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  darkMode: 'class', // ✅ ต้องเป็น string
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       fontFamily: {
@@ -51,12 +48,30 @@ export default {
           800: '#c62828',
           900: '#b71c1c',
         },
+
         // Additional semantic colors
         success: '#4caf50',
         warning: '#ff9800',
         info: '#2196f3',
-        // Greenhouse specific
+
+        // ✅ Greenhouse specific (Palette) — ทำให้ bg-soil-600 ใช้งานได้จริง
+        // คุณใช้ bg-soil-600 ใน Header ของ SoilNodeCard
         soil: {
+          DEFAULT: '#2e7d32',
+          50:  '#e8f5e9',
+          100: '#c8e6c9',
+          200: '#a5d6a7',
+          300: '#81c784',
+          400: '#66bb6a',
+          500: '#4caf50',
+          600: '#43a047', // ✅ สำคัญ: รองรับ bg-soil-600
+          700: '#388e3c',
+          800: '#2e7d32',
+          900: '#1b5e20',
+        },
+
+        // ✅ ของเดิม (สีตามชนิดค่าดิน) เก็บไว้ แต่เปลี่ยนชื่อไม่ให้ชนกับ soil palette
+        soilMetric: {
           moisture: '#4facfe',
           temp: '#ff6b6b',
           ec: '#feca57',
@@ -65,13 +80,15 @@ export default {
           phosphorus: '#ff9ff3',
           potassium: '#54a0ff',
         },
+
         air: {
           temp: '#ff6b6b',
           humidity: '#48dbfb',
           co2: '#feca57',
           light: '#f9ca24',
-        }
+        },
       },
+
       borderRadius: {
         'xl': '1rem',
         '2xl': '1.5rem',
@@ -84,7 +101,15 @@ export default {
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'pulse-soft': 'pulse 2.2s ease-in-out infinite',
         'spin-slow': 'spin 2s linear infinite',
+        'shimmer': 'shimmer 2s infinite',
+      },
+      keyframes: {
+        shimmer: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(400%)' },
+        },
       },
     },
   },

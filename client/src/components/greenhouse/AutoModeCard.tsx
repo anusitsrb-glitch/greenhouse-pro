@@ -13,11 +13,13 @@ interface AutoModeCardProps {
 }
 
 const AUTO_MODES = [
-  { key: 'fan_1_auto', name: 'พัดลม 1', icon: Fan, method: RPC_METHODS.AUTO.SET_FAN_1_AUTO },
-  { key: 'fan_2_auto', name: 'พัดลม 2', icon: Fan, method: RPC_METHODS.AUTO.SET_FAN_2_AUTO },
-  { key: 'valve_2_auto', name: 'วาล์ว 2', icon: Droplets, method: RPC_METHODS.AUTO.SET_VALVE_2_AUTO },
-  { key: 'pump_1_auto', name: 'ปั๊ม 1', icon: Waves, method: RPC_METHODS.AUTO.SET_PUMP_1_AUTO },
-  { key: 'light_1_auto', name: 'ไฟ 1', icon: Lightbulb, method: RPC_METHODS.AUTO.SET_LIGHT_1_AUTO },
+  { key: 'fan_1_auto', name: 'พัดลมใหญ่', icon: Fan, method: RPC_METHODS.AUTO.SET_FAN_1_AUTO },
+  { key: 'fan_2_auto', name: 'พัดลมกวนอากาศ', icon: Fan, method: RPC_METHODS.AUTO.SET_FAN_2_AUTO },
+  { key: 'valve_1_auto', name: 'น้ำโซน 1', icon: Droplets, method: RPC_METHODS.AUTO.SET_VALVE_1_AUTO },
+  { key: 'valve_2_auto', name: 'น้ำโซน 2', icon: Droplets, method: RPC_METHODS.AUTO.SET_VALVE_2_AUTO },
+  { key: 'valve_3_auto', name: 'น้ำโซน 3', icon: Droplets, method: RPC_METHODS.AUTO.SET_VALVE_3_AUTO },
+  { key: 'valve_4_auto', name: 'น้ำโซน 4', icon: Droplets, method: RPC_METHODS.AUTO.SET_VALVE_4_AUTO },
+  { key: 'light_1_auto', name: 'แสงเสริม', icon: Lightbulb, method: RPC_METHODS.AUTO.SET_LIGHT_1_AUTO },
   { key: 'global_motor_auto', name: 'มอเตอร์ทั้งหมด', icon: Cog, method: RPC_METHODS.AUTO.SET_GLOBAL_MOTOR_AUTO },
 ];
 
@@ -37,7 +39,7 @@ export function AutoModeCard({ data, isLoading, isReady, disabled, onToggle, isP
         </div>
 
         {/* Auto mode toggles */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8 gap-3">
           {AUTO_MODES.map((mode) => {
             const Icon = mode.icon;
             const isOn = isReady && !isLoading && normalizeBoolean(data[mode.key]);

@@ -10,27 +10,7 @@ import type { UserRole } from '../types/index.js';
 
 const router = Router();
 
-// ✅ กันพัง: สร้างตาราง users ขั้นต่ำให้แน่ใจว่า query ไม่ล้ม
-function ensureUsersTable() {
-  try {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT NOT NULL UNIQUE,
-        password_hash TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'user',
-        is_active INTEGER NOT NULL DEFAULT 1,
-        created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        updated_at TEXT
-      );
 
-      CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
-    `);
-  } catch (e) {
-    // ถ้าสร้างตารางไม่ได้จริง ๆ ให้ log ไว้ (แต่ไม่ throw เพื่อไม่ให้ route ล้มแบบเงียบ)
-    console.error('[DB] ensureUsersTable failed:', e);
-  }
-}
 
 // Validation schemas
 const loginSchema = z.object({
@@ -66,7 +46,6 @@ router.get('/csrf', (req: Request, res: Response) => {
 router.post('/login', async (req: Request, res: Response) => {
   try {
     // ✅ กันพัง: ถ้า DB ยังไม่ init หรือเพิ่งสร้างไฟล์ใหม่ จะไม่เจอ "no such table"
-    ensureUsersTable();
 
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -78,11 +57,20 @@ router.post('/login', async (req: Request, res: Response) => {
 
     // Find user
     const user = db.prepare(`
-      SELECT id, username, password_hash, role, is_active
+      SELECT id, username, password_hash, role, is_active, language, theme
       FROM users WHERE username = ?
     `).get(username) as
-      | { id: number; username: string; password_hash: string; role: UserRole; is_active: number }
+      | {
+          id: number;
+          username: string;
+          password_hash: string;
+          role: UserRole;
+          is_active: number;
+          language?: string;
+          theme?: string;
+        }
       | undefined;
+
 
     if (!user) {
       logAudit({
@@ -142,9 +130,12 @@ router.post('/login', async (req: Request, res: Response) => {
         id: user.id,
         username: user.username,
         role: user.role,
+        language: user.language || 'th',
+        theme: user.theme || 'light',
       },
       csrfToken: req.session.csrfToken,
     });
+
   } catch (error) {
     console.error('Login error:', error);
     sendError(res, ThaiErrors.SERVER_ERROR, 500);
@@ -182,10 +173,9 @@ router.post('/logout', requireAuth, (req: Request, res: Response) => {
  */
 router.get('/me', requireAuth, (req: Request, res: Response) => {
   // ✅ กันพัง: บางเคส DB ใหม่ / schema ยังไม่มา จะทำให้ route ล้ม
-  ensureUsersTable();
 
   const user = db.prepare(`
-    SELECT id, username, email, role, full_name, phone, language, theme, is_active, created_at
+    SELECT id, username, email, role, phone, language, theme, is_active, created_at
     FROM users WHERE id = ?
   `).get(req.session.userId) as any | undefined;
 
@@ -201,7 +191,7 @@ router.get('/me', requireAuth, (req: Request, res: Response) => {
       id: user.id,
       username: user.username,
       email: user.email,
-      fullName: user.full_name,
+      fullName: null,
       phone: user.phone,
       role: user.role,
       language: user.language || 'th',
@@ -216,10 +206,8 @@ router.get('/me', requireAuth, (req: Request, res: Response) => {
  * POST /api/auth/change-password
  * Change own password
  */
-router.post('/change-password', requireAuth, async (req: Request, res: Response) => {
+router.post('/change-password', requireAuth, validateCsrf, async (req: Request, res: Response) => {
   try {
-    ensureUsersTable();
-
     const parsed = changePasswordSchema.safeParse(req.body);
     if (!parsed.success) {
       sendError(res, 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร', 400);
@@ -243,8 +231,8 @@ router.post('/change-password', requireAuth, async (req: Request, res: Response)
     }
 
     const newHash = await bcrypt.hash(newPassword, 12);
-
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, req.session.userId);
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+      .run(newHash, req.session.userId);
 
     logAudit({
       userId: req.session.userId ?? null,
@@ -262,10 +250,8 @@ router.post('/change-password', requireAuth, async (req: Request, res: Response)
  * POST /api/auth/admin-reset-password
  * Admin resets user password
  */
-router.post('/admin-reset-password', requireAdmin, async (req: Request, res: Response) => {
+router.post('/admin-reset-password', requireAdmin, validateCsrf, async (req: Request, res: Response) => {
   try {
-    ensureUsersTable();
-
     const parsed = adminResetPasswordSchema.safeParse(req.body);
     if (!parsed.success) {
       sendError(res, ThaiErrors.INVALID_INPUT, 400);
@@ -282,14 +268,12 @@ router.post('/admin-reset-password', requireAdmin, async (req: Request, res: Res
       return;
     }
 
-    // Prevent admin from resetting superadmin password
     if (user.role === 'superadmin' && req.session.role !== 'superadmin') {
       sendError(res, 'ไม่สามารถรีเซ็ตรหัสผ่าน Super Admin ได้', 403);
       return;
     }
 
     const newHash = await bcrypt.hash(newPassword, 12);
-
     db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, userId);
 
     logAudit({
@@ -304,5 +288,81 @@ router.post('/admin-reset-password', requireAdmin, async (req: Request, res: Res
     sendError(res, ThaiErrors.SERVER_ERROR, 500);
   }
 });
+
+
+/**
+ * PUT /api/auth/preferences
+ * Save user preferences
+ */
+router.put('/preferences', requireAuth, validateCsrf, (req: Request, res: Response) => {
+  try {
+    const userId = req.session.userId;
+
+    if (!userId) {
+      sendError(res, 'กรุณาเข้าสู่ระบบใหม่', 401);
+      return;
+    }
+
+    const { language, theme } = req.body as { language?: string; theme?: string };
+
+    const lang = String(language || 'th');
+    const thm = String(theme || 'light');
+
+    if (!['th', 'en', 'mm'].includes(lang)) {
+      sendError(res, 'ภาษาที่เลือกไม่ถูกต้อง', 400);
+      return;
+    }
+
+    if (!['light', 'dark', 'system'].includes(thm)) {
+      sendError(res, 'ธีมไม่ถูกต้อง', 400);
+      return;
+    }
+
+    // ✅ อัปเดตแบบปลอดภัย: ไม่พังถ้า updated_at ไม่มี
+    try {
+      db.prepare(`
+        UPDATE users
+        SET language = ?, theme = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(lang, thm, userId);
+    } catch (e) {
+      // fallback ถ้าไม่มี updated_at
+      db.prepare(`
+        UPDATE users
+        SET language = ?, theme = ?
+        WHERE id = ?
+      `).run(lang, thm, userId);
+    }
+
+    // ✅ ส่ง user กลับไปเลยเพื่อให้ client refresh ได้ชัวร์
+    const user = db.prepare(`
+      SELECT id, username, email, role, phone, language, theme, is_active, created_at
+      FROM users WHERE id = ?
+    `).get(userId) as any;
+
+    sendSuccess(res, {
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        fullName: null,
+        phone: user.phone,
+        role: user.role,
+        language: user.language || 'th',
+        theme: user.theme || 'light',
+        isActive: Boolean(user.is_active),
+        createdAt: user.created_at,
+      },
+    });
+  } catch (err) {
+    console.error('[Preferences]', err);
+    sendError(res, ThaiErrors.SERVER_ERROR, 500);
+  }
+});
+
+
+
+
+
 
 export default router;

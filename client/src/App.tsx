@@ -7,16 +7,27 @@ import { HomePage } from '@/pages/HomePage';
 import { ProjectPage } from '@/pages/ProjectPage';
 import { GreenhousePage } from '@/pages/GreenhousePage';
 import { ProfilePage } from '@/pages/ProfilePage';
+import { NotificationPermissionBanner } from '@/components/notifications';
 import { 
   UsersPage, ProjectsPage, GreenhousesPage, NotificationsPage, 
   SettingsPage, SensorsPage, AlertsPage, AuditLogPage,
-  AutomationPage, ScenesPage, SecurityPage, ControlHistoryPage 
+  AutomationPage, ScenesPage, ControlHistoryPage as AdminControlHistoryPage,
+  AdminLayout
 } from '@/pages/admin';
 import { 
   CropsPage, GrowthRecordsPage, FertilizerPage, 
   PestDiseasePage, YieldPage, WaterUsagePage 
 } from '@/pages/agriculture';
-import { ReactNode } from 'react';
+
+// 🆕 Phase 2 Pages
+import {
+  ControlHistoryPage,
+  NotificationSettingsPage,
+  NotificationsListPage,
+} from '@/pages';
+
+import { ReactNode, useEffect } from 'react';
+
 
 // Check if user has at least the required role
 function hasRole(userRole: string | undefined, allowedRoles: string[]): boolean {
@@ -63,11 +74,39 @@ function PublicRoute({ children }: { children: ReactNode }) {
 }
 
 // Main app content with routes
+// Main app content with routes
 function AppRoutes() {
   const { toasts, removeToast } = useToast();
+  const { isAuthenticated, user } = useAuth();
+
+
+  useEffect(() => {
+    if (!user?.theme) return;
+
+    if (user.theme === 'dark') {
+      document.documentElement.classList.add('dark');
+      return;
+    }
+
+    if (user.theme === 'light') {
+      document.documentElement.classList.remove('dark');
+      return;
+    }
+
+    // system
+    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [user]);
+
   
   return (
     <>
+      {isAuthenticated && <NotificationPermissionBanner />}
       <Routes>
         {/* Public Routes */}
         <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
@@ -78,7 +117,7 @@ function AppRoutes() {
         <Route path="/project/:projectKey" element={<ProtectedRoute><ProjectPage /></ProtectedRoute>} />
         <Route path="/project/:projectKey/:ghKey" element={<ProtectedRoute><GreenhousePage /></ProtectedRoute>} />
         
-        {/* Agriculture Routes - Operator+ can record, Viewer can only view */}
+        {/* Agriculture Routes */}
         <Route path="/agriculture/crops" element={<ProtectedRoute><CropsPage /></ProtectedRoute>} />
         <Route path="/agriculture/growth" element={<ProtectedRoute><GrowthRecordsPage /></ProtectedRoute>} />
         <Route path="/agriculture/fertilizer" element={<ProtectedRoute><FertilizerPage /></ProtectedRoute>} />
@@ -86,11 +125,15 @@ function AppRoutes() {
         <Route path="/agriculture/yield" element={<ProtectedRoute><YieldPage /></ProtectedRoute>} />
         <Route path="/agriculture/water" element={<ProtectedRoute><WaterUsagePage /></ProtectedRoute>} />
         
-        {/* Alerts - All authenticated users can view */}
+        {/* Alerts Route */}
         <Route path="/alerts" element={<ProtectedRoute><AlertsPage /></ProtectedRoute>} />
-        <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
         
-        {/* Admin Routes - Admin and SuperAdmin only */}
+        {/* 🆕 Phase 2 Routes - Notification System */}
+        <Route path="/control-history" element={<ProtectedRoute><ControlHistoryPage /></ProtectedRoute>} />
+        <Route path="/notifications" element={<ProtectedRoute><NotificationsListPage /></ProtectedRoute>} />
+        <Route path="/notifications/settings" element={<ProtectedRoute><NotificationSettingsPage /></ProtectedRoute>} />
+        
+        {/* Admin Routes */}
         <Route path="/admin/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
         <Route path="/admin/projects" element={<AdminRoute><ProjectsPage /></AdminRoute>} />
         <Route path="/admin/greenhouses" element={<AdminRoute><GreenhousesPage /></AdminRoute>} />
@@ -101,8 +144,7 @@ function AppRoutes() {
         <Route path="/admin/settings" element={<AdminRoute><SettingsPage /></AdminRoute>} />
         <Route path="/admin/automation" element={<AdminRoute><AutomationPage /></AdminRoute>} />
         <Route path="/admin/scenes" element={<AdminRoute><ScenesPage /></AdminRoute>} />
-        <Route path="/admin/security" element={<AdminRoute><SecurityPage /></AdminRoute>} />
-        <Route path="/admin/control-history" element={<AdminRoute><ControlHistoryPage /></AdminRoute>} />
+        <Route path="/admin/control-history" element={<AdminRoute><AdminControlHistoryPage /></AdminRoute>} />
         
         {/* Catch all - redirect to home */}
         <Route path="*" element={<Navigate to="/" replace />} />

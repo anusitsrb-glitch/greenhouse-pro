@@ -23,9 +23,15 @@ import alertsRoutes from './routes/alerts.js';
 import passwordRoutes from './routes/password.js';
 import externalRoutes from './routes/external/index.js';
 import exportRoutes from './routes/export.js';
+import notificationsRoutes from './routes/notifications.js';
+import controlHistoryRoutes from './routes/control-history.js';
+import { startDeviceMonitoring } from './services/deviceMonitor.js';
+import { startSensorMonitoring } from './services/sensorMonitor.js';
+
 
 // ✅ ใช้ DB instance เพื่อทำ SQLite session store
 import { db } from './db/connection.js';
+import './db/migrate.js';
 
 // ✅ SQLite Session Store (แทน MemoryStore)
 import BetterSqlite3SessionStore from 'better-sqlite3-session-store';
@@ -132,11 +138,22 @@ const externalApiLimiter = rateLimit({
   message: { success: false, error: 'Too many requests from this API Key' },
 });
 
+app.set('etag', false);
+
+app.use('/api', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
 
 app.use('/api/auth/login', authLimiter);
 app.use('/api/password', authLimiter);
 app.use('/api', apiLimiter);
 app.use('/api/external', externalApiLimiter);
+
+
+
 
 // ===== API routes =====
 app.use('/api/health', healthRoutes);
@@ -149,7 +166,14 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/alerts', alertsRoutes);
 app.use('/api/external/v1', externalRoutes);
 app.use('/api/export', exportRoutes);
+app.use('/api/notifications', notificationsRoutes);
+app.use('/api/control-history', controlHistoryRoutes);
+
+// ✅ วาง notFound เป็น “ตัวสุดท้าย” ของ /api เสมอ
 app.use('/api', notFoundHandler);
+
+
+
 
 // ===== Serve React build (Production) =====
 if (!isDev) {
@@ -189,6 +213,26 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   ThingsBoard: ${env.TB_BASE_URL}`);
   console.log('════════════════════════════════════════════════════════');
   console.log('');
+  
+  // ✅ Start monitoring services
+  startMonitoringServices();
 });
+
+// ✅ เพิ่มฟังก์ชันนี้ก่อน export default app
+function startMonitoringServices() {
+  try {
+    console.log('🚀 Starting monitoring services...');
+    
+    // Start device status monitoring (every 30 seconds)
+    startDeviceMonitoring(30);
+    
+    // Start sensor alert monitoring (every 60 seconds)
+    startSensorMonitoring(60);
+    
+    console.log('✅ All monitoring services started');
+  } catch (error) {
+    console.error('❌ Failed to start monitoring services:', error);
+  }
+}
 
 export default app;
