@@ -368,7 +368,13 @@ function CreateUserModal({ onClose, onSuccess }: { onClose: () => void; onSucces
     setIsLoading(true);
 
     try {
-      await adminApi.createUser(formData);
+      const payload = {
+        ...formData,
+        email: formData.email.trim() || undefined, // ✅ แปลง "" → undefined
+      };
+
+      await adminApi.createUser(payload);
+
       addToast({ type: 'success', message: 'สร้างผู้ใช้สำเร็จ' });
       onSuccess();
     } catch (error) {
