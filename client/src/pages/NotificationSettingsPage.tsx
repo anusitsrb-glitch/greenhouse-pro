@@ -515,6 +515,15 @@ export function NotificationSettingsPage() {
           />
 
           <ToggleCard
+            title="เซ็นเซอร์ออฟไลน์"
+            description="แจ้งเตือนเมื่อเซ็นเซอร์ไม่ส่งข้อมูลเกินเวลาที่กำหนด"
+            enabled={(settings as any).sensor_offline}
+            onToggle={() => handleToggle('sensor_offline' as any)}
+            icon={BellOff}
+          />
+
+
+          <ToggleCard
             title="เปลี่ยนโหมด Auto"
             description="แจ้งเตือนเมื่อมีการเปลี่ยนการตั้งค่า Auto"
             enabled={settings.auto_mode_changed}
@@ -562,7 +571,8 @@ export function NotificationSettingsPage() {
           />
         </div>
       </Card>
-
+      
+      
       {/* Quiet Hours */}
       <Card className="p-6 mb-6">
         <div className="flex items-center gap-2 mb-4">

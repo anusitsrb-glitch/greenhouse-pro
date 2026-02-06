@@ -1023,7 +1023,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER,
     type TEXT NOT NULL CHECK (type IN (
-      'device_offline', 'device_online', 'sensor_alert',
+      'device_offline', 'device_online', 'sensor_alert','sensor_offline',
       'control_action', 'auto_mode_changed', 'system_error', 'info'
     )),
     severity TEXT NOT NULL CHECK (severity IN ('info', 'warning', 'critical')) DEFAULT 'info',
@@ -1052,6 +1052,7 @@ db.exec(`
     device_offline INTEGER NOT NULL DEFAULT 1,
     device_online INTEGER NOT NULL DEFAULT 1,
     sensor_alert INTEGER NOT NULL DEFAULT 1,
+    sensor_offline INTEGER NOT NULL DEFAULT 1,  
     control_action INTEGER NOT NULL DEFAULT 1,
     auto_mode_changed INTEGER NOT NULL DEFAULT 1,
     system_error INTEGER NOT NULL DEFAULT 1,
@@ -1072,6 +1073,13 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )
 `);
+
+addColumnIfMissing(
+  'notification_settings',
+  'sensor_offline',
+  'INTEGER NOT NULL DEFAULT 1'
+);
+
 
 // 3. Device Status Logs Table
 db.exec(`
@@ -1108,17 +1116,8 @@ db.exec(`
 console.log('✅ Phase 1 tables created');
 
 
-await addColumnIfMissing(
-  'users',
-  'language',
-  "TEXT DEFAULT 'th'"
-);
-
-await addColumnIfMissing(
-  'users',
-  'theme',
-  "TEXT DEFAULT 'light'"
-);
+addColumnIfMissing('users', 'language', "TEXT DEFAULT 'th'");
+addColumnIfMissing('users', 'theme', "TEXT DEFAULT 'light'");
 
 
 

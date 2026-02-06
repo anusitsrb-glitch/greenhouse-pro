@@ -34,6 +34,7 @@ const updateSettingsSchema = z.object({
   device_offline: z.boolean().optional(),
   device_online: z.boolean().optional(),
   sensor_alert: z.boolean().optional(),
+  sensor_offline: z.boolean().optional(),
   control_action: z.boolean().optional(),
   auto_mode_changed: z.boolean().optional(),
   system_error: z.boolean().optional(),
@@ -45,6 +46,10 @@ const updateSettingsSchema = z.object({
   quiet_hours_enabled: z.boolean().optional(),
   quiet_hours_start: z.string().optional(),
   quiet_hours_end: z.string().optional(),
+  in_app: z.boolean().optional(),
+  email: z.boolean().optional(),
+  line_notify: z.boolean().optional(),
+  push: z.boolean().optional(),
 });
 
 // ============================================================
