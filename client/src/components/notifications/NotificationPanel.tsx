@@ -9,6 +9,7 @@ import { Spinner } from '@/components/ui';
 import { CheckCheck, RefreshCw, Settings, X } from 'lucide-react';
 import type { Notification } from '@/types/notifications';
 import { Link } from 'react-router-dom';
+import { cn } from '@/lib/utils';
 
 interface NotificationPanelProps {
   notifications: Notification[];
@@ -20,6 +21,9 @@ interface NotificationPanelProps {
   onDelete: (id: number) => void;
   onRefresh: () => void;
   onClose: () => void;
+
+  /** ✅ เพิ่ม: บอกว่า render แบบ mobile modal ไหม */
+  mode?: 'desktop' | 'mobile';
 }
 
 export function NotificationPanel({
@@ -32,6 +36,7 @@ export function NotificationPanel({
   onDelete,
   onRefresh,
   onClose,
+  mode = 'desktop',
 }: NotificationPanelProps) {
   const [showAll, setShowAll] = useState(false);
 
@@ -39,26 +44,29 @@ export function NotificationPanel({
     ? notifications
     : notifications.filter((n) => !n.is_read);
 
+  const isMobile = mode === 'mobile';
+
   return (
     <>
-      {/* Mobile overlay (ปิดเมื่อกดพื้นหลัง) */}
-      <button
-        type="button"
-        aria-label="Close notifications overlay"
-        onClick={onClose}
-        className="fixed inset-0 z-40 bg-black/30 sm:hidden"
-      />
+      {/* Mobile overlay */}
+      {isMobile && (
+        <button
+          type="button"
+          aria-label="Close notifications overlay"
+          onClick={onClose}
+          className="fixed inset-0 z-40 bg-black/30"
+        />
+      )}
 
       {/* Panel */}
       <div
-        className="
-          z-50 bg-white border border-gray-200 shadow-lg
-          sm:absolute sm:right-0 sm:top-full sm:mt-2 sm:w-96 sm:rounded-lg
-
-          fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
-          w-[94vw] max-w-md rounded-2xl
-          max-h-[80vh] overflow-hidden
-        "
+        data-notification-panel
+        className={cn(
+          'z-50 bg-white border border-gray-200 shadow-lg overflow-hidden',
+          isMobile
+            ? 'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[94vw] max-w-md rounded-2xl max-h-[80vh]'
+            : 'absolute right-0 top-full mt-2 w-96 rounded-lg max-h-[70vh]'
+        )}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
@@ -76,6 +84,7 @@ export function NotificationPanel({
               onClick={onRefresh}
               className="p-1.5 rounded hover:bg-gray-100 transition-colors"
               title="รีเฟรช"
+              type="button"
             >
               <RefreshCw className="w-4 h-4 text-gray-600" />
             </button>
@@ -90,13 +99,16 @@ export function NotificationPanel({
             </Link>
 
             {/* ปุ่มปิด (แสดงเฉพาะมือถือ) */}
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded hover:bg-gray-100 transition-colors sm:hidden"
-              title="ปิด"
-            >
-              <X className="w-4 h-4 text-gray-600" />
-            </button>
+            {isMobile && (
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded hover:bg-gray-100 transition-colors"
+                title="ปิด"
+                type="button"
+              >
+                <X className="w-4 h-4 text-gray-600" />
+              </button>
+            )}
           </div>
         </div>
 
@@ -109,6 +121,7 @@ export function NotificationPanel({
                 ? 'text-primary border-b-2 border-primary bg-white'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
+            type="button"
           >
             ยังไม่อ่าน {unreadCount > 0 && `(${unreadCount})`}
           </button>
@@ -119,6 +132,7 @@ export function NotificationPanel({
                 ? 'text-primary border-b-2 border-primary bg-white'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
+            type="button"
           >
             ทั้งหมด ({notifications.length})
           </button>
@@ -130,6 +144,7 @@ export function NotificationPanel({
             <button
               onClick={onMarkAllAsRead}
               className="text-sm text-primary hover:underline flex items-center gap-1"
+              type="button"
             >
               <CheckCheck className="w-4 h-4" />
               อ่านทั้งหมดแล้ว
@@ -137,8 +152,8 @@ export function NotificationPanel({
           </div>
         )}
 
-        {/* Notifications List */}
-        <div className="max-h-[52vh] sm:max-h-96 overflow-y-auto">
+        {/* List (scroll) */}
+        <div className="overflow-y-auto max-h-[50vh]">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Spinner />
