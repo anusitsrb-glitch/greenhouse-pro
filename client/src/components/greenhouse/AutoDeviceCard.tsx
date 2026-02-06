@@ -114,14 +114,18 @@ export default function AutoDeviceCard({
   }, [attributes, modeKey]);
 
   const derivedActiveTab = useMemo<'daily' | 'condition' | 'interval'>(() => {
-  if (device.id === 'water') {
-    // water_mode: 1=Daily(Valve), 2=Interval(Sequential)
-    return modeValue === 2 ? 'interval' : 'daily';
-  }
-  if (modeValue === 2) return 'Smart Rules';
-  if (modeValue === 3) return 'Cycle Timer';
-  return 'daily';
+    if (device.id === 'water') {
+      // water_mode: 1=Daily(Valve), 2=Interval(Sequential)
+      return modeValue === 2 ? 'interval' : 'daily';
+    }
+
+    // ESP32 mode mapping (ทั่วไป)
+    // 1 = daily, 2 = condition, 3 = interval
+    if (modeValue === 2) return 'condition';
+    if (modeValue === 3) return 'interval';
+    return 'daily';
   }, [modeValue, device.id]);
+
 
 
   const modeLabel = useMemo(() => {
