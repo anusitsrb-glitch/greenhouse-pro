@@ -89,7 +89,7 @@ router.get('/', async (req: Request, res: Response) => {
           nameTh: g.name_th,
           status: g.status,
           deviceId: g.tb_device_id,
-          isOnline, // ✅ เพิ่มตรงนี้
+          isOnline, 
           projectKey: g.project_key,
           projectName: g.project_name,
           createdAt: g.created_at,
