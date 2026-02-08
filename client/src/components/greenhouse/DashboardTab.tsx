@@ -202,7 +202,7 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
       <section>
         <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
           <span className="w-1.5 h-5 bg-purple-500 rounded-full"></span>
-          โหมดอัตโนมัติ
+          เปิดใช้งานโหมดทำงานตามเวลาอัตโนมัติ
         </h2>
         <AutoModeCard
           data={data}

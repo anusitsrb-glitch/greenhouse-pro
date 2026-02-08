@@ -33,8 +33,8 @@ export function AutoModeCard({ data, isLoading, isReady, disabled, onToggle, isP
             <Bot className="w-5 h-5 text-purple-600" />
           </div>
           <div>
-            <h3 className="font-semibold text-gray-900">โหมดอัตโนมัติ</h3>
-            <p className="text-sm text-gray-500">เปิด/ปิดการควบคุมอัตโนมัติ</p>
+            <h3 className="font-semibold text-gray-900">โหมดทำงานตามเวลาอัตโนมัติ</h3>
+            <p className="text-sm text-gray-500">เปิด/ปิดการควบคุมการทำงานตามเวลาแบบอัตโนมัติ</p>
           </div>
         </div>
 
