@@ -1,6 +1,6 @@
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui';
-import { Leaf, LogOut, User, ChevronRight, Settings, Sprout, Bell, LayoutDashboard } from 'lucide-react';
+import { Leaf, LogOut, User, ChevronRight, Settings, Sprout } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { NotificationBell } from '@/components/notifications';
 
@@ -92,8 +92,8 @@ export function Header({ breadcrumbs }: HeaderProps) {
             <Link
               to="/agriculture/crops"
               className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                location.pathname.startsWith('/agriculture') 
-                  ? 'text-primary bg-primary/10' 
+                location.pathname.startsWith('/agriculture')
+                  ? 'text-primary bg-primary/10'
                   : 'text-gray-600 hover:text-primary hover:bg-primary/5'
               }`}
             >
@@ -101,18 +101,16 @@ export function Header({ breadcrumbs }: HeaderProps) {
               <span className="hidden sm:inline">การเกษตร</span>
             </Link>
 
-            
-            
             {/* 🆕 Notification Bell - Phase 1 */}
             <NotificationBell />
-            
+
             {/* Admin Link - only for admin/superadmin */}
             {isAdmin && (
               <Link
                 to="/admin/users"
                 className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                  location.pathname.startsWith('/admin') 
-                    ? 'text-primary bg-primary/10' 
+                  location.pathname.startsWith('/admin')
+                    ? 'text-primary bg-primary/10'
                     : 'text-gray-600 hover:text-primary hover:bg-primary/5'
                 }`}
               >
@@ -121,7 +119,7 @@ export function Header({ breadcrumbs }: HeaderProps) {
               </Link>
             )}
 
-            {/* User Info */}
+            {/* User Info (Desktop only - unchanged) */}
             <div className="hidden sm:flex items-center gap-2 ml-2 pl-2 border-l border-gray-200">
               <Link to="/profile" className="flex items-center gap-2 hover:opacity-80">
                 <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
@@ -129,12 +127,26 @@ export function Header({ breadcrumbs }: HeaderProps) {
                 </div>
                 <div className="text-right">
                   <div className="text-sm font-medium text-gray-900">{user?.username}</div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${getRoleBadgeColor(user?.role || '')}`}>
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full ${getRoleBadgeColor(
+                      user?.role || ''
+                    )}`}
+                  >
                     {getRoleLabel(user?.role || '')}
                   </span>
                 </div>
               </Link>
             </div>
+
+            {/* ✅ User Profile (Mobile only) */}
+            <Link
+              to="/profile"
+              className="sm:hidden inline-flex items-center justify-center w-9 h-9 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+              aria-label="โปรไฟล์"
+              title="โปรไฟล์"
+            >
+              <User className="w-4 h-4" />
+            </Link>
 
             <Button
               variant="ghost"
