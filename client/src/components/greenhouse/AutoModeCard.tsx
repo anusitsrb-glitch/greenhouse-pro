@@ -95,7 +95,7 @@ export function AutoModeCard({ data, isLoading, isReady, disabled, onToggle, isP
 
         {/* Info text */}
         <p className="mt-4 text-xs text-gray-500 text-center">
-          เมื่อเปิดโหมดอัตโนมัติ อุปกรณ์จะทำงานตามตัวจับเวลาและเงื่อนไขที่ตั้งไว้
+          เมื่อเปิดโหมดอัตโนมัติ อุปกรณ์จะทำงานตามตัวจับเวลาที่ตั้งไว้
         </p>
       </div>
     </Card>
