@@ -50,54 +50,69 @@ app.set('trust proxy', 1);
 app.use(helmet({ contentSecurityPolicy: false }));
 
 // ============================================================
-// ✅ CORS - Updated for Capacitor Support
+// ✅ CORS - Production-Ready (Web + Capacitor Android/iOS)
 // ============================================================
+
+// Parse comma-separated origins from env (Railway Variables)
+// Example: CORS_ORIGINS="https://greenhouse-pro-server-production.up.railway.app"
 const corsOrigins =
   (process.env.CORS_ORIGINS ?? '')
     .split(',')
-    .map((s: string) => s.trim())
+    .map((s) => s.trim())
     .filter(Boolean);
 
-// ✅ Base allowed origins
-const allowedOrigins = isDev
-  ? [
-      'http://localhost:5173',
-      'http://127.0.0.1:5173',
-      'capacitor://localhost',     // ✅ Capacitor Android/iOS
-      'http://localhost',           // ✅ Capacitor fallback
-      'ionic://localhost',          // ✅ Ionic apps (if needed)
-      'http://localhost:8080',      // ✅ Alternative dev port
-    ]
-  : [
-      ...corsOrigins,
-      'capacitor://localhost',      // ✅ Capacitor production
-      'http://localhost',           // ✅ Capacitor fallback
-      'ionic://localhost',          // ✅ Ionic apps (if needed)
-    ];
+// Capacitor / Ionic app origins
+const appOrigins = [
+  'capacitor://localhost',
+  'ionic://localhost',
+  'http://localhost', // fallback (บางเคส)
+];
 
-console.log('📡 CORS Allowed Origins:', allowedOrigins);
+// Dev web origins (vite/อื่นๆ)
+const devWebOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:8080',
+];
+
+// Final allowlist
+const allowedOrigins = isDev
+  ? [...devWebOrigins, ...appOrigins, ...corsOrigins]
+  : [...appOrigins, ...corsOrigins];
+
+// Debug (ช่วยเช็คตอน deploy)
+console.log('📡 isDev:', isDev);
+console.log('📡 CORS_ORIGINS env:', corsOrigins);
+console.log('📡 CORS Allowed Origins (exact):', allowedOrigins);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl)
+      // ✅ Allow requests with no origin (curl/health checks/native requestsบางแบบ)
       if (!origin) return callback(null, true);
-      
-      // Check if origin is in allowed list
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      
-      // In development, allow all origins
+
+      // ✅ Exact allowlist
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+
+      // ✅ Dev: allow localhost/127.0.0.1 any port (กัน dev port เปลี่ยนแล้วพัง)
       if (isDev) {
+        try {
+          const u = new URL(origin);
+          if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
+            return callback(null, true);
+          }
+        } catch {
+          // ignore parse errors
+        }
         return callback(null, true);
       }
-      
-      // Reject other origins
-      callback(new Error('Not allowed by CORS'));
+
+      // ❌ Reject other origins in production
+      console.error('❌ [CORS BLOCKED] Origin:', origin);
+      return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'Accept'],
     exposedHeaders: ['Set-Cookie'],
   })
@@ -131,7 +146,9 @@ app.use(
     cookie: {
       httpOnly: true,
       // ✅ Updated for Capacitor cross-origin cookies
-      secure: process.env.NODE_ENV === 'production' ? 'auto' : false,
+      // express-session typings allow boolean; runtime accepts 'auto' in some setups, but safest is boolean.
+      // We'll keep your intent: secure true in production (behind HTTPS proxy), false in dev.
+      secure: process.env.NODE_ENV === 'production',
       sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       domain: undefined, // Let browser handle it
@@ -244,7 +261,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   CORS Origins: ${allowedOrigins.length} allowed`);
   console.log('════════════════════════════════════════════════════════');
   console.log('');
-  
+
   // ✅ Start monitoring services
   startMonitoringServices();
 });
@@ -253,13 +270,13 @@ app.listen(PORT, '0.0.0.0', () => {
 function startMonitoringServices() {
   try {
     console.log('🚀 Starting monitoring services...');
-    
+
     // Start device status monitoring (every 30 seconds)
     startDeviceMonitoring(30);
-    
+
     // Start sensor alert monitoring (every 60 seconds)
     startSensorMonitoring(60);
-    
+
     console.log('✅ All monitoring services started');
   } catch (error) {
     console.error('❌ Failed to start monitoring services:', error);
