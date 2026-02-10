@@ -28,7 +28,6 @@ import controlHistoryRoutes from './routes/control-history.js';
 import { startDeviceMonitoring } from './services/deviceMonitor.js';
 import { startSensorMonitoring } from './services/sensorMonitor.js';
 
-
 // ✅ ใช้ DB instance เพื่อทำ SQLite session store
 import { db } from './db/connection.js';
 import './db/migrate.js';
@@ -50,26 +49,57 @@ app.set('trust proxy', 1);
 // Security middleware
 app.use(helmet({ contentSecurityPolicy: false }));
 
-// -------------------------------
-// ✅ CORS
-// - ถ้าโปรดักชัน “โดเมนเดียวกัน” (serve client+api จากโดเมนเดียว) => origin: true ได้เลย
-// - ถ้าอยากจำกัดหลายโดเมน ให้ตั้ง ENV: CORS_ORIGINS="https://a.com,https://b.com"
-//   แล้วระบบจะอ่านจาก process.env (ไม่ผูกกับ env.ts)
-// -------------------------------
+// ============================================================
+// ✅ CORS - Updated for Capacitor Support
+// ============================================================
 const corsOrigins =
   (process.env.CORS_ORIGINS ?? '')
     .split(',')
     .map((s: string) => s.trim())
     .filter(Boolean);
 
+// ✅ Base allowed origins
+const allowedOrigins = isDev
+  ? [
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+      'capacitor://localhost',     // ✅ Capacitor Android/iOS
+      'http://localhost',           // ✅ Capacitor fallback
+      'ionic://localhost',          // ✅ Ionic apps (if needed)
+      'http://localhost:8080',      // ✅ Alternative dev port
+    ]
+  : [
+      ...corsOrigins,
+      'capacitor://localhost',      // ✅ Capacitor production
+      'http://localhost',           // ✅ Capacitor fallback
+      'ionic://localhost',          // ✅ Ionic apps (if needed)
+    ];
+
+console.log('📡 CORS Allowed Origins:', allowedOrigins);
+
 app.use(
   cors({
-    origin: isDev
-      ? ['http://localhost:5173', 'http://127.0.0.1:5173']
-      : corsOrigins.length
-        ? corsOrigins
-        : true,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+      
+      // Check if origin is in allowed list
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      
+      // In development, allow all origins
+      if (isDev) {
+        return callback(null, true);
+      }
+      
+      // Reject other origins
+      callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'Accept'],
+    exposedHeaders: ['Set-Cookie'],
   })
 );
 
@@ -77,9 +107,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// -------------------------------
-// ✅ SESSION: ใช้ SQLiteStore เพื่อ “จำล็อกอิน” แม้ Railway restart
-// -------------------------------
+// ============================================================
+// ✅ SESSION - Updated for Capacitor Support
+// ============================================================
 const SqliteStore = BetterSqlite3SessionStore(session);
 
 app.use(
@@ -100,16 +130,18 @@ app.use(
     rolling: true,
     cookie: {
       httpOnly: true,
-      secure: 'auto',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      // ✅ Updated for Capacitor cross-origin cookies
+      secure: process.env.NODE_ENV === 'production' ? 'auto' : false,
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      domain: undefined, // Let browser handle it
     },
   })
 );
 
-// -------------------------------
-// ✅ Rate limit แบบไม่ทำเว็บพัง
-// -------------------------------
+// ============================================================
+// Rate Limiting
+// ============================================================
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: isDev ? 500 : 30,
@@ -131,8 +163,8 @@ const apiLimiter = rateLimit({
 });
 
 const externalApiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isDev ? 10000 : 1000, // 1000 requests per 15 minutes
+  windowMs: 15 * 60 * 1000,
+  max: isDev ? 10000 : 1000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: 'Too many requests from this API Key' },
@@ -152,10 +184,9 @@ app.use('/api/password', authLimiter);
 app.use('/api', apiLimiter);
 app.use('/api/external', externalApiLimiter);
 
-
-
-
-// ===== API routes =====
+// ============================================================
+// API Routes
+// ============================================================
 app.use('/api/health', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/password', passwordRoutes);
@@ -169,13 +200,12 @@ app.use('/api/export', exportRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/control-history', controlHistoryRoutes);
 
-// ✅ วาง notFound เป็น “ตัวสุดท้าย” ของ /api เสมอ
+// ✅ วาง notFound เป็น "ตัวสุดท้าย" ของ /api เสมอ
 app.use('/api', notFoundHandler);
 
-
-
-
-// ===== Serve React build (Production) =====
+// ============================================================
+// Serve React build (Production)
+// ============================================================
 if (!isDev) {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
@@ -205,12 +235,13 @@ const PORT = Number(process.env.PORT) || env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('════════════════════════════════════════════════════════');
-  console.log('🌿 GreenHouse Pro V5 Server');
+  console.log('🌿 GreenHouse Pro V2 Server');
   console.log('════════════════════════════════════════════════════════');
   console.log(`   Environment: ${env.NODE_ENV}`);
   console.log(`   Port: ${PORT}`);
   console.log(`   Database: ${env.DB_PATH}`);
   console.log(`   ThingsBoard: ${env.TB_BASE_URL}`);
+  console.log(`   CORS Origins: ${allowedOrigins.length} allowed`);
   console.log('════════════════════════════════════════════════════════');
   console.log('');
   

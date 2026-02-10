@@ -2,15 +2,13 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './index.css';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { logEnvironmentInfo } from './config/env';
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
+// ✅ Log environment BEFORE render
+logEnvironmentInfo();
 
-// ✅ Service Worker: เปิดเฉพาะ Production (Railway)
-// ✅ Dev: ถ้าเคยมี SW ค้าง ให้ถอนออก กัน cache หลอน
+// ✅ Service Worker: เปิดเฉพาะ Production
 if ('serviceWorker' in navigator) {
   if (import.meta.env?.PROD) {
     window.addEventListener('load', () => {
@@ -22,3 +20,12 @@ if ('serviceWorker' in navigator) {
     });
   }
 }
+
+// ✅ Render only ONCE
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  </StrictMode>
+);
