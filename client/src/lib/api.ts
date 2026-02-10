@@ -1,6 +1,9 @@
 /**
  * API client with CSRF and error handling
+ * ✅ Updated to support dynamic URLs for Capacitor
  */
+
+import { getApiUrl, ENV } from '@/config/env';
 
 const API_BASE = '/api';
 
@@ -21,7 +24,8 @@ class ApiClient {
     if (this.csrfToken) return this.csrfToken ?? '';
 
     try {
-      const response = await fetch(`${API_BASE}/auth/csrf`, {
+      const url = getApiUrl(`${API_BASE}/auth/csrf`);
+      const response = await fetch(url, {
         credentials: 'include',
       });
       const data = await response.json();
@@ -56,7 +60,13 @@ class ApiClient {
    */
   async get<T>(endpoint: string): Promise<ApiResponse<T>> {
     try {
-      const response = await fetch(`${API_BASE}${endpoint}`, {
+      const url = getApiUrl(`${API_BASE}${endpoint}`);
+      
+      if (ENV.IS_DEV) {
+        console.log('[API GET]', url);
+      }
+      
+      const response = await fetch(url, {
         method: 'GET',
         credentials: 'include',
         cache: 'no-store',
@@ -78,7 +88,13 @@ class ApiClient {
    */
   async postWithoutCsrf<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {
     try {
-      const response = await fetch(`${API_BASE}${endpoint}`, {
+      const url = getApiUrl(`${API_BASE}${endpoint}`);
+      
+      if (ENV.IS_DEV) {
+        console.log('[API POST (no CSRF)]', url);
+      }
+      
+      const response = await fetch(url, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -100,8 +116,13 @@ class ApiClient {
   async post<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {
     try {
       const csrf = await this.getCsrfToken();
+      const url = getApiUrl(`${API_BASE}${endpoint}`);
       
-      const response = await fetch(`${API_BASE}${endpoint}`, {
+      if (ENV.IS_DEV) {
+        console.log('[API POST]', url);
+      }
+      
+      const response = await fetch(url, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -123,33 +144,36 @@ class ApiClient {
    * Make a PUT request
    */
   async put<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {
-  try {
-    const csrf = await this.getCsrfToken();
-
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-      method: 'PUT',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-CSRF-Token': csrf,
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-
-    const text = await response.text();
     try {
-      return JSON.parse(text);
-    } catch {
-      // 👇 ถ้าไม่ใช่ JSON ให้โชว์ข้อความจริงออกมาเลย
-      return { success: false, error: text || `HTTP ${response.status}` };
-    }
-  } catch (e) {
-    console.error('PUT error:', e);
-    return { success: false, error: 'Network error' };
-  }
-}
+      const csrf = await this.getCsrfToken();
+      const url = getApiUrl(`${API_BASE}${endpoint}`);
+      
+      if (ENV.IS_DEV) {
+        console.log('[API PUT]', url);
+      }
 
+      const response = await fetch(url, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRF-Token': csrf,
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+
+      const text = await response.text();
+      try {
+        return JSON.parse(text);
+      } catch {
+        return { success: false, error: text || `HTTP ${response.status}` };
+      }
+    } catch (e) {
+      console.error('PUT error:', e);
+      return { success: false, error: 'Network error' };
+    }
+  }
 
   /**
    * Make a DELETE request
@@ -157,8 +181,13 @@ class ApiClient {
   async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
     try {
       const csrf = await this.getCsrfToken();
+      const url = getApiUrl(`${API_BASE}${endpoint}`);
       
-      const response = await fetch(`${API_BASE}${endpoint}`, {
+      if (ENV.IS_DEV) {
+        console.log('[API DELETE]', url);
+      }
+      
+      const response = await fetch(url, {
         method: 'DELETE',
         credentials: 'include',
         headers: {

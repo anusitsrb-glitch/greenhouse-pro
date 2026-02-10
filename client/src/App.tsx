@@ -27,7 +27,7 @@ import {
 } from '@/pages';
 
 import { ReactNode, useEffect } from 'react';
-
+import { useOfflineBanner } from '@/hooks/useNetworkStatus';
 
 // Check if user has at least the required role
 function hasRole(userRole: string | undefined, allowedRoles: string[]): boolean {
@@ -74,11 +74,10 @@ function PublicRoute({ children }: { children: ReactNode }) {
 }
 
 // Main app content with routes
-// Main app content with routes
 function AppRoutes() {
   const { toasts, removeToast } = useToast();
   const { isAuthenticated, user } = useAuth();
-
+  const { showBanner } = useOfflineBanner();
 
   useEffect(() => {
     if (!user?.theme) return;
@@ -93,7 +92,6 @@ function AppRoutes() {
       return;
     }
 
-    // system
     const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
 
     if (isDark) {
@@ -103,10 +101,17 @@ function AppRoutes() {
     }
   }, [user]);
 
-  
   return (
     <>
+      {/* Offline Banner */}
+      {showBanner && (
+        <div className="fixed top-0 left-0 right-0 bg-red-500 text-white text-center py-2 z-50 text-sm font-medium">
+          ⚠️ ไม่มีการเชื่อมต่ออินเทอร์เน็ต
+        </div>
+      )}
+      
       {isAuthenticated && <NotificationPermissionBanner />}
+      
       <Routes>
         {/* Public Routes */}
         <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
