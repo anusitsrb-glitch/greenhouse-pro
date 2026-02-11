@@ -66,6 +66,7 @@ const appOrigins = [
   'capacitor://localhost',
   'ionic://localhost',
   'http://localhost', // fallback (บางเคส)
+  'https://localhost',
 ];
 
 // Dev web origins (vite/อื่นๆ)
