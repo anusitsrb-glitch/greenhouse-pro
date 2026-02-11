@@ -59,7 +59,9 @@ export const ENV = {
   PLATFORM: getPlatform(),
 
   // API Configuration
-  API_BASE_URL: import.meta.env.VITE_API_BASE_URL || '',
+  // ✨ FIXED: Always use Railway URL for Capacitor, try .env first
+  API_BASE_URL: import.meta.env.VITE_API_BASE_URL || 
+                'https://greenhouse-pro-server-production.up.railway.app',
   
   // App Configuration
   APP_NAME: 'GreenHouse Pro',
@@ -79,26 +81,16 @@ export const ENV = {
  * 
  * @param endpoint - API endpoint (e.g., '/api/auth/login')
  * @returns Full URL for the API call
- * 
- * @example
- * // Web Development (with Vite proxy)
- * getApiUrl('/api/users') → '/api/users'
- * 
- * // Web Production (same origin)
- * getApiUrl('/api/users') → '/api/users'
- * 
- * // Capacitor (Android/iOS)
- * getApiUrl('/api/users') → 'https://greenhouse-pro-server-production.up.railway.app/api/users'
  */
 export function getApiUrl(endpoint: string): string {
-  // Capacitor apps need full URL
-  if (ENV.IS_CAPACITOR && ENV.API_BASE_URL) {
-    // Remove leading slash if present to avoid double slashes
+  // Capacitor apps ALWAYS need full URL
+  if (ENV.IS_CAPACITOR) {
+    // Remove leading slash if present
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
     return `${ENV.API_BASE_URL}/${cleanEndpoint}`;
   }
   
-  // Web apps use relative URLs (works with Vite proxy in dev, same-origin in prod)
+  // Web apps use relative URLs
   return endpoint;
 }
 
@@ -106,13 +98,11 @@ export function getApiUrl(endpoint: string): string {
  * Log environment info (useful for debugging)
  */
 export function logEnvironmentInfo(): void {
-  if (!ENV.IS_DEV) return;
-  
   console.group('🌿 GreenHouse Pro - Environment Info');
   console.log('Platform:', ENV.PLATFORM);
   console.log('Is Capacitor:', ENV.IS_CAPACITOR);
   console.log('Is Mobile:', ENV.IS_MOBILE);
-  console.log('API Base URL:', ENV.API_BASE_URL || 'Using relative URLs');
+  console.log('API Base URL:', ENV.API_BASE_URL);
   console.log('Environment:', ENV.IS_DEV ? 'Development' : 'Production');
   console.groupEnd();
 }
@@ -121,16 +111,10 @@ export function logEnvironmentInfo(): void {
 // Platform-Specific Helpers
 // ============================================================
 
-/**
- * Get user-agent string
- */
 export function getUserAgent(): string {
   return navigator.userAgent || '';
 }
 
-/**
- * Check if running in standalone mode (PWA)
- */
 export function isStandalone(): boolean {
   return (
     window.matchMedia('(display-mode: standalone)').matches ||
@@ -138,9 +122,6 @@ export function isStandalone(): boolean {
   );
 }
 
-/**
- * Get app identifier for analytics/logging
- */
 export function getAppIdentifier(): string {
   if (ENV.IS_CAPACITOR) {
     return `capacitor-${ENV.PLATFORM}`;
@@ -151,5 +132,4 @@ export function getAppIdentifier(): string {
   return 'web';
 }
 
-// Export all functions
 export default ENV;

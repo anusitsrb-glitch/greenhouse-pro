@@ -44,3 +44,4 @@ backups/
 # Temporary files
 tmp/
 temp/
+client/android/

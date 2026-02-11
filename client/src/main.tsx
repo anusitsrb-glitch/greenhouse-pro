@@ -3,10 +3,28 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import './index.css';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { logEnvironmentInfo } from './config/env';
+import { logEnvironmentInfo, ENV } from './config/env';
+
+// ✨ เพิ่ม Capacitor plugins
+import { StatusBar, Style } from '@capacitor/status-bar';
+import { SplashScreen } from '@capacitor/splash-screen';
 
 // ✅ Log environment BEFORE render
 logEnvironmentInfo();
+
+// ✨ Initialize Capacitor plugins (mobile only)
+if (ENV.IS_CAPACITOR) {
+  // Configure status bar
+  StatusBar.setBackgroundColor({ color: '#22c55e' }).catch(console.error);
+  StatusBar.setStyle({ style: Style.Dark }).catch(console.error);
+  
+  // Hide splash screen after app loads
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      SplashScreen.hide().catch(console.error);
+    }, 2000);
+  });
+}
 
 // ✅ Service Worker: เปิดเฉพาะ Production
 if ('serviceWorker' in navigator) {
