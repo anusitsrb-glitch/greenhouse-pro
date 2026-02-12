@@ -14,6 +14,8 @@ logEnvironmentInfo();
 
 // ✨ Initialize Capacitor plugins (mobile only)
 if (ENV.IS_CAPACITOR) {
+  // ✨ FIX: ปิด StatusBar overlay เพื่อให้ content ไม่ถูกทับ
+  StatusBar.setOverlaysWebView({ overlay: false }).catch(console.error);
   // Configure status bar
   StatusBar.setBackgroundColor({ color: '#22c55e' }).catch(console.error);
   StatusBar.setStyle({ style: Style.Dark }).catch(console.error);

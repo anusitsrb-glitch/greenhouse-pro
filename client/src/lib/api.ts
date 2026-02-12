@@ -4,6 +4,7 @@
  */
 
 import { getApiUrl, ENV } from '@/config/env';
+import { CapacitorHttp } from '@capacitor/core';
 
 const API_BASE = '/api';
 
@@ -62,23 +63,44 @@ class ApiClient {
     try {
       const url = getApiUrl(`${API_BASE}${endpoint}`);
       
-      if (ENV.IS_DEV) {
-        console.log('[API GET]', url);
+      console.log('🔵 [API GET] Starting...');
+      console.log('🔵 Endpoint:', endpoint);
+      console.log('🔵 Full URL:', url);
+      
+      // ✅ ใช้ CapacitorHttp แทน fetch บน mobile
+      if (ENV.IS_CAPACITOR) {
+        const response = await CapacitorHttp.get({
+          url,
+          headers: {
+            'Accept': 'application/json',
+          },
+          webFetchExtra: {
+            credentials: 'include',
+          },
+        });
+
+        console.log('🟢 [API GET] Response received!');
+        console.log('🟢 Status:', response.status);
+        
+        return response.data;
       }
       
+      // Web: ใช้ fetch ปกติ
       const response = await fetch(url, {
         method: 'GET',
         credentials: 'include',
-        cache: 'no-store',
         headers: {
           'Accept': 'application/json',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache',
         },
       });
+
+      console.log('🟢 [API GET] Response received!');
+      console.log('🟢 Status:', response.status);
+      
       return response.json();
     } catch (e) {
-      console.error('GET error:', e);
+      console.error('🔴 [API GET] CATCH ERROR!');
+      console.error('🔴 Error:', e);
       return { success: false, error: 'Network error' };
     }
   }
@@ -90,10 +112,33 @@ class ApiClient {
     try {
       const url = getApiUrl(`${API_BASE}${endpoint}`);
       
-      if (ENV.IS_DEV) {
-        console.log('[API POST (no CSRF)]', url);
+      console.log('🔵 [API POST (no CSRF)] Starting...');
+      console.log('🔵 Endpoint:', endpoint);
+      console.log('🔵 Full URL:', url);
+      console.log('🔵 Body:', JSON.stringify(body));
+      
+      // ✅ ใช้ CapacitorHttp แทน fetch บน mobile
+      if (ENV.IS_CAPACITOR) {
+        const response = await CapacitorHttp.post({
+          url,
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          data: body,
+          webFetchExtra: {
+            credentials: 'include',
+          },
+        });
+
+        console.log('🟢 [API POST] Response received!');
+        console.log('🟢 Status:', response.status);
+        console.log('🟢 Result:', JSON.stringify(response.data));
+        
+        return response.data;
       }
       
+      // Web: ใช้ fetch ปกติ
       const response = await fetch(url, {
         method: 'POST',
         credentials: 'include',
@@ -103,9 +148,14 @@ class ApiClient {
         },
         body: body ? JSON.stringify(body) : undefined,
       });
+
+      console.log('🟢 [API POST] Response received!');
+      console.log('🟢 Status:', response.status);
+      
       return response.json();
     } catch (e) {
-      console.error('POST error:', e);
+      console.error('🔴 [API POST] CATCH ERROR!');
+      console.error('🔴 Error:', e);
       return { success: false, error: 'Network error' };
     }
   }

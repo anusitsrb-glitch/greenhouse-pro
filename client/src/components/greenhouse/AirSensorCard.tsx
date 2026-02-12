@@ -75,17 +75,19 @@ function SensorDisplay({
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm text-gray-500 truncate">{label}</p>
-        <p className="text-2xl font-bold text-gray-900">
-          {displayValue}
+        <div className="flex items-baseline gap-1">
+          <p className="text-2xl font-bold text-gray-900 truncate">
+            {displayValue}
+          </p>
           {displayValue !== '--' && displayValue !== '...' && (
-            <span className="text-base font-normal text-gray-500 ml-1">{unit}</span>
+            <span className="text-sm font-normal text-gray-500 flex-shrink-0">{unit}</span>
           )}
-        </p>
+        </div>
         {/* หมายเลข 2: แสดงการแจ้งเตือน */}
         {showWarning && value !== null && (
           <div className="flex items-center gap-1 mt-1">
             <AlertCircle className="w-3 h-3 text-red-600" />
-            <span className="text-xs text-red-600 font-medium">{warningMessage}</span>
+            <span className="text-xs text-red-600 font-medium truncate">{warningMessage}</span>
           </div>
         )}
       </div>
