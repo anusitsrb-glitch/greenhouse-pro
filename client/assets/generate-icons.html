@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Generate GreenHouse Pro Icons</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: sans-serif;
+      background: #f5f5f5;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .icon-preview {
+      display: inline-block;
+      margin: 20px;
+      text-align: center;
+    }
+    .icon-box {
+      position: relative;
+      display: inline-block;
+    }
+    /* Icon styles - same as PremiumLeafLogo */
+    .icon-glow {
+      position: absolute;
+      inset: -8px;
+      border-radius: 22px;
+      background: rgba(16, 185, 129, 0.15);
+      filter: blur(40px);
+    }
+    .icon-badge {
+      position: relative;
+      width: 1024px;
+      height: 1024px;
+      border-radius: 226px;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .icon-svg {
+      width: 460px;
+      height: 460px;
+    }
+    .icon-highlight {
+      position: absolute;
+      inset: 0;
+      border-radius: 226px;
+      background: radial-gradient(circle at 30% 20%, rgba(255,255,255,0.35), transparent 60%);
+    }
+    button {
+      margin: 10px;
+      padding: 12px 24px;
+      background: #10b981;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    button:hover {
+      background: #059669;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>GreenHouse Pro Icons Generator</h1>
+    
+    <div class="icon-preview">
+      <h3>App Icon (1024x1024)</h3>
+      <div class="icon-box">
+        <div class="icon-glow"></div>
+        <div class="icon-badge" id="icon">
+          <svg viewBox="0 0 128 128" class="icon-svg" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="stroke" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#ffffff" stop-opacity="0.98" />
+                <stop offset="100%" stop-color="#ffffff" stop-opacity="0.78" />
+              </linearGradient>
+            </defs>
+            <g fill="none" stroke="url(#stroke)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M64 24c-20 12-34 33-34 54 0 24 16 40 34 40s34-16 34-40c0-21-14-42-34-54Z" />
+              <path d="M64 42v58" opacity="0.55" />
+              <path d="M64 64c11-7 20-11 29-13" opacity="0.28" />
+              <path d="M64 78c-11-7-20-11-29-13" opacity="0.22" />
+            </g>
+          </svg>
+          <div class="icon-highlight"></div>
+        </div>
+      </div>
+      <br>
+      <button onclick="downloadIcon()">Download icon.png</button>
+    </div>
+
+    <div class="icon-preview">
+      <h3>Splash Screen (2732x2732)</h3>
+      <div class="icon-box" style="transform: scale(0.5);">
+        <div class="icon-glow"></div>
+        <div class="icon-badge" id="splash" style="width: 2732px; height: 2732px; border-radius: 603px;">
+          <svg viewBox="0 0 128 128" style="width: 1230px; height: 1230px;" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="stroke2" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#ffffff" stop-opacity="0.98" />
+                <stop offset="100%" stop-color="#ffffff" stop-opacity="0.78" />
+              </linearGradient>
+            </defs>
+            <g fill="none" stroke="url(#stroke2)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M64 24c-20 12-34 33-34 54 0 24 16 40 34 40s34-16 34-40c0-21-14-42-34-54Z" />
+              <path d="M64 42v58" opacity="0.55" />
+              <path d="M64 64c11-7 20-11 29-13" opacity="0.28" />
+              <path d="M64 78c-11-7-20-11-29-13" opacity="0.22" />
+            </g>
+          </svg>
+          <div class="icon-highlight" style="border-radius: 603px;"></div>
+        </div>
+      </div>
+      <br>
+      <button onclick="downloadSplash()">Download splash.png</button>
+    </div>
+  </div>
+
+  <canvas id="canvas" style="display:none;"></canvas>
+
+  <script>
+    function downloadIcon() {
+      downloadElement('icon', 1024, 1024, 'icon.png');
+    }
+
+    function downloadSplash() {
+      downloadElement('splash', 2732, 2732, 'splash.png');
+    }
+
+    function downloadElement(elementId, width, height, filename) {
+      const element = document.getElementById(elementId);
+      const canvas = document.getElementById('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      
+      const ctx = canvas.getContext('2d');
+      
+      // Draw gradient background
+      const gradient = ctx.createLinearGradient(0, 0, width, height);
+      gradient.addColorStop(0, '#10b981');
+      gradient.addColorStop(1, '#059669');
+      
+      // Draw rounded rectangle
+      const radius = width * 0.221;
+      ctx.beginPath();
+      ctx.moveTo(radius, 0);
+      ctx.lineTo(width - radius, 0);
+      ctx.quadraticCurveTo(width, 0, width, radius);
+      ctx.lineTo(width, height - radius);
+      ctx.quadraticCurveTo(width, height, width - radius, height);
+      ctx.lineTo(radius, height);
+      ctx.quadraticCurveTo(0, height, 0, height - radius);
+      ctx.lineTo(0, radius);
+      ctx.quadraticCurveTo(0, 0, radius, 0);
+      ctx.closePath();
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      
+      // Draw SVG
+      const svgData = `
+        <svg viewBox="0 0 128 128" width="${width * 0.45}" height="${height * 0.45}" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="s" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#ffffff" stop-opacity="0.98" />
+              <stop offset="100%" stop-color="#ffffff" stop-opacity="0.78" />
+            </linearGradient>
+          </defs>
+          <g fill="none" stroke="url(#s)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M64 24c-20 12-34 33-34 54 0 24 16 40 34 40s34-16 34-40c0-21-14-42-34-54Z" />
+            <path d="M64 42v58" opacity="0.55" />
+            <path d="M64 64c11-7 20-11 29-13" opacity="0.28" />
+            <path d="M64 78c-11-7-20-11-29-13" opacity="0.22" />
+          </g>
+        </svg>`;
+      
+      const img = new Image();
+      const blob = new Blob([svgData], {type: 'image/svg+xml'});
+      const url = URL.createObjectURL(blob);
+      
+      img.onload = function() {
+        ctx.drawImage(img, width * 0.275, height * 0.275, width * 0.45, height * 0.45);
+        
+        // Add highlight
+        const highlightGradient = ctx.createRadialGradient(
+          width * 0.3, height * 0.2, 0,
+          width * 0.3, height * 0.2, width * 0.6
+        );
+        highlightGradient.addColorStop(0, 'rgba(255,255,255,0.35)');
+        highlightGradient.addColorStop(0.6, 'transparent');
+        ctx.fillStyle = highlightGradient;
+        ctx.fill();
+        
+        // Download
+        canvas.toBlob(function(blob) {
+          const link = document.createElement('a');
+          link.download = filename;
+          link.href = URL.createObjectURL(blob);
+          link.click();
+        });
+        
+        URL.revokeObjectURL(url);
+      };
+      
+      img.src = url;
+    }
+  </script>
+</body>
+</html>

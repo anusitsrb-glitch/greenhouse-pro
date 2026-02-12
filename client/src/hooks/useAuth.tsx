@@ -65,28 +65,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await authApi.login(username, password);
 
+      console.log('🟦 Login response:', response); // เพิ่ม debug log
+
       if (response.success && response.data) {
+        // Set CSRF token
         if (response.data.csrfToken) {
           api.setCsrfToken(response.data.csrfToken);
+          console.log('✅ CSRF token set'); // debug
         }
 
-        const meResponse = await authApi.me();
-        if (meResponse.success && meResponse.data?.user) {
+        // ✅ ใช้ user จาก login response โดยตรง (ไม่ต้องเรียก /me)
+        if (response.data.user) {
+          console.log('✅ Setting user state:', response.data.user); // debug
           setState({
-            user: meResponse.data.user as User,
+            user: response.data.user as User,
             isLoading: false,
             isAuthenticated: true,
           });
           return true;
+        } else {
+          console.error('❌ No user in response data');
+          setState({
+            user: null,
+            isLoading: false,
+            isAuthenticated: false,
+          });
+          return false;
         }
-
-        setState({
-          user: response.data.user as User,
-          isLoading: false,
-          isAuthenticated: true,
-        });
-        return true;
       } else {
+        console.error('❌ Login failed:', response.error);
         setState({
           user: null,
           isLoading: false,
@@ -95,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return false;
       }
     } catch (e) {
-      console.error('Login error:', e);
+      console.error('🔴 Login exception:', e);
       setState({
         user: null,
         isLoading: false,

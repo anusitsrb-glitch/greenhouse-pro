@@ -54,10 +54,12 @@ function MiniSensor({
         <Icon className={cn('w-4 h-4 shrink-0', colorClass)} />
         <span className="text-sm text-slate-600 truncate">{label}</span>
       </div>
-      <div className="text-sm font-semibold text-slate-900 tabular-nums">
-        {displayValue}
+      <div className="flex items-baseline gap-1">
+        <span className="text-sm font-semibold text-slate-900 tabular-nums truncate">
+          {displayValue}
+        </span>
         {displayValue !== '--' && displayValue !== '...' && unit && (
-          <span className="font-normal text-slate-500 ml-1">{unit}</span>
+          <span className="text-xs font-normal text-slate-500 flex-shrink-0">{unit}</span>
         )}
       </div>
     </div>
@@ -246,7 +248,7 @@ export function SoilNodeCard({
             icon={Zap}
             label="EC"
             value={ec}
-            unit="us/cm"
+            unit="µS/cm"
             colorClass="text-amber-600"
             isLoading={isLoading}
             isReady={isReady}

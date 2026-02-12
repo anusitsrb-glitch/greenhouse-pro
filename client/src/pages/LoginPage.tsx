@@ -65,7 +65,7 @@ export function LoginPage() {
     }
   }, []);
 
-  const handleSubmit = async (e: FormEvent) => {
+ const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -80,18 +80,29 @@ export function LoginPage() {
 
     setIsSubmitting(true);
     try {
+      console.log('🔵 Calling login...'); // debug
       const success = await login(username.trim(), password);
+      console.log('🟢 Login result:', success); // debug
 
       if (success) {
+        console.log('✅ Login success!'); // debug
+        
         if (remember) localStorage.setItem('gh_remember_user', username.trim());
         else localStorage.removeItem('gh_remember_user');
 
-        navigate('/');
+        console.log('🚀 Redirecting to /'); // debug
+        
+        // ✅ ใช้ window.location.href แทน navigate (force full page reload)
+        window.location.href = '/';
+        
+        // หรือถ้าอยากใช้ navigate ให้ใส่ replace: true
+        // navigate('/', { replace: true });
       } else {
+        console.log('❌ Login failed'); // debug
         setError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
       }
     } catch (err) {
-      console.error('Login error:', err);
+      console.error('🔴 Login error:', err);
       setError('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
     } finally {
       setIsSubmitting(false);
