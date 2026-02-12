@@ -75,10 +75,10 @@ function SensorDisplay({
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm text-gray-500 truncate">{label}</p>
-        <div className="flex items-baseline gap-1">
-          <p className="text-2xl font-bold text-gray-900 truncate">
+        <div className="flex items-baseline gap-1 flex-wrap">
+          <span className="text-2xl font-bold text-gray-900">
             {displayValue}
-          </p>
+          </span>
           {displayValue !== '--' && displayValue !== '...' && (
             <span className="text-sm font-normal text-gray-500 flex-shrink-0">{unit}</span>
           )}
