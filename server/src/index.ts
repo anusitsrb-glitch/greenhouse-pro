@@ -146,13 +146,10 @@ app.use(
     rolling: true,
     cookie: {
       httpOnly: true,
-      // ✅ Updated for Capacitor cross-origin cookies
-      // express-session typings allow boolean; runtime accepts 'auto' in some setups, but safest is boolean.
-      // We'll keep your intent: secure true in production (behind HTTPS proxy), false in dev.
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      domain: undefined, // Let browser handle it
+      secure: true,  // ✅ เปลี่ยนเป็น true เสมอ (Railway ใช้ HTTPS)
+      sameSite: 'none',  // ✅ เปลี่ยนเป็น 'none' เสมอ
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      domain: undefined,
     },
   })
 );
