@@ -74,13 +74,13 @@ function SensorDisplay({
         <Icon className={cn('w-6 h-6', colorClass)} />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-gray-500 truncate">{label}</p>
+        <p className="text-xs text-gray-500 mb-0.5">{label}</p>
         <div className="flex items-baseline gap-1 flex-wrap">
-          <span className="text-2xl font-bold text-gray-900">
+          <span className="text-xl font-bold text-gray-900">
             {displayValue}
           </span>
           {displayValue !== '--' && displayValue !== '...' && (
-            <span className="text-sm font-normal text-gray-500 flex-shrink-0">{unit}</span>
+            <span className="text-xs font-normal text-gray-500 flex-shrink-0">{unit}</span>
           )}
         </div>
         {/* หมายเลข 2: แสดงการแจ้งเตือน */}
@@ -100,7 +100,7 @@ export function AirSensorCard({ data, timestamps, isLoading, isReady }: AirSenso
     {
       key: TELEMETRY_KEYS.AIR.TEMP,
       icon: Thermometer,
-      label: 'อุณหภูมิอากาศ',
+      label: 'อุณหภูมิ',
       unit: '°C',
       colorClass: 'text-red-500',
       bgClass: 'bg-red-100',
@@ -114,7 +114,7 @@ export function AirSensorCard({ data, timestamps, isLoading, isReady }: AirSenso
     {
       key: TELEMETRY_KEYS.AIR.HUMIDITY,
       icon: Droplets,
-      label: 'ความชื้นอากาศ',
+      label: 'ความชื้น',
       unit: '%RH',
       colorClass: 'text-blue-500',
       bgClass: 'bg-blue-100',
