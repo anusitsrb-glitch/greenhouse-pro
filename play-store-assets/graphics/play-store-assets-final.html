@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GreenHouse Pro - Play Store Assets</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+        .canvas-container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .preview {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        canvas {
+            border: 2px solid #ccc;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        button {
+            padding: 12px 24px;
+            background: #10b981;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: 600;
+            margin: 5px;
+        }
+        button:hover {
+            background: #059669;
+        }
+        .info {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 800px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 { color: #047857; }
+        h3 { color: #059669; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <div class="info">
+        <h1>🌿 GreenHouse Pro - Play Store Assets</h1>
+        <p><strong>โลโก้:</strong> PremiumLeafLogo (จาก LoginPage.tsx - 100% เหมือนกัน)</p>
+        <p><strong>สไตล์:</strong> Professional Green Gradient</p>
+    </div>
+    
+    <div class="canvas-container">
+        <div class="preview">
+            <h3>Feature Graphic (1024 x 500)</h3>
+            <canvas id="featureCanvas" width="1024" height="500"></canvas>
+            <br>
+            <button onclick="downloadFeature()">📥 Download Feature Graphic</button>
+        </div>
+        
+        <div class="preview">
+            <h3>App Icon (512 x 512)</h3>
+            <canvas id="iconCanvas" width="512" height="512"></canvas>
+            <br>
+            <button onclick="downloadIcon()">📥 Download App Icon</button>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // PremiumLeafLogo - จาก LoginPage.tsx (เป๊ะ 100%)
+        // ============================================================
+        function drawPremiumLeafLogo(ctx, x, y, size) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(size, size);
+            
+            // Gradient for leaf stroke
+            const gradient = ctx.createLinearGradient(0, 0, 128, 128);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0.98)');
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0.78)');
+            
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = 10;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.fillStyle = 'none';
+            
+            // Main leaf path
+            ctx.beginPath();
+            ctx.moveTo(64, 24);
+            ctx.bezierCurveTo(44, 36, 30, 57, 30, 78);
+            ctx.bezierCurveTo(30, 102, 46, 118, 64, 118);
+            ctx.bezierCurveTo(82, 118, 98, 102, 98, 78);
+            ctx.bezierCurveTo(98, 57, 84, 36, 64, 24);
+            ctx.closePath();
+            ctx.stroke();
+            
+            // Center vein
+            ctx.globalAlpha = 0.55;
+            ctx.beginPath();
+            ctx.moveTo(64, 42);
+            ctx.lineTo(64, 100);
+            ctx.stroke();
+            
+            // Right side vein
+            ctx.globalAlpha = 0.28;
+            ctx.beginPath();
+            ctx.moveTo(64, 64);
+            ctx.bezierCurveTo(75, 57, 84, 53, 93, 51);
+            ctx.stroke();
+            
+            // Left side vein
+            ctx.globalAlpha = 0.22;
+            ctx.beginPath();
+            ctx.moveTo(64, 78);
+            ctx.bezierCurveTo(53, 71, 44, 67, 35, 65);
+            ctx.stroke();
+            
+            ctx.globalAlpha = 1;
+            ctx.restore();
+        }
+
+        // ============================================================
+        // Feature Graphic (1024 x 500)
+        // ============================================================
+        function drawFeatureGraphic() {
+            const canvas = document.getElementById('featureCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Background gradient (professional green)
+            const bgGradient = ctx.createLinearGradient(0, 0, 1024, 500);
+            bgGradient.addColorStop(0, '#064e3b');
+            bgGradient.addColorStop(0.5, '#065f46');
+            bgGradient.addColorStop(1, '#047857');
+            ctx.fillStyle = bgGradient;
+            ctx.fillRect(0, 0, 1024, 500);
+
+            // Subtle diagonal pattern
+            ctx.globalAlpha = 0.03;
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            for (let i = -500; i < 1524; i += 30) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i + 500, 500);
+                ctx.stroke();
+            }
+            ctx.globalAlpha = 1;
+
+            // Decorative circles
+            ctx.globalAlpha = 0.06;
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(900, 80, 200, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(100, 420, 150, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+
+            // Logo circle background
+            const centerX = 180;
+            const centerY = 250;
+            const radius = 90;
+            
+            // Soft glow (from PremiumLeafLogo)
+            const glowGradient = ctx.createRadialGradient(centerX, centerY, radius * 0.6, centerX, centerY, radius * 2);
+            glowGradient.addColorStop(0, 'rgba(16, 185, 129, 0.15)');
+            glowGradient.addColorStop(1, 'rgba(16, 185, 129, 0)');
+            ctx.fillStyle = glowGradient;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius * 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Icon badge (gradient from emerald-500 to green-600)
+            const badgeGradient = ctx.createLinearGradient(
+                centerX - radius, centerY - radius,
+                centerX + radius, centerY + radius
+            );
+            badgeGradient.addColorStop(0, '#10b981'); // emerald-500
+            badgeGradient.addColorStop(1, '#059669'); // green-600
+            
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
+            ctx.shadowBlur = 20;
+            ctx.shadowOffsetY = 6;
+            ctx.fillStyle = badgeGradient;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowColor = 'transparent';
+            
+            // Ring (ring-1 ring-black/5)
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.05)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            // Highlight (radial gradient at 30% 20%)
+            const highlightGradient = ctx.createRadialGradient(
+                centerX - radius * 0.4, centerY - radius * 0.6, 0,
+                centerX - radius * 0.4, centerY - radius * 0.6, radius * 1.2
+            );
+            highlightGradient.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
+            highlightGradient.addColorStop(0.6, 'transparent');
+            ctx.fillStyle = highlightGradient;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw PremiumLeafLogo (w-9 h-9 = 36px in 64px circle, scale = 0.7)
+            const logoScale = 0.7;
+            drawPremiumLeafLogo(ctx, centerX - 64 * logoScale, centerY - 64 * logoScale, logoScale);
+
+            // App name
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 72px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+            ctx.shadowBlur = 15;
+            ctx.shadowOffsetY = 4;
+            ctx.fillText('GreenHouse Pro', 300, 215);
+            ctx.shadowColor = 'transparent';
+
+            // Tagline
+            ctx.font = '30px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.fillText('Smart Greenhouse Management System', 300, 268);
+
+            // Accent line
+            ctx.strokeStyle = 'rgba(16, 185, 129, 0.6)';
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(300, 290);
+            ctx.lineTo(500, 290);
+            ctx.stroke();
+
+            // Features
+            ctx.font = '20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
+            ctx.fillText('📊  Real-time Monitoring', 305, 335);
+            ctx.fillText('⚡  Automation Control', 305, 385);
+            ctx.fillText('📱  Mobile & Web', 535, 335);
+            ctx.fillText('🌡️  IoT Sensors', 535, 385);
+        }
+
+        // ============================================================
+        // App Icon (512 x 512)
+        // ============================================================
+        function drawAppIcon() {
+            const canvas = document.getElementById('iconCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Soft glow background
+            const glowGradient = ctx.createRadialGradient(256, 256, 150, 256, 256, 300);
+            glowGradient.addColorStop(0, 'rgba(16, 185, 129, 0.15)');
+            glowGradient.addColorStop(1, 'rgba(16, 185, 129, 0)');
+            ctx.fillStyle = glowGradient;
+            ctx.fillRect(0, 0, 512, 512);
+            
+            // Icon badge gradient (from emerald-500 to green-600)
+            const badgeGradient = ctx.createLinearGradient(0, 0, 512, 512);
+            badgeGradient.addColorStop(0, '#10b981');
+            badgeGradient.addColorStop(1, '#059669');
+            
+            // Rounded rectangle (rounded-2xl ≈ 16px radius, scale to 512)
+            const radius = 113; // 512 * 0.221
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+            ctx.shadowBlur = 30;
+            ctx.shadowOffsetY = 10;
+            ctx.beginPath();
+            ctx.moveTo(radius, 0);
+            ctx.lineTo(512 - radius, 0);
+            ctx.quadraticCurveTo(512, 0, 512, radius);
+            ctx.lineTo(512, 512 - radius);
+            ctx.quadraticCurveTo(512, 512, 512 - radius, 512);
+            ctx.lineTo(radius, 512);
+            ctx.quadraticCurveTo(0, 512, 0, 512 - radius);
+            ctx.lineTo(0, radius);
+            ctx.quadraticCurveTo(0, 0, radius, 0);
+            ctx.closePath();
+            ctx.fillStyle = badgeGradient;
+            ctx.fill();
+            ctx.shadowColor = 'transparent';
+            
+            // Ring
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.05)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            
+            // Highlight
+            const highlightGradient = ctx.createRadialGradient(
+                512 * 0.3, 512 * 0.2, 0,
+                512 * 0.3, 512 * 0.2, 512 * 0.6
+            );
+            highlightGradient.addColorStop(0, 'rgba(255, 255, 255, 0.35)');
+            highlightGradient.addColorStop(0.6, 'transparent');
+            ctx.fillStyle = highlightGradient;
+            ctx.fill();
+            
+            // Draw PremiumLeafLogo centered (w-9 h-9 in w-16 h-16 = 36/64, scaled to 512)
+            const logoSize = (512 * 0.45) / 128; // 45% of icon size
+            drawPremiumLeafLogo(ctx, 256 - 64 * logoSize, 256 - 64 * logoSize, logoSize);
+        }
+
+        // ============================================================
+        // Download Functions
+        // ============================================================
+        function downloadFeature() {
+            const canvas = document.getElementById('featureCanvas');
+            const link = document.createElement('a');
+            link.download = 'feature-graphic.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        function downloadIcon() {
+            const canvas = document.getElementById('iconCanvas');
+            const link = document.createElement('a');
+            link.download = 'app-icon-512.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        // Draw on load
+        drawFeatureGraphic();
+        drawAppIcon();
+    </script>
+</body>
+</html>
