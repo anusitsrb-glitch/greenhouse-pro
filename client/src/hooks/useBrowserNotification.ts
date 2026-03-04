@@ -1,9 +1,11 @@
 /**
  * useBrowserNotification Hook
  * Handle browser notification permissions and display
+ * ✅ Patch M1: ซ่อน Browser Notification บน Capacitor (ใช้ไม่ได้ใน WebView)
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { ENV } from '@/config/env';
 
 type PermissionStatus = 'default' | 'granted' | 'denied';
 
@@ -11,11 +13,17 @@ export function useBrowserNotification() {
   const [permission, setPermission] = useState<PermissionStatus>('default');
   const [isSupported, setIsSupported] = useState(false);
 
-  // Check if browser supports notifications
   useEffect(() => {
+    // ✅ บน Capacitor ให้ isSupported = false เสมอ
+    // เพื่อซ่อน permission banner และไม่เรียก Browser Notification API
+    if (ENV.IS_CAPACITOR) {
+      setIsSupported(false);
+      return;
+    }
+
     const supported = 'Notification' in window;
     setIsSupported(supported);
-    
+
     if (supported) {
       setPermission(Notification.permission);
     }
@@ -25,8 +33,8 @@ export function useBrowserNotification() {
    * Request notification permission from user
    */
   const requestPermission = useCallback(async (): Promise<boolean> => {
-    if (!isSupported) {
-      console.warn('Browser notifications are not supported');
+    if (!isSupported || ENV.IS_CAPACITOR) {
+      console.warn('Browser notifications are not supported on this platform');
       return false;
     }
 
@@ -45,8 +53,8 @@ export function useBrowserNotification() {
    */
   const showNotification = useCallback(
     (title: string, options?: NotificationOptions) => {
-      if (!isSupported) {
-        console.warn('Browser notifications are not supported');
+      if (!isSupported || ENV.IS_CAPACITOR) {
+        console.warn('Browser notifications are not supported on this platform');
         return null;
       }
 
@@ -57,7 +65,7 @@ export function useBrowserNotification() {
 
       try {
         const notification = new Notification(title, {
-          icon: '/favicon.ico', // Change to your app icon
+          icon: '/favicon.ico',
           badge: '/favicon.ico',
           ...options,
         });

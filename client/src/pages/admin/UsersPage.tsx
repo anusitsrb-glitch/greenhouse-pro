@@ -17,6 +17,7 @@ import {
 
 import { cn } from '@/lib/utils';
 import type { UserRole } from '@/types';
+import { api } from '@/lib/api';
 
 const ROLE_RANK: Record<string, number> = {
   superadmin: 0,
@@ -62,9 +63,7 @@ export function UsersPage() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch('/api/auth/me', { credentials: 'include' });
-        if (!r.ok) return;
-        const data: any = await r.json();
+        const data: any = await api.get('/auth/me');
         if (!data?.success) return;
         const u = data?.data?.user;
         if (typeof u?.role === 'string') setActorRole(u.role);

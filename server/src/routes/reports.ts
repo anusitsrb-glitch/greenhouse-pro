@@ -29,7 +29,7 @@ const reportQuerySchema = z.object({
 // ============================================================
 
 function hasProjectAccess(userId: number, userRole: string, projectKey: string): boolean {
-  if (userRole === 'admin') return true;
+  if (userRole === 'admin' || userRole === 'superadmin') return true;
 
   const access = db.prepare(`
     SELECT 1 FROM user_project_access upa

@@ -1,9 +1,14 @@
 import { useState } from 'react';
 import { Card, Button } from '@/components/ui';
-import { adminApi } from '@/lib/adminApi';
 import { useToast } from '@/hooks/useToast';
 import { FileText, Download, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { getApiUrl, ENV } from '@/config/env';
+import { api } from '@/lib/api';
+
+// ✅ Mobile: ใช้ Filesystem + Share สำหรับ download
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 
 interface ReportDownloadProps {
   projectKey: string;
@@ -26,36 +31,67 @@ export function ReportDownload({ projectKey, ghKey }: ReportDownloadProps) {
   const handleDownload = async () => {
     setIsDownloading(true);
     try {
-      // Get CSRF token first
-      const csrfResponse = await fetch('/api/auth/csrf', { credentials: 'include' });
-      const csrfData = await csrfResponse.json();
-      const csrfToken = csrfData.data?.csrfToken;
+      const filename = `greenhouse-report-${projectKey}-${ghKey}-${selectedPeriod}.pdf`;
 
-      // Fetch PDF
-      const url = `/api/reports/download?project=${projectKey}&gh=${ghKey}&period=${selectedPeriod}`;
-      const response = await fetch(url, {
-        credentials: 'include',
-        headers: {
-          'X-CSRF-Token': csrfToken || '',
-        },
-      });
+      if (ENV.IS_CAPACITOR) {
+        // ✅ Mobile: ใช้ CapacitorHttp ผ่าน api แล้วบันทึกด้วย Filesystem
+        const { CapacitorHttp } = await import('@capacitor/core');
+        const csrf = await api.getCsrfToken();
+        const url = getApiUrl(`/api/reports/download?project=${projectKey}&gh=${ghKey}&period=${selectedPeriod}`);
 
-      if (!response.ok) {
-        throw new Error('ไม่สามารถดาวน์โหลดรายงานได้');
+        const response = await CapacitorHttp.get({
+          url,
+          headers: { 'X-CSRF-Token': csrf },
+          responseType: 'blob',
+          webFetchExtra: { credentials: 'include' },
+        });
+
+        // บันทึกไฟล์ลงเครื่อง
+        await Filesystem.writeFile({
+          path: filename,
+          data: response.data,
+          directory: Directory.Cache,
+        });
+
+        const fileUri = await Filesystem.getUri({
+          path: filename,
+          directory: Directory.Cache,
+        });
+
+        // เปิด Share sheet ให้ผู้ใช้บันทึก/แชร์
+        await Share.share({
+          title: 'GreenHouse Report',
+          url: fileUri.uri,
+          dialogTitle: 'บันทึกหรือแชร์รายงาน',
+        });
+
+        addToast({ type: 'success', message: 'ดาวน์โหลดรายงานสำเร็จ' });
+      } else {
+        // ✅ Web: ใช้ fetch + <a download> เหมือนเดิม
+        const csrfResponse = await fetch(getApiUrl('/api/auth/csrf'), { credentials: 'include' });
+        const csrfData = await csrfResponse.json();
+        const csrfToken = csrfData.data?.csrfToken;
+
+        const url = getApiUrl(`/api/reports/download?project=${projectKey}&gh=${ghKey}&period=${selectedPeriod}`);
+        const response = await fetch(url, {
+          credentials: 'include',
+          headers: { 'X-CSRF-Token': csrfToken || '' },
+        });
+
+        if (!response.ok) throw new Error('ไม่สามารถดาวน์โหลดรายงานได้');
+
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(downloadUrl);
+
+        addToast({ type: 'success', message: 'ดาวน์โหลดรายงานสำเร็จ' });
       }
-
-      // Download file
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = `greenhouse-report-${projectKey}-${ghKey}-${selectedPeriod}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(downloadUrl);
-
-      addToast({ type: 'success', message: 'ดาวน์โหลดรายงานสำเร็จ' });
     } catch (error) {
       addToast({ type: 'error', message: error instanceof Error ? error.message : 'เกิดข้อผิดพลาด' });
     } finally {
