@@ -45,3 +45,12 @@ backups/
 tmp/
 temp/
 client/android/
+
+# Release Keystore - DO NOT COMMIT
+*.keystore
+*.jks
+android/key.properties
+greenhouse-pro-release.keystore
+client/android/greenhouse-pro-release.keystore
+client/android/key.properties
+/android/

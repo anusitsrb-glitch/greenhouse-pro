@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { PageLoading, ToastContainer } from '@/components/ui';
 import { useToast } from '@/hooks/useToast';
@@ -19,7 +19,6 @@ import {
   PestDiseasePage, YieldPage, WaterUsagePage 
 } from '@/pages/agriculture';
 
-// 🆕 Phase 2 Pages
 import {
   ControlHistoryPage,
   NotificationSettingsPage,
@@ -28,14 +27,16 @@ import {
 
 import { ReactNode, useEffect } from 'react';
 import { useOfflineBanner } from '@/hooks/useNetworkStatus';
+import { ENV } from '@/config/env';
 
-// Check if user has at least the required role
+// ✅ Patch M2: Android back button
+import { App as CapacitorApp } from '@capacitor/app';
+
 function hasRole(userRole: string | undefined, allowedRoles: string[]): boolean {
   if (!userRole) return false;
   return allowedRoles.includes(userRole);
 }
 
-// Protected route component - any authenticated user
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
   if (isLoading) return <PageLoading />;
@@ -43,7 +44,6 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-// Admin route (requires admin or superadmin role)
 function AdminRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading, user } = useAuth();
   if (isLoading) return <PageLoading />;
@@ -54,7 +54,6 @@ function AdminRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-// Operator route (requires operator, admin, or superadmin role)
 function OperatorRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading, user } = useAuth();
   if (isLoading) return <PageLoading />;
@@ -65,7 +64,6 @@ function OperatorRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-// Public route (redirect to home if authenticated)
 function PublicRoute({ children }: { children: ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
   if (isLoading) return <PageLoading />;
@@ -73,11 +71,29 @@ function PublicRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-// Main app content with routes
 function AppRoutes() {
   const { toasts, removeToast } = useToast();
   const { isAuthenticated, user } = useAuth();
   const { showBanner } = useOfflineBanner();
+  const navigate = useNavigate();
+
+  // ✅ Patch M2: Android back button — ย้อน route แทนการออกแอป
+  useEffect(() => {
+    if (!ENV.IS_CAPACITOR) return;
+
+    const handler = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+      if (canGoBack) {
+        navigate(-1);
+      } else {
+        // อยู่หน้าแรกสุดแล้ว → ออกแอป
+        CapacitorApp.exitApp();
+      }
+    });
+
+    return () => {
+      handler.then((h) => h.remove());
+    };
+  }, [navigate]);
 
   useEffect(() => {
     if (!user?.theme) return;
@@ -103,7 +119,6 @@ function AppRoutes() {
 
   return (
     <>
-      {/* Offline Banner */}
       {showBanner && (
         <div className="fixed top-0 left-0 right-0 bg-red-500 text-white text-center py-2 z-50 text-sm font-medium">
           ⚠️ ไม่มีการเชื่อมต่ออินเทอร์เน็ต
@@ -113,16 +128,13 @@ function AppRoutes() {
       {isAuthenticated && <NotificationPermissionBanner />}
       
       <Routes>
-        {/* Public Routes */}
         <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
         
-        {/* Protected Routes - All authenticated users */}
         <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         <Route path="/project/:projectKey" element={<ProtectedRoute><ProjectPage /></ProtectedRoute>} />
         <Route path="/project/:projectKey/:ghKey" element={<ProtectedRoute><GreenhousePage /></ProtectedRoute>} />
         
-        {/* Agriculture Routes */}
         <Route path="/agriculture/crops" element={<ProtectedRoute><CropsPage /></ProtectedRoute>} />
         <Route path="/agriculture/growth" element={<ProtectedRoute><GrowthRecordsPage /></ProtectedRoute>} />
         <Route path="/agriculture/fertilizer" element={<ProtectedRoute><FertilizerPage /></ProtectedRoute>} />
@@ -130,15 +142,12 @@ function AppRoutes() {
         <Route path="/agriculture/yield" element={<ProtectedRoute><YieldPage /></ProtectedRoute>} />
         <Route path="/agriculture/water" element={<ProtectedRoute><WaterUsagePage /></ProtectedRoute>} />
         
-        {/* Alerts Route */}
         <Route path="/alerts" element={<ProtectedRoute><AlertsPage /></ProtectedRoute>} />
         
-        {/* 🆕 Phase 2 Routes - Notification System */}
         <Route path="/control-history" element={<ProtectedRoute><ControlHistoryPage /></ProtectedRoute>} />
         <Route path="/notifications" element={<ProtectedRoute><NotificationsListPage /></ProtectedRoute>} />
         <Route path="/notifications/settings" element={<ProtectedRoute><NotificationSettingsPage /></ProtectedRoute>} />
         
-        {/* Admin Routes */}
         <Route path="/admin/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
         <Route path="/admin/projects" element={<AdminRoute><ProjectsPage /></AdminRoute>} />
         <Route path="/admin/greenhouses" element={<AdminRoute><GreenhousesPage /></AdminRoute>} />
@@ -151,7 +160,6 @@ function AppRoutes() {
         <Route path="/admin/scenes" element={<AdminRoute><ScenesPage /></AdminRoute>} />
         <Route path="/admin/control-history" element={<AdminRoute><AdminControlHistoryPage /></AdminRoute>} />
         
-        {/* Catch all - redirect to home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       

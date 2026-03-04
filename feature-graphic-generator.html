@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GreenHouse Pro - Feature Graphic</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+        canvas {
+            border: 2px solid #ccc;
+            background: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        button {
+            padding: 12px 24px;
+            background: #22c55e;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        button:hover {
+            background: #16a34a;
+        }
+        .info {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 600px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="info">
+        <h1>🌿 GreenHouse Pro - Feature Graphic</h1>
+        <p><strong>ขนาด:</strong> 1024 x 500 px (Google Play Store)</p>
+        <p><strong>โลโก้:</strong> Modern Luxury Leaf (NEW)</p>
+    </div>
+    
+    <canvas id="canvas" width="1024" height="500"></canvas>
+    
+    <button onclick="downloadImage()">📥 Download Feature Graphic</button>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // ============================================================
+        // Modern Luxury Leaf Logo (NEW) - replaces old herb leaf
+        // ============================================================
+        function drawHerbLeaf(x, y, scale) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
+
+            // Subtle shadow for premium depth
+            ctx.shadowColor = 'rgba(0,0,0,0.10)';
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetY = 4;
+
+            // Two-leaf sprout
+            drawModernLeaf(-10, 8, 1.0, -22, true);   // left leaf
+            drawModernLeaf(12, 10, 0.92, 28, false);  // right leaf
+
+            // Stem (clean & thin)
+            ctx.shadowColor = 'transparent';
+            const stemGrad = ctx.createLinearGradient(0, 32, 0, -30);
+            stemGrad.addColorStop(0, '#0f766e');   // teal-green
+            stemGrad.addColorStop(1, '#22c55e');   // fresh green
+            ctx.strokeStyle = stemGrad;
+            ctx.lineWidth = 5;
+            ctx.lineCap = 'round';
+
+            ctx.beginPath();
+            ctx.moveTo(0, 42);
+            ctx.quadraticCurveTo(-2, 18, 2, -6);
+            ctx.stroke();
+
+            // Tiny highlight dot (premium detail)
+            ctx.fillStyle = 'rgba(255,255,255,0.40)';
+            ctx.beginPath();
+            ctx.arc(2, -8, 2.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawModernLeaf(x, y, size, angleDeg, isLeft) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate((angleDeg * Math.PI) / 180);
+            ctx.scale(size, size);
+
+            // Leaf fill gradient (soft, luxury)
+            const g = ctx.createLinearGradient(-10, -26, 14, 30);
+            g.addColorStop(0, '#d1fae5');   // mint (very light)
+            g.addColorStop(0.48, '#34d399'); // emerald
+            g.addColorStop(1, '#0f766e');   // teal depth
+            ctx.fillStyle = g;
+
+            // Thin outline stroke (luxury)
+            const sg = ctx.createLinearGradient(0, -28, 0, 30);
+            sg.addColorStop(0, 'rgba(255,255,255,0.45)');
+            sg.addColorStop(0.35, 'rgba(255,255,255,0.10)');
+            sg.addColorStop(1, 'rgba(0,0,0,0.10)');
+            ctx.strokeStyle = sg;
+
+            // Leaf shape (minimal)
+            const W = 26;
+            const H = 44;
+            const tipX = isLeft ? -1 : 1;
+
+            ctx.beginPath();
+            ctx.moveTo(0, 18); // base
+            ctx.quadraticCurveTo(-W, -4, tipX * 2, -H); // to tip
+            ctx.quadraticCurveTo(W, -6, 0, 18); // back
+            ctx.closePath();
+
+            ctx.fill();
+
+            ctx.lineWidth = 1.6;
+            ctx.globalAlpha = 0.9;
+            ctx.stroke();
+
+            // Mid vein (subtle)
+            ctx.globalAlpha = 0.35;
+            ctx.strokeStyle = 'rgba(15,118,110,0.55)';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.moveTo(0, 16);
+            ctx.quadraticCurveTo(tipX * 2, -10, tipX * 2, -36);
+            ctx.stroke();
+
+            // Highlight curve (premium shine)
+            ctx.globalAlpha = 0.22;
+            ctx.strokeStyle = 'rgba(255,255,255,0.70)';
+            ctx.lineWidth = 1.0;
+            ctx.beginPath();
+            ctx.moveTo(-6, 10);
+            ctx.quadraticCurveTo(-10, -8, -2, -28);
+            ctx.stroke();
+
+            ctx.restore();
+            ctx.globalAlpha = 1;
+        }
+
+        // ============================================================
+        // Feature Graphic
+        // ============================================================
+        function drawFeatureGraphic() {
+            // Background gradient
+            const bgGradient = ctx.createLinearGradient(0, 0, 1024, 500);
+            bgGradient.addColorStop(0, '#047857');
+            bgGradient.addColorStop(0.5, '#059669');
+            bgGradient.addColorStop(1, '#10b981');
+            ctx.fillStyle = bgGradient;
+            ctx.fillRect(0, 0, 1024, 500);
+
+            // Geometric pattern
+            ctx.globalAlpha = 0.05;
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 1024; i += 40) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, 500);
+                ctx.stroke();
+            }
+            for (let i = 0; i < 500; i += 40) {
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(1024, i);
+                ctx.stroke();
+            }
+            ctx.globalAlpha = 1;
+
+            // Decorative circles
+            ctx.globalAlpha = 0.08;
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(850, 120, 180, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(950, 400, 120, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+
+            // White circle background for logo
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
+            ctx.shadowBlur = 20;
+            ctx.shadowOffsetY = 6;
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(170, 250, 85, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowColor = 'transparent';
+
+            // Inner circle with subtle gradient
+            const circleGradient = ctx.createRadialGradient(170, 230, 0, 170, 250, 80);
+            circleGradient.addColorStop(0, 'rgba(209, 250, 229, 0.40)');
+            circleGradient.addColorStop(1, 'rgba(16, 185, 129, 0.10)');
+            ctx.fillStyle = circleGradient;
+            ctx.beginPath();
+            ctx.arc(170, 250, 75, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw NEW modern luxury leaf logo
+            drawHerbLeaf(170, 250, 1.15);
+
+            // App name
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 78px system-ui, -apple-system, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('GreenHouse Pro', 290, 210);
+
+            // Tagline
+            ctx.font = '34px system-ui, -apple-system, sans-serif';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+            ctx.fillText('Smart Greenhouse Management System', 290, 265);
+
+            // Decorative line
+            const lineGradient = ctx.createLinearGradient(290, 285, 720, 285);
+            lineGradient.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
+            lineGradient.addColorStop(1, 'rgba(255, 255, 255, 0.1)');
+            ctx.strokeStyle = lineGradient;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(290, 285);
+            ctx.lineTo(720, 285);
+            ctx.stroke();
+
+            // Features
+            ctx.font = '22px system-ui, -apple-system, sans-serif';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
+            ctx.fillText('📊  Real-time Monitoring', 290, 330);
+            ctx.fillText('⚡  Automation Control', 290, 370);
+            ctx.fillText('📱  Mobile & Web', 560, 330);
+            ctx.fillText('🌡️  IoT Sensors', 560, 370);
+        }
+
+        function downloadImage() {
+            const link = document.createElement('a');
+            link.download = 'feature-graphic.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        drawFeatureGraphic();
+    </script>
+</body>
+</html>

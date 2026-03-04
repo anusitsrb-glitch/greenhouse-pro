@@ -45,7 +45,7 @@ const createAlertSchema = z.object({
 // ============================================================
 
 function hasProjectAccess(userId: number, userRole: string, projectKey?: string): boolean {
-  if (userRole === 'admin') return true;
+  if (userRole === 'admin' || userRole === 'superadmin') return true;
   if (!projectKey) return false;
 
   const access = db.prepare(`
@@ -93,7 +93,7 @@ router.get('/', requireAuth, (req: Request, res: Response) => {
     const params: any[] = [];
 
     // Project access check for non-admin
-    if (req.session.role !== 'admin') {
+    if (req.session.role !== 'admin' && req.session.role !== 'superadmin') {
       query += ` AND p.id IN (SELECT project_id FROM user_project_access WHERE user_id = ?)`;
       params.push(req.session.userId);
     }
@@ -146,7 +146,7 @@ router.get('/', requireAuth, (req: Request, res: Response) => {
     `;
     const countParams: any[] = [];
 
-    if (req.session.role !== 'admin') {
+    if (req.session.role !== 'admin' && req.session.role !== 'superadmin') {
       countQuery += ` AND p.id IN (SELECT project_id FROM user_project_access WHERE user_id = ?)`;
       countParams.push(req.session.userId);
     }
@@ -270,7 +270,7 @@ router.put('/acknowledge-all', requireAuth, (req: Request, res: Response) => {
     `;
     const params: any[] = [req.session.userId];
 
-    if (req.session.role !== 'admin') {
+    if (req.session.role !== 'admin' && req.session.role !== 'superadmin') {
       query += ` AND p.id IN (SELECT project_id FROM user_project_access WHERE user_id = ?)`;
       params.push(req.session.userId);
     }
@@ -312,7 +312,7 @@ router.get('/stats', requireAuth, (req: Request, res: Response) => {
     let whereClause = `WHERE ah.created_at >= datetime('now', '-${daysNum} days')`;
     const params: any[] = [];
 
-    if (req.session.role !== 'admin') {
+    if (req.session.role !== 'admin' && req.session.role !== 'superadmin') {
       whereClause += ` AND p.id IN (SELECT project_id FROM user_project_access WHERE user_id = ?)`;
       params.push(req.session.userId);
     }
