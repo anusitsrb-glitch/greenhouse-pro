@@ -275,6 +275,25 @@ function startMonitoringServices() {
     // Start sensor alert monitoring (every 60 seconds)
     startSensorMonitoring(60);
 
+    // ✅ Keep-alive ping (ป้องกัน Railway sleep)
+    const selfUrl = process.env.RAILWAY_PUBLIC_DOMAIN
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/api/health`
+      : null;
+
+    if (selfUrl) {
+      setInterval(async () => {
+        try {
+          await fetch(selfUrl);
+          console.log('💓 Keep-alive ping sent');
+        } catch (e) {
+          console.error('💔 Keep-alive ping failed:', e);
+        }
+      }, 5 * 60 * 1000); // ทุก 5 นาที
+      console.log('✅ Keep-alive ping started:', selfUrl);
+    } else {
+      console.log('⚠️ Keep-alive ping skipped (RAILWAY_PUBLIC_DOMAIN not set)');
+    }
+
     console.log('✅ All monitoring services started');
   } catch (error) {
     console.error('❌ Failed to start monitoring services:', error);
