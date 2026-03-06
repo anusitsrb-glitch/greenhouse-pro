@@ -22,25 +22,61 @@ interface DashboardTabProps {
   userRole: string;
 }
 
-type MotorCmd = number; // 0/1/2
+type MotorCmd = number;
 type OptimisticMotorState = Record<string, MotorCmd | null>;
+type OptimisticRelayState = Record<string, boolean | null>;
 
-const OPTIMISTIC_MOTOR_TTL_MS = 12000; // กันค้างสำหรับมอเตอร์ (12s)
+const OPTIMISTIC_RELAY_TTL_MS = 8000;
+const OPTIMISTIC_MOTOR_TTL_MS = 12000;
+
+// ============================================================
+// ✅ Per-device Command Queue
+// รอคำสั่งแรกเสร็จก่อน แล้วค่อยส่งคำสั่งถัดไป
+// ถ้ามีคำสั่งรอใน queue เกิน 1 → เก็บแค่ล่าสุด (debounce)
+// ============================================================
+type QueuedCommand = () => Promise<void>;
+
+class DeviceQueue {
+  private running = false;
+  private pending: QueuedCommand | null = null; // เก็บแค่ล่าสุด
+
+  enqueue(cmd: QueuedCommand) {
+    if (this.running) {
+      // มีคำสั่งกำลังทำงานอยู่ → เก็บคำสั่งใหม่ไว้รอ (แทนที่ของเก่าถ้ามี)
+      this.pending = cmd;
+      return;
+    }
+    this.run(cmd);
+  }
+
+  private async run(cmd: QueuedCommand) {
+    this.running = true;
+    try {
+      await cmd();
+    } finally {
+      this.running = false;
+      if (this.pending) {
+        const next = this.pending;
+        this.pending = null;
+        this.run(next);
+      }
+    }
+  }
+}
 
 export function DashboardTab({ project, gh, isReady, isOnline, userRole }: DashboardTabProps) {
   const { addToast } = useToast();
 
-  // Fetch attributes (control states)
   const { data, isLoading, refetch, lastUpdated } = useAttributes({
     project,
     gh,
     keys: ALL_CONTROL_ATTRIBUTES,
     enabled: isReady && isOnline,
-    pollInterval: 5000, // ลด request (ใช้ optimistic ช่วยให้ UI เร็ว)
+    pollInterval: 5000,
   });
 
   // -------------------------
-  // ✅ Debounced refetch helper
+  // Debounced refetch helper
   // -------------------------
   const refetchTimerRef = useRef<number | null>(null);
 
@@ -59,6 +95,75 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
   }, []);
 
   // -------------------------
+  // ✅ Per-device queues
+  // แต่ละ relay/motor มี queue เป็นของตัวเอง
+  // -------------------------
+  const relayQueues = useRef<Record<string, DeviceQueue>>({});
+  const motorQueues = useRef<Record<string, DeviceQueue>>({});
+
+  const getRelayQueue = (key: string) => {
+    if (!relayQueues.current[key]) relayQueues.current[key] = new DeviceQueue();
+    return relayQueues.current[key];
+  };
+
+  const getMotorQueue = (key: string) => {
+    if (!motorQueues.current[key]) motorQueues.current[key] = new DeviceQueue();
+    return motorQueues.current[key];
+  };
+
+  // -------------------------
+  // ✅ Optimistic UI (Relays)
+  // -------------------------
+  const [optimisticRelays, setOptimisticRelays] = useState<OptimisticRelayState>({});
+  const relayTtlRef = useRef<Record<string, number>>({});
+
+  const clearRelayOptimistic = (relayKey: string) => {
+    const t = relayTtlRef.current[relayKey];
+    if (t) window.clearTimeout(t);
+    delete relayTtlRef.current[relayKey];
+    setOptimisticRelays((prev) => {
+      if (!(relayKey in prev)) return prev;
+      const next = { ...prev };
+      next[relayKey] = null;
+      return next;
+    });
+  };
+
+  const setRelayOptimistic = (relayKey: string, value: boolean) => {
+    setOptimisticRelays((prev) => ({ ...prev, [relayKey]: value }));
+    const old = relayTtlRef.current[relayKey];
+    if (old) window.clearTimeout(old);
+    relayTtlRef.current[relayKey] = window.setTimeout(() => {
+      clearRelayOptimistic(relayKey);
+    }, OPTIMISTIC_RELAY_TTL_MS);
+  };
+
+  // เคลียร์ optimistic relay เมื่อ data จริง match แล้ว
+  useEffect(() => {
+    for (const relay of RELAY_CONFIG) {
+      const opt = optimisticRelays[relay.key];
+      if (opt === null || opt === undefined) continue;
+      const real = normalizeBoolean(data[relay.cmdKey]);
+      if (real === opt) clearRelayOptimistic(relay.key);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
+  useEffect(() => {
+    if (isReady && isOnline) return;
+    setOptimisticRelays({});
+    Object.values(relayTtlRef.current).forEach((t) => window.clearTimeout(t));
+    relayTtlRef.current = {};
+  }, [isReady, isOnline]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(relayTtlRef.current).forEach((t) => window.clearTimeout(t));
+      relayTtlRef.current = {};
+    };
+  }, []);
+
+  // -------------------------
   // ✅ Optimistic UI (Motors)
   // -------------------------
   const [optimisticMotors, setOptimisticMotors] = useState<OptimisticMotorState>({});
@@ -68,7 +173,6 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
     const t = motorTtlRef.current[motorKey];
     if (t) window.clearTimeout(t);
     delete motorTtlRef.current[motorKey];
-
     setOptimisticMotors((prev) => {
       if (!(motorKey in prev)) return prev;
       const next = { ...prev };
@@ -78,47 +182,28 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
   };
 
   const setMotorOptimistic = (motorKey: string, cmd: MotorCmd) => {
-    // set optimistic
     setOptimisticMotors((prev) => ({ ...prev, [motorKey]: cmd }));
-
-    // reset TTL
     const old = motorTtlRef.current[motorKey];
     if (old) window.clearTimeout(old);
-
     motorTtlRef.current[motorKey] = window.setTimeout(() => {
       clearMotorOptimistic(motorKey);
     }, OPTIMISTIC_MOTOR_TTL_MS);
   };
 
   useEffect(() => {
-    // cleanup timers on unmount
-    return () => {
-      Object.values(motorTtlRef.current).forEach((t) => window.clearTimeout(t));
-      motorTtlRef.current = {};
-    };
-  }, []);
-
-  // ✅ ถ้า data จริง update แล้วตรงกับ optimistic → เคลียร์ optimistic ทิ้ง
-  useEffect(() => {
     for (const motor of MOTOR_CONFIG) {
       const opt = optimisticMotors[motor.key];
       if (opt === null || opt === undefined) continue;
-
       const realFw = normalizeBoolean(data[motor.fwKey]);
       const realRe = normalizeBoolean(data[motor.reKey]);
-
       let realCmd = MOTOR_COMMANDS.STOP;
       if (realFw && !realRe) realCmd = MOTOR_COMMANDS.FORWARD as 0;
       else if (!realFw && realRe) realCmd = MOTOR_COMMANDS.REVERSE as 0;
-
-      if (realCmd === opt) {
-        clearMotorOptimistic(motor.key);
-      }
+      if (realCmd === opt) clearMotorOptimistic(motor.key);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
-  // ✅ ถ้า offline/ไม่พร้อม → เคลียร์ optimistic ทั้งหมด (กันค้าง)
   useEffect(() => {
     if (isReady && isOnline) return;
     setOptimisticMotors({});
@@ -126,8 +211,15 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
     motorTtlRef.current = {};
   }, [isReady, isOnline]);
 
+  useEffect(() => {
+    return () => {
+      Object.values(motorTtlRef.current).forEach((t) => window.clearTimeout(t));
+      motorTtlRef.current = {};
+    };
+  }, []);
+
   // -------------------------
-  // RPC hook for relays & auto
+  // RPC hooks
   // -------------------------
   const rpc = useRpc({
     project,
@@ -144,15 +236,12 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
     },
   });
 
-  // -------------------------
-  // Motor RPC hook
-  // -------------------------
   const motorRpc = useMotorRpc({
     project,
     gh,
     onSuccess: () => {
       addToast({ type: 'success', message: 'ส่งคำสั่งมอเตอร์แล้ว' });
-      scheduleRefetch(900); // หน่วงน้อยลง (optimistic ทำให้ UI เร็วอยู่แล้ว)
+      scheduleRefetch(900);
     },
     onTimeout: () => {
       addToast({ type: 'warning', message: 'รอการยืนยันมอเตอร์นานเกินไป' });
@@ -164,10 +253,8 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
     },
   });
 
-  // Check if user can control
   const canControl = userRole === 'superadmin' || userRole === 'admin' || userRole === 'operator';
   const controlsDisabled = !isReady || !isOnline || !canControl;
-
   const globalAuto = normalizeBoolean(data['global_motor_auto']);
 
   return (
@@ -187,7 +274,6 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
           <Clock className="w-4 h-4" />
           <span>อัปเดตล่าสุด: {lastUpdated ? formatDateTime(new Date(lastUpdated)) : '--'}</span>
         </div>
-
         <button
           onClick={() => scheduleRefetch(0)}
           disabled={isLoading}
@@ -222,21 +308,34 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           {RELAY_CONFIG.map((relay) => {
-            const isOn = normalizeBoolean(data[relay.cmdKey]);
+            const realIsOn = normalizeBoolean(data[relay.cmdKey]);
             const isAuto = normalizeBoolean(data[relay.autoKey]);
+            const effectiveIsOn = optimisticRelays[relay.key] ?? realIsOn;
 
             return (
               <RelayControlCard
                 key={relay.key}
                 name={relay.name}
                 icon={relay.icon}
-                isOn={isOn}
+                isOn={effectiveIsOn}
                 isAuto={isAuto}
                 isLoading={isLoading}
                 isReady={isReady}
                 disabled={controlsDisabled || isAuto}
-                isPending={rpc.isPending(relay.rpcMethod)}
-                onToggle={async () => { await rpc.sendCommand(relay.rpcMethod, isOn ? 0 : 1, !isOn); }}
+                onToggle={() => {
+                  const next = !effectiveIsOn;
+                  // ✅ set optimistic ทันที ก่อน enqueue
+                  setRelayOptimistic(relay.key, next);
+
+                  // ✅ enqueue → รอคำสั่งก่อนหน้าเสร็จก่อนเสมอ
+                  getRelayQueue(relay.key).enqueue(async () => {
+                    const ok = await rpc.sendCommand(relay.rpcMethod, next ? 1 : 0, next);
+                    if (!ok) {
+                      clearRelayOptimistic(relay.key);
+                      addToast({ type: 'error', message: `ส่งคำสั่ง ${relay.name} ไม่สำเร็จ กรุณาลองใหม่` });
+                    }
+                  });
+                }}
               />
             );
           })}
@@ -254,19 +353,19 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
         <div className="mb-4 flex gap-3">
           <button
             onClick={() => {
-              // ✅ optimistic ทั้ง 4 โซนทันที
-              MOTOR_CONFIG.forEach((motor) => setMotorOptimistic(motor.key, MOTOR_COMMANDS.FORWARD));
-
-              // ส่งคำสั่งจริง
               MOTOR_CONFIG.forEach((motor) => {
-                motorRpc.sendMotorCommand(motor.key, motor.rpcMethod, MOTOR_COMMANDS.FORWARD).then((ok) => {
-                  if (!ok) clearMotorOptimistic(motor.key);
+                setMotorOptimistic(motor.key, MOTOR_COMMANDS.FORWARD);
+                getMotorQueue(motor.key).enqueue(async () => {
+                  const ok = await motorRpc.sendMotorCommand(motor.key, motor.rpcMethod, MOTOR_COMMANDS.FORWARD);
+                  if (!ok) {
+                    clearMotorOptimistic(motor.key);
+                    addToast({ type: 'error', message: `ส่งคำสั่ง ${motor.name} ไม่สำเร็จ กรุณาลองใหม่` });
+                  }
                 });
               });
-
               scheduleRefetch(900);
             }}
-            disabled={controlsDisabled || globalAuto || motorRpc.isAnyPending}
+            disabled={controlsDisabled || globalAuto}
             className={cn(
               'flex-1 py-4 px-6 rounded-xl font-bold text-base transition-all duration-300 shadow-lg',
               'flex items-center justify-center gap-3',
@@ -281,18 +380,19 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
 
           <button
             onClick={() => {
-              // ✅ optimistic ทั้ง 4 โซนทันที
-              MOTOR_CONFIG.forEach((motor) => setMotorOptimistic(motor.key, MOTOR_COMMANDS.REVERSE));
-
               MOTOR_CONFIG.forEach((motor) => {
-                motorRpc.sendMotorCommand(motor.key, motor.rpcMethod, MOTOR_COMMANDS.REVERSE).then((ok) => {
-                  if (!ok) clearMotorOptimistic(motor.key);
+                setMotorOptimistic(motor.key, MOTOR_COMMANDS.REVERSE);
+                getMotorQueue(motor.key).enqueue(async () => {
+                  const ok = await motorRpc.sendMotorCommand(motor.key, motor.rpcMethod, MOTOR_COMMANDS.REVERSE);
+                  if (!ok) {
+                    clearMotorOptimistic(motor.key);
+                    addToast({ type: 'error', message: `ส่งคำสั่ง ${motor.name} ไม่สำเร็จ กรุณาลองใหม่` });
+                  }
                 });
               });
-
               scheduleRefetch(900);
             }}
-            disabled={controlsDisabled || globalAuto || motorRpc.isAnyPending}
+            disabled={controlsDisabled || globalAuto}
             className={cn(
               'flex-1 py-4 px-6 rounded-xl font-bold text-base transition-all duration-300 shadow-lg',
               'flex items-center justify-center gap-3',
@@ -324,13 +424,15 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
                 disabled={controlsDisabled || globalAuto}
                 isPending={motorRpc.isMotorPending(motor.key)}
                 optimisticCmd={optimisticMotors[motor.key] ?? null}
-                onCommand={async (cmd) => {
-                  // ✅ optimistic ทันที
+                onCommand={(cmd) => {
                   setMotorOptimistic(motor.key, cmd);
-
-                  const ok = await motorRpc.sendMotorCommand(motor.key, motor.rpcMethod, cmd);
-                  if (!ok) clearMotorOptimistic(motor.key);
-
+                  getMotorQueue(motor.key).enqueue(async () => {
+                    const ok = await motorRpc.sendMotorCommand(motor.key, motor.rpcMethod, cmd);
+                    if (!ok) {
+                      clearMotorOptimistic(motor.key);
+                      addToast({ type: 'error', message: `ส่งคำสั่ง ${motor.name} ไม่สำเร็จ กรุณาลองใหม่` });
+                    }
+                  });
                   scheduleRefetch(900);
                 }}
               />
