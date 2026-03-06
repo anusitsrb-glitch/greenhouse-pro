@@ -38,11 +38,10 @@ type QueuedCommand = () => Promise<void>;
 
 class DeviceQueue {
   private running = false;
-  private pending: QueuedCommand | null = null; // เก็บแค่ล่าสุด
+  private pending: QueuedCommand | null = null;
 
   enqueue(cmd: QueuedCommand) {
     if (this.running) {
-      // มีคำสั่งกำลังทำงานอยู่ → เก็บคำสั่งใหม่ไว้รอ (แทนที่ของเก่าถ้ามี)
       this.pending = cmd;
       return;
     }
@@ -77,6 +76,8 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
 
   // -------------------------
   // Debounced refetch helper
+  // ใช้เฉพาะปุ่ม "รีเฟรช" และ error เท่านั้น
+  // ✅ ไม่เรียกหลัง onSuccess เพราะจะทับ optimistic state
   // -------------------------
   const refetchTimerRef = useRef<number | null>(null);
 
@@ -96,7 +97,6 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
 
   // -------------------------
   // ✅ Per-device queues
-  // แต่ละ relay/motor มี queue เป็นของตัวเอง
   // -------------------------
   const relayQueues = useRef<Record<string, DeviceQueue>>({});
   const motorQueues = useRef<Record<string, DeviceQueue>>({});
@@ -138,7 +138,7 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
     }, OPTIMISTIC_RELAY_TTL_MS);
   };
 
-  // เคลียร์ optimistic relay เมื่อ data จริง match แล้ว
+  // เคลียร์ optimistic เมื่อ data จริง match แล้ว
   useEffect(() => {
     for (const relay of RELAY_CONFIG) {
       const opt = optimisticRelays[relay.key];
@@ -220,13 +220,15 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
 
   // -------------------------
   // RPC hooks
+  // ✅ ตัด scheduleRefetch ออกจาก onSuccess/onTimeout ทั้งหมด
+  // เพราะจะทำให้ data ใหม่มาทับ optimistic state ก่อน server sync ทัน
+  // polling 5 วินาทีจัดการ sync เองอยู่แล้ว
   // -------------------------
   const rpc = useRpc({
     project,
     gh,
     onSuccess: () => {
       addToast({ type: 'success', message: 'ส่งคำสั่งแล้ว' });
-      scheduleRefetch(1200);
     },
     onTimeout: () => {
       addToast({ type: 'warning', message: 'รอการยืนยันนานเกินไป' });
@@ -241,15 +243,12 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
     gh,
     onSuccess: () => {
       addToast({ type: 'success', message: 'ส่งคำสั่งมอเตอร์แล้ว' });
-      scheduleRefetch(900);
     },
     onTimeout: () => {
       addToast({ type: 'warning', message: 'รอการยืนยันมอเตอร์นานเกินไป' });
-      scheduleRefetch(0);
     },
     onError: (_method, error) => {
       addToast({ type: 'error', message: error });
-      scheduleRefetch(0);
     },
   });
 
@@ -324,10 +323,7 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
                 disabled={controlsDisabled || isAuto}
                 onToggle={() => {
                   const next = !effectiveIsOn;
-                  // ✅ set optimistic ทันที ก่อน enqueue
                   setRelayOptimistic(relay.key, next);
-
-                  // ✅ enqueue → รอคำสั่งก่อนหน้าเสร็จก่อนเสมอ
                   getRelayQueue(relay.key).enqueue(async () => {
                     const ok = await rpc.sendCommand(relay.rpcMethod, next ? 1 : 0, next);
                     if (!ok) {
@@ -363,7 +359,6 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
                   }
                 });
               });
-              scheduleRefetch(900);
             }}
             disabled={controlsDisabled || globalAuto}
             className={cn(
@@ -390,7 +385,6 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
                   }
                 });
               });
-              scheduleRefetch(900);
             }}
             disabled={controlsDisabled || globalAuto}
             className={cn(
@@ -433,7 +427,6 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
                       addToast({ type: 'error', message: `ส่งคำสั่ง ${motor.name} ไม่สำเร็จ กรุณาลองใหม่` });
                     }
                   });
-                  scheduleRefetch(900);
                 }}
               />
             );
