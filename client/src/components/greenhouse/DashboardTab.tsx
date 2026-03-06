@@ -29,40 +29,6 @@ type OptimisticRelayState = Record<string, boolean | null>;
 const OPTIMISTIC_RELAY_TTL_MS = 8000;
 const OPTIMISTIC_MOTOR_TTL_MS = 12000;
 
-// ============================================================
-// ✅ Per-device Command Queue
-// รอคำสั่งแรกเสร็จก่อน แล้วค่อยส่งคำสั่งถัดไป
-// ถ้ามีคำสั่งรอใน queue เกิน 1 → เก็บแค่ล่าสุด (debounce)
-// ============================================================
-type QueuedCommand = () => Promise<void>;
-
-class DeviceQueue {
-  private running = false;
-  private pending: QueuedCommand | null = null;
-
-  enqueue(cmd: QueuedCommand) {
-    if (this.running) {
-      this.pending = cmd;
-      return;
-    }
-    this.run(cmd);
-  }
-
-  private async run(cmd: QueuedCommand) {
-    this.running = true;
-    try {
-      await cmd();
-    } finally {
-      this.running = false;
-      if (this.pending) {
-        const next = this.pending;
-        this.pending = null;
-        this.run(next);
-      }
-    }
-  }
-}
-
 export function DashboardTab({ project, gh, isReady, isOnline, userRole }: DashboardTabProps) {
   const { addToast } = useToast();
 
@@ -75,44 +41,22 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
   });
 
   // -------------------------
-  // Debounced refetch helper
-  // ใช้เฉพาะปุ่ม "รีเฟรช" และ error เท่านั้น
-  // ✅ ไม่เรียกหลัง onSuccess เพราะจะทับ optimistic state
+  // Refetch — ใช้เฉพาะปุ่ม "รีเฟรช" เท่านั้น
   // -------------------------
   const refetchTimerRef = useRef<number | null>(null);
-
-  const scheduleRefetch = (delayMs = 1200) => {
+  const scheduleRefetch = (delayMs = 0) => {
     if (refetchTimerRef.current) window.clearTimeout(refetchTimerRef.current);
     refetchTimerRef.current = window.setTimeout(() => {
       refetch();
       refetchTimerRef.current = null;
     }, delayMs);
   };
-
   useEffect(() => {
-    return () => {
-      if (refetchTimerRef.current) window.clearTimeout(refetchTimerRef.current);
-    };
+    return () => { if (refetchTimerRef.current) window.clearTimeout(refetchTimerRef.current); };
   }, []);
 
   // -------------------------
-  // ✅ Per-device queues
-  // -------------------------
-  const relayQueues = useRef<Record<string, DeviceQueue>>({});
-  const motorQueues = useRef<Record<string, DeviceQueue>>({});
-
-  const getRelayQueue = (key: string) => {
-    if (!relayQueues.current[key]) relayQueues.current[key] = new DeviceQueue();
-    return relayQueues.current[key];
-  };
-
-  const getMotorQueue = (key: string) => {
-    if (!motorQueues.current[key]) motorQueues.current[key] = new DeviceQueue();
-    return motorQueues.current[key];
-  };
-
-  // -------------------------
-  // ✅ Optimistic UI (Relays)
+  // Optimistic UI — Relays
   // -------------------------
   const [optimisticRelays, setOptimisticRelays] = useState<OptimisticRelayState>({});
   const relayTtlRef = useRef<Record<string, number>>({});
@@ -133,12 +77,13 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
     setOptimisticRelays((prev) => ({ ...prev, [relayKey]: value }));
     const old = relayTtlRef.current[relayKey];
     if (old) window.clearTimeout(old);
-    relayTtlRef.current[relayKey] = window.setTimeout(() => {
-      clearRelayOptimistic(relayKey);
-    }, OPTIMISTIC_RELAY_TTL_MS);
+    relayTtlRef.current[relayKey] = window.setTimeout(
+      () => clearRelayOptimistic(relayKey),
+      OPTIMISTIC_RELAY_TTL_MS
+    );
   };
 
-  // เคลียร์ optimistic เมื่อ data จริง match แล้ว
+  // เคลียร์ optimistic เมื่อ polling ดึงค่าจริงมาตรงกันแล้ว
   useEffect(() => {
     for (const relay of RELAY_CONFIG) {
       const opt = optimisticRelays[relay.key];
@@ -164,7 +109,7 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
   }, []);
 
   // -------------------------
-  // ✅ Optimistic UI (Motors)
+  // Optimistic UI — Motors
   // -------------------------
   const [optimisticMotors, setOptimisticMotors] = useState<OptimisticMotorState>({});
   const motorTtlRef = useRef<Record<string, number>>({});
@@ -185,9 +130,10 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
     setOptimisticMotors((prev) => ({ ...prev, [motorKey]: cmd }));
     const old = motorTtlRef.current[motorKey];
     if (old) window.clearTimeout(old);
-    motorTtlRef.current[motorKey] = window.setTimeout(() => {
-      clearMotorOptimistic(motorKey);
-    }, OPTIMISTIC_MOTOR_TTL_MS);
+    motorTtlRef.current[motorKey] = window.setTimeout(
+      () => clearMotorOptimistic(motorKey),
+      OPTIMISTIC_MOTOR_TTL_MS
+    );
   };
 
   useEffect(() => {
@@ -220,41 +166,56 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
 
   // -------------------------
   // RPC hooks
-  // ✅ ตัด scheduleRefetch ออกจาก onSuccess/onTimeout ทั้งหมด
-  // เพราะจะทำให้ data ใหม่มาทับ optimistic state ก่อน server sync ทัน
-  // polling 5 วินาทีจัดการ sync เองอยู่แล้ว
+  // ✅ onSuccess แค่ toast ไม่ refetch
+  // ✅ polling 5 วินาที sync สถานะจริงเอง
   // -------------------------
   const rpc = useRpc({
     project,
     gh,
-    onSuccess: () => {
-      addToast({ type: 'success', message: 'ส่งคำสั่งแล้ว' });
-    },
-    onTimeout: () => {
-      addToast({ type: 'warning', message: 'รอการยืนยันนานเกินไป' });
-    },
-    onError: (_method, error) => {
-      addToast({ type: 'error', message: error });
-    },
+    onSuccess: () => addToast({ type: 'success', message: 'ส่งคำสั่งแล้ว' }),
+    onError: (_method, error) => addToast({ type: 'error', message: error }),
   });
 
   const motorRpc = useMotorRpc({
     project,
     gh,
-    onSuccess: () => {
-      addToast({ type: 'success', message: 'ส่งคำสั่งมอเตอร์แล้ว' });
-    },
-    onTimeout: () => {
-      addToast({ type: 'warning', message: 'รอการยืนยันมอเตอร์นานเกินไป' });
-    },
-    onError: (_method, error) => {
-      addToast({ type: 'error', message: error });
-    },
+    onSuccess: () => addToast({ type: 'success', message: 'ส่งคำสั่งมอเตอร์แล้ว' }),
+    onError: (_method, error) => addToast({ type: 'error', message: error }),
   });
 
   const canControl = userRole === 'superadmin' || userRole === 'admin' || userRole === 'operator';
   const controlsDisabled = !isReady || !isOnline || !canControl;
   const globalAuto = normalizeBoolean(data['global_motor_auto']);
+
+  // -------------------------
+  // Relay toggle handler
+  // ✅ set optimistic ทันที → ส่ง RPC fire-and-forget
+  // ✅ ถ้า error → rollback optimistic + toast
+  // -------------------------
+  const handleRelayToggle = (relayKey: string, rpcMethod: string, relayName: string, next: boolean) => {
+    setRelayOptimistic(relayKey, next);
+    rpc.sendCommand(rpcMethod, next ? 1 : 0, next).then((ok) => {
+      if (!ok) {
+        clearRelayOptimistic(relayKey);
+        addToast({ type: 'error', message: `ส่งคำสั่ง ${relayName} ไม่สำเร็จ กรุณาลองใหม่` });
+      }
+    });
+  };
+
+  // -------------------------
+  // Motor command handler
+  // ✅ set optimistic ทันที → ส่ง RPC fire-and-forget
+  // ✅ ถ้า error → rollback optimistic + toast
+  // -------------------------
+  const handleMotorCommand = (motorKey: string, rpcMethod: string, motorName: string, cmd: number) => {
+    setMotorOptimistic(motorKey, cmd);
+    motorRpc.sendMotorCommand(motorKey, rpcMethod, cmd).then((ok) => {
+      if (!ok) {
+        clearMotorOptimistic(motorKey);
+        addToast({ type: 'error', message: `ส่งคำสั่ง ${motorName} ไม่สำเร็จ กรุณาลองใหม่` });
+      }
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -262,7 +223,7 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
           <p className="text-sm text-yellow-800">
-            คุณไม่มีสิทธิ์ควบคุมอุปกรณ์ (ต้องเป็น superadmin / operator / admin )
+            คุณไม่มีสิทธิ์ควบคุมอุปกรณ์ (ต้องเป็น superadmin / operator / admin)
           </p>
         </div>
       )}
@@ -321,17 +282,12 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
                 isLoading={isLoading}
                 isReady={isReady}
                 disabled={controlsDisabled || isAuto}
-                onToggle={() => {
-                  const next = !effectiveIsOn;
-                  setRelayOptimistic(relay.key, next);
-                  getRelayQueue(relay.key).enqueue(async () => {
-                    const ok = await rpc.sendCommand(relay.rpcMethod, next ? 1 : 0, next);
-                    if (!ok) {
-                      clearRelayOptimistic(relay.key);
-                      addToast({ type: 'error', message: `ส่งคำสั่ง ${relay.name} ไม่สำเร็จ กรุณาลองใหม่` });
-                    }
-                  });
-                }}
+                onToggle={() => handleRelayToggle(
+                  relay.key,
+                  relay.rpcMethod,
+                  relay.name,
+                  !effectiveIsOn
+                )}
               />
             );
           })}
@@ -348,24 +304,14 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
         {/* Control All */}
         <div className="mb-4 flex gap-3">
           <button
-            onClick={() => {
-              MOTOR_CONFIG.forEach((motor) => {
-                setMotorOptimistic(motor.key, MOTOR_COMMANDS.FORWARD);
-                getMotorQueue(motor.key).enqueue(async () => {
-                  const ok = await motorRpc.sendMotorCommand(motor.key, motor.rpcMethod, MOTOR_COMMANDS.FORWARD);
-                  if (!ok) {
-                    clearMotorOptimistic(motor.key);
-                    addToast({ type: 'error', message: `ส่งคำสั่ง ${motor.name} ไม่สำเร็จ กรุณาลองใหม่` });
-                  }
-                });
-              });
-            }}
+            onClick={() => MOTOR_CONFIG.forEach((motor) =>
+              handleMotorCommand(motor.key, motor.rpcMethod, motor.name, MOTOR_COMMANDS.FORWARD)
+            )}
             disabled={controlsDisabled || globalAuto}
             className={cn(
               'flex-1 py-4 px-6 rounded-xl font-bold text-base transition-all duration-300 shadow-lg',
               'flex items-center justify-center gap-3',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
-              'transform active:scale-95',
+              'disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-95',
               'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 shadow-blue-200'
             )}
           >
@@ -374,24 +320,14 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
           </button>
 
           <button
-            onClick={() => {
-              MOTOR_CONFIG.forEach((motor) => {
-                setMotorOptimistic(motor.key, MOTOR_COMMANDS.REVERSE);
-                getMotorQueue(motor.key).enqueue(async () => {
-                  const ok = await motorRpc.sendMotorCommand(motor.key, motor.rpcMethod, MOTOR_COMMANDS.REVERSE);
-                  if (!ok) {
-                    clearMotorOptimistic(motor.key);
-                    addToast({ type: 'error', message: `ส่งคำสั่ง ${motor.name} ไม่สำเร็จ กรุณาลองใหม่` });
-                  }
-                });
-              });
-            }}
+            onClick={() => MOTOR_CONFIG.forEach((motor) =>
+              handleMotorCommand(motor.key, motor.rpcMethod, motor.name, MOTOR_COMMANDS.REVERSE)
+            )}
             disabled={controlsDisabled || globalAuto}
             className={cn(
               'flex-1 py-4 px-6 rounded-xl font-bold text-base transition-all duration-300 shadow-lg',
               'flex items-center justify-center gap-3',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
-              'transform active:scale-95',
+              'disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-95',
               'bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 shadow-orange-200'
             )}
           >
@@ -418,16 +354,7 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
                 disabled={controlsDisabled || globalAuto}
                 isPending={motorRpc.isMotorPending(motor.key)}
                 optimisticCmd={optimisticMotors[motor.key] ?? null}
-                onCommand={(cmd) => {
-                  setMotorOptimistic(motor.key, cmd);
-                  getMotorQueue(motor.key).enqueue(async () => {
-                    const ok = await motorRpc.sendMotorCommand(motor.key, motor.rpcMethod, cmd);
-                    if (!ok) {
-                      clearMotorOptimistic(motor.key);
-                      addToast({ type: 'error', message: `ส่งคำสั่ง ${motor.name} ไม่สำเร็จ กรุณาลองใหม่` });
-                    }
-                  });
-                }}
+                onCommand={(cmd) => handleMotorCommand(motor.key, motor.rpcMethod, motor.name, cmd)}
               />
             );
           })}
