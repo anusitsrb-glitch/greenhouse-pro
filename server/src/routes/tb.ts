@@ -210,6 +210,7 @@ router.get('/attributes', async (req: Request, res: Response) => {
 
 /**
  * POST /api/tb/rpc
+ * ✅ one-way methods: ตอบ client ทันที แล้วส่ง RPC ใน background
  */
 router.post('/rpc', requireOperator, async (req: Request, res: Response) => {
   try {
@@ -227,6 +228,8 @@ router.post('/rpc', requireOperator, async (req: Request, res: Response) => {
       return;
     }
 
+    // ✅ เช็ค online จาก attributes cache (ไม่ต้องรอ TB)
+    //    ใช้ status ที่ polling อยู่แล้ว แทนการเรียก isDeviceOnline แยก
     const isOnline = await tbService.isDeviceOnline(project, gh);
 
     if (!isOnline) {
@@ -242,6 +245,12 @@ router.post('/rpc', requireOperator, async (req: Request, res: Response) => {
       return;
     }
 
+    // ✅ one-way = ทุก method ที่ไม่ต้องรอ device ตอบกลับ
+    const forceOneWay =
+      /_cmd$|_auto$|_time$|_condition_auto$|_interval_auto$/.test(method) ||
+      method.startsWith('set_global_') ||
+      /^set_motor_\d+_status$/.test(method);
+
     logAudit({
       userId: req.session.userId ?? null,
       action: AuditActions.RPC_SENT,
@@ -250,34 +259,66 @@ router.post('/rpc', requireOperator, async (req: Request, res: Response) => {
       detail: { method, params },
     });
 
-    const forceOneWay =
-      /_cmd$|_auto$|_time$|_condition_auto$|_interval_auto$/.test(method) ||
-      method.startsWith('set_global_') ||
-      /^set_motor_\d+_status$/.test(method);
+    if (forceOneWay) {
+      // ✅ ตอบ client ทันทีเลย ไม่รอ ThingsBoard
+      sendSuccess(res, {
+        rpcResponse: {},
+        message: 'ส่งคำสั่งแล้ว',
+      });
 
-    const effectiveTimeout = forceOneWay ? undefined : timeout;
+      // ส่ง RPC จริงใน background (ไม่ await)
+      tbService.sendRpc(project, gh, method, params, undefined)
+        .then((rpcResponse) => {
+          const greenhouseId = getGreenhouseId(project, gh);
+          if (greenhouseId) {
+            const { controlKey, action, value } = parseRpcMethod(method, params);
+            logControlAction(req, greenhouseId, controlKey, action, value, true);
+          }
 
+          logAudit({
+            userId: req.session.userId ?? null,
+            action: AuditActions.RPC_SUCCESS,
+            projectKey: project,
+            ghKey: gh,
+            detail: { method, params, response: rpcResponse },
+          });
+        })
+        .catch((err) => {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.error(`[RPC background] ${method} failed:`, errMsg);
+
+          const greenhouseId = getGreenhouseId(project, gh);
+          if (greenhouseId) {
+            const { controlKey, action, value } = parseRpcMethod(method, params);
+            logControlAction(req, greenhouseId, controlKey, action, value, false, errMsg);
+          }
+
+          logAudit({
+            userId: req.session.userId ?? null,
+            action: AuditActions.RPC_FAILED,
+            projectKey: project,
+            ghKey: gh,
+            detail: { method, params, error: errMsg },
+          });
+        });
+
+      return; // จบ handler ทันที
+    }
+
+    // ─── two-way: รอ response ปกติ ───
     const rpcResponse = await tbService.sendRpc(
       project,
       gh,
       method,
       params,
-      effectiveTimeout
+      timeout
     );
 
     const greenhouseId = getGreenhouseId(project, gh);
 
     if (greenhouseId) {
       const { controlKey, action, value } = parseRpcMethod(method, params);
-
-      logControlAction(
-        req,
-        greenhouseId,
-        controlKey,
-        action,
-        value,
-        true
-      );
+      logControlAction(req, greenhouseId, controlKey, action, value, true);
     }
 
     logAudit({
@@ -292,6 +333,7 @@ router.post('/rpc', requireOperator, async (req: Request, res: Response) => {
       rpcResponse,
       message: 'ส่งคำสั่งสำเร็จ',
     });
+
   } catch (error) {
     console.error('Error sending RPC:', error);
 
@@ -309,15 +351,7 @@ router.post('/rpc', requireOperator, async (req: Request, res: Response) => {
         req.body?.params
       );
 
-      logControlAction(
-        req,
-        greenhouseId,
-        controlKey,
-        action,
-        value,
-        false,
-        errMsg
-      );
+      logControlAction(req, greenhouseId, controlKey, action, value, false, errMsg);
     }
 
     logAudit({
@@ -348,8 +382,7 @@ router.post('/rpc', requireOperator, async (req: Request, res: Response) => {
     if (isSoftTimeout) {
       sendSuccess(res, {
         rpcResponse: {},
-        message:
-          'ส่งคำสั่งแล้ว (ThingsBoard ตอบช้า) รอซิงค์สถานะจากอุปกรณ์...',
+        message: 'ส่งคำสั่งแล้ว (ThingsBoard ตอบช้า) รอซิงค์สถานะจากอุปกรณ์...',
       });
       return;
     }
@@ -453,25 +486,13 @@ function parseRpcMethod(
     const motorNum = motorMatch[1];
 
     if (lowerMethod.includes('forward'))
-      return {
-        controlKey: `motor_${motorNum}`,
-        action: 'setForward',
-        value: params,
-      };
+      return { controlKey: `motor_${motorNum}`, action: 'setForward', value: params };
 
     if (lowerMethod.includes('reverse'))
-      return {
-        controlKey: `motor_${motorNum}`,
-        action: 'setReverse',
-        value: params,
-      };
+      return { controlKey: `motor_${motorNum}`, action: 'setReverse', value: params };
 
     if (lowerMethod.includes('stop'))
-      return {
-        controlKey: `motor_${motorNum}`,
-        action: 'stop',
-        value: 0,
-      };
+      return { controlKey: `motor_${motorNum}`, action: 'stop', value: 0 };
   }
 
   return { controlKey: method, action: 'set', value: params };

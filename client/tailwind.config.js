@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  darkMode: 'class', // ✅ ต้องเป็น string
+  darkMode: 'class',
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
@@ -8,7 +8,6 @@ export default {
         prompt: ['Prompt', 'sans-serif'],
       },
       colors: {
-        // Theme tokens from spec
         primary: {
           DEFAULT: '#2e7d32',
           50: '#e8f5e9',
@@ -48,14 +47,9 @@ export default {
           800: '#c62828',
           900: '#b71c1c',
         },
-
-        // Additional semantic colors
         success: '#4caf50',
         warning: '#ff9800',
         info: '#2196f3',
-
-        // ✅ Greenhouse specific (Palette) — ทำให้ bg-soil-600 ใช้งานได้จริง
-        // คุณใช้ bg-soil-600 ใน Header ของ SoilNodeCard
         soil: {
           DEFAULT: '#2e7d32',
           50:  '#e8f5e9',
@@ -64,13 +58,11 @@ export default {
           300: '#81c784',
           400: '#66bb6a',
           500: '#4caf50',
-          600: '#43a047', // ✅ สำคัญ: รองรับ bg-soil-600
+          600: '#43a047',
           700: '#388e3c',
           800: '#2e7d32',
           900: '#1b5e20',
         },
-
-        // ✅ ของเดิม (สีตามชนิดค่าดิน) เก็บไว้ แต่เปลี่ยนชื่อไม่ให้ชนกับ soil palette
         soilMetric: {
           moisture: '#4facfe',
           temp: '#ff6b6b',
@@ -80,7 +72,6 @@ export default {
           phosphorus: '#ff9ff3',
           potassium: '#54a0ff',
         },
-
         air: {
           temp: '#ff6b6b',
           humidity: '#48dbfb',
@@ -88,7 +79,6 @@ export default {
           light: '#f9ca24',
         },
       },
-
       borderRadius: {
         'xl': '1rem',
         '2xl': '1.5rem',
@@ -102,13 +92,29 @@ export default {
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'pulse-soft': 'pulse 2.2s ease-in-out infinite',
-        'spin-slow': 'spin 2s linear infinite',
+        'spin-slow': 'spin 2s linear infinite',         // พัดลม หมุน
         'shimmer': 'shimmer 2s infinite',
+        // ✅ ใหม่
+        'bounce-slow': 'bounce-slow 1.4s ease-in-out infinite',  // น้ำโซน หยดน้ำ
+        'flicker': 'flicker 1.8s ease-in-out infinite',          // แสงเสริม กะพริบ
       },
       keyframes: {
         shimmer: {
           '0%': { transform: 'translateX(-100%)' },
           '100%': { transform: 'translateX(400%)' },
+        },
+        // ✅ น้ำโซน: หยดน้ำกระเด้งช้าๆ
+        'bounce-slow': {
+          '0%, 100%': { transform: 'translateY(0) scaleY(1)', animationTimingFunction: 'cubic-bezier(0.8,0,1,1)' },
+          '50%': { transform: 'translateY(-20%) scaleY(0.9)', animationTimingFunction: 'cubic-bezier(0,0,0.2,1)' },
+        },
+        // ✅ แสงเสริม: กะพริบเหมือนไฟ
+        'flicker': {
+          '0%, 100%': { opacity: '1',    transform: 'scale(1)' },
+          '20%':       { opacity: '0.85', transform: 'scale(1.05)' },
+          '40%':       { opacity: '1',    transform: 'scale(1)' },
+          '60%':       { opacity: '0.75', transform: 'scale(0.97)' },
+          '80%':       { opacity: '1',    transform: 'scale(1.03)' },
         },
       },
     },
