@@ -18,17 +18,16 @@ const ICONS: Record<string, typeof Fan> = { Fan, Droplets, Waves, Lightbulb };
 interface RelayControlCardProps {
   name: string;
   icon: string;
-  isOn: boolean;       // ✅ สถานะจริงจาก telemetry/attribute
+  isOn: boolean;
   isAuto: boolean;
   isLoading: boolean;
   isReady: boolean;
   disabled: boolean;
-  isPending: boolean;  // (อาจค้างจาก parent) เราจะไม่ใช้เป็นตัวหลักแล้ว
+  isPending: boolean;
   onToggle: () => void | Promise<void>;
 }
 
-const SEND_PHASE_MS = 450;     // แสดง "กำลังส่ง..." สั้นๆ
-const SYNC_TTL_MS = 6000;      // กันค้าง: 6s แล้วหยุดซิงค์เอง
+const SEND_PHASE_MS = 400; // แสดง "กำลังส่ง..." สั้นๆ แล้วกลับ idle ทันที
 
 export function RelayControlCard({
   name,
@@ -45,70 +44,76 @@ export function RelayControlCard({
 
   // ---------- Optimistic UI ----------
   const [optimisticOn, setOptimisticOn] = useState<boolean | null>(null);
-  const [targetOn, setTargetOn] = useState<boolean | null>(null);
-  const [phase, setPhase] = useState<'idle' | 'sending' | 'syncing'>('idle');
-  const ttlTimer = useRef<number | null>(null);
+  const [phase, setPhase] = useState<'idle' | 'sending'>('idle');
   const phaseTimer = useRef<number | null>(null);
+  const ttlTimer = useRef<number | null>(null);
 
-  // ใช้ optimistic แสดงผลทันที แต่สถานะจริงยังมาจาก isOn
   const effectiveOn = optimisticOn ?? isOn;
-
   const showOn = isReady && !isLoading && effectiveOn;
   const showAuto = isReady && !isLoading && isAuto;
 
-  // เคลียร์เมื่อสถานะจริง match เป้าหมาย
+  // เคลียร์ optimistic เมื่อสถานะจริงอัปเดตแล้ว
   useEffect(() => {
-    if (phase === 'idle') return;
-    if (targetOn === null) return;
-
-    if (isOn === targetOn) {
-      cleanupLocalPending();
+    if (optimisticOn === null) return;
+    if (isOn === optimisticOn) {
+      setOptimisticOn(null);
+      if (ttlTimer.current) window.clearTimeout(ttlTimer.current);
+      ttlTimer.current = null;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOn]);
+  }, [isOn, optimisticOn]);
 
-  const cleanupLocalPending = () => {
-    setPhase('idle');
-    setOptimisticOn(null);
-    setTargetOn(null);
-    if (ttlTimer.current) window.clearTimeout(ttlTimer.current);
-    if (phaseTimer.current) window.clearTimeout(phaseTimer.current);
-    ttlTimer.current = null;
-    phaseTimer.current = null;
-  };
+  // cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (phaseTimer.current) window.clearTimeout(phaseTimer.current);
+      if (ttlTimer.current) window.clearTimeout(ttlTimer.current);
+    };
+  }, []);
 
   const handleToggle = () => {
-    if (disabled) return;
+    if (disabled || phase !== 'idle') return;
 
-    const next = !(optimisticOn ?? isOn); // ใช้ isOn จริงเป็นฐาน
+    const next = !(optimisticOn ?? isOn);
     setOptimisticOn(next);
-    setTargetOn(next);
-
-    // เฟส "กำลังส่ง..." สั้นๆ แล้วเปลี่ยนเป็น "กำลังซิงค์..."
     setPhase('sending');
-    if (phaseTimer.current) window.clearTimeout(phaseTimer.current);
-    phaseTimer.current = window.setTimeout(() => setPhase('syncing'), SEND_PHASE_MS);
 
-    // TTL กันค้าง
+    // ✅ กลับ idle หลัง SEND_PHASE_MS → ปุ่มตัวอื่นไม่ถูก block
+    if (phaseTimer.current) window.clearTimeout(phaseTimer.current);
+    phaseTimer.current = window.setTimeout(() => {
+      setPhase('idle');
+      phaseTimer.current = null;
+    }, SEND_PHASE_MS);
+
+    // TTL กันค้าง optimistic (6s)
     if (ttlTimer.current) window.clearTimeout(ttlTimer.current);
-    ttlTimer.current = window.setTimeout(() => cleanupLocalPending(), SYNC_TTL_MS);
+    ttlTimer.current = window.setTimeout(() => {
+      setOptimisticOn(null);
+      ttlTimer.current = null;
+    }, 6000);
 
     try {
       const p = onToggle();
       if (p && typeof (p as any).then === 'function') {
         (p as Promise<void>).catch(() => {
-          // ถ้าส่งไม่ออกจริง → ย้อนกลับ
-          cleanupLocalPending();
+          setOptimisticOn(null);
         });
       }
     } catch {
-      cleanupLocalPending();
+      setOptimisticOn(null);
     }
   };
 
-  // ปุ่ม disable แค่ตาม disabled จริง + loading/ready (ไม่ผูกกับ isPending ที่ค้าง)
-  const btnDisabled = disabled || !isReady || isLoading || phase !== 'idle';
+  // ✅ ปุ่ม disable แค่ตอน 'sending' (400ms) ไม่ค้างนาน
+  const btnDisabled = disabled || !isReady || isLoading || phase === 'sending';
 
+  // ✅ Animation ตามประเภทอุปกรณ์
+  const getIconAnimation = () => {
+    if (!showOn) return '';
+    if (icon === 'Fan') return 'animate-spin-slow';
+    if (icon === 'Droplets' || icon === 'Waves') return 'animate-bounce-slow';
+    if (icon === 'Lightbulb') return 'animate-flicker';
+    return 'animate-pulse';
+  };
 
   return (
     <Card
@@ -140,7 +145,7 @@ export function RelayControlCard({
                 : 'bg-gray-100 text-gray-400'
             )}
           >
-            <Icon className={cn('w-7 h-7 transition-transform duration-300', showOn && 'animate-pulse')} />
+            <Icon className={cn('w-7 h-7 transition-all duration-300', getIconAnimation())} />
           </div>
 
           {showAuto && (
@@ -175,11 +180,6 @@ export function RelayControlCard({
               <Zap className="w-5 h-5 animate-bounce" />
               กำลังส่งคำสั่ง...
             </>
-          ) : phase === 'syncing' ? (
-            <>
-              <CheckCircle2 className="w-5 h-5" />
-              ส่งคำสั่งแล้ว
-            </>
           ) : (
             <>
               <Power className="w-5 h-5" />
@@ -188,9 +188,9 @@ export function RelayControlCard({
           )}
         </button>
 
-        {/* Sync hint */}
-        {(phase === 'syncing' || isPending) && (
-          <div className="mt-2 text-xs text-gray-500 text-center flex items-center justify-center gap-1">
+        {/* Sync hint - แสดงเบาๆ จาก isPending ของ parent เท่านั้น */}
+        {isPending && phase === 'idle' && (
+          <div className="mt-2 text-xs text-gray-400 text-center flex items-center justify-center gap-1">
             <RefreshCw className="w-3.5 h-3.5 animate-spin" />
             กำลังซิงค์สถานะ...
           </div>
