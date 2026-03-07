@@ -39,7 +39,7 @@ export function useAttributes({
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const prevDataRef = useRef<AttributesResponse>({}); // ✅ เก็บค่าก่อนหน้า
+
 
   const fetchData = useCallback(async () => {
     if (!project || !gh || keys.length === 0) {
@@ -50,13 +50,8 @@ export function useAttributes({
     try {
       const response = await tbApi.getAttributes(project, gh, keys);
 
-      // ✅ เปรียบเทียบก่อน set — ไม่ re-render ถ้าข้อมูลไม่เปลี่ยน
-      const hasChanged = JSON.stringify(response) !== JSON.stringify(prevDataRef.current);
-      if (hasChanged) {
-        console.log('[useAttributes] data changed, updating state');
-        prevDataRef.current = response;
-        setData(response);
-      }
+    
+      setData(response);
 
       setError(null);
       setLastUpdated(Date.now());
