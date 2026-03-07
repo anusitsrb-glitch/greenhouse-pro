@@ -88,10 +88,10 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
     for (const relay of RELAY_CONFIG) {
       const opt = optimisticRelays[relay.key];
       if (opt === null || opt === undefined) continue;
+      if (data[relay.cmdKey] === undefined) continue; // ← guard เพิ่ม
       const real = normalizeBoolean(data[relay.cmdKey]);
       if (real === opt) clearRelayOptimistic(relay.key);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
   useEffect(() => {
@@ -140,6 +140,7 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
     for (const motor of MOTOR_CONFIG) {
       const opt = optimisticMotors[motor.key];
       if (opt === null || opt === undefined) continue;
+      if (data[motor.fwKey] === undefined || data[motor.reKey] === undefined) continue; // ← guard เพิ่ม
       const realFw = normalizeBoolean(data[motor.fwKey]);
       const realRe = normalizeBoolean(data[motor.reKey]);
       let realCmd = MOTOR_COMMANDS.STOP;

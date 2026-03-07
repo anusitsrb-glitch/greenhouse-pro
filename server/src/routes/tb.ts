@@ -73,7 +73,7 @@ function hasProjectAccess(userId: number, userRole: string, projectKey: string):
 // key = "project:gh", value = { isOnline, ts }
 // ============================================================
 const onlineCache = new Map<string, { isOnline: boolean; ts: number }>();
-const ONLINE_CACHE_TTL_MS = 10000; // cache 10 วินาที
+const ONLINE_CACHE_TTL_MS = 30000; // 30 วินาที
 
 async function getDeviceOnlineCached(project: string, gh: string): Promise<boolean> {
   const key = `${project}:${gh}`;
