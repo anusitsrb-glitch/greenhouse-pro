@@ -37,8 +37,9 @@ export function useAttributes({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
-  
+
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const prevDataRef = useRef<AttributesResponse>({}); // ✅ เก็บค่าก่อนหน้า
 
   const fetchData = useCallback(async () => {
     if (!project || !gh || keys.length === 0) {
@@ -48,7 +49,15 @@ export function useAttributes({
 
     try {
       const response = await tbApi.getAttributes(project, gh, keys);
-      setData(response);
+
+      // ✅ เปรียบเทียบก่อน set — ไม่ re-render ถ้าข้อมูลไม่เปลี่ยน
+      const hasChanged = JSON.stringify(response) !== JSON.stringify(prevDataRef.current);
+      if (hasChanged) {
+        console.log('[useAttributes] data changed, updating state');
+        prevDataRef.current = response;
+        setData(response);
+      }
+
       setError(null);
       setLastUpdated(Date.now());
     } catch (err) {
@@ -58,17 +67,14 @@ export function useAttributes({
     }
   }, [project, gh, keys]);
 
-  // Initial fetch and polling
   useEffect(() => {
     if (!enabled) {
       setIsLoading(false);
       return;
     }
 
-    // Initial fetch
     fetchData();
 
-    // Set up polling
     if (pollInterval > 0) {
       intervalRef.current = setInterval(fetchData, pollInterval);
     }
@@ -80,7 +86,6 @@ export function useAttributes({
     };
   }, [enabled, fetchData, pollInterval]);
 
-  // Determine online status from attributes
   const isOnline = (() => {
     const status = data.status;
     if (typeof status === 'string') {
@@ -113,11 +118,9 @@ export function useBurstPoll(
   const burstTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const startBurst = useCallback(() => {
-    // Clear any existing burst
     if (burstIntervalRef.current) clearInterval(burstIntervalRef.current);
     if (burstTimeoutRef.current) clearTimeout(burstTimeoutRef.current);
 
-    // Start burst polling
     burstIntervalRef.current = setInterval(async () => {
       try {
         const response = await tbApi.getAttributes(project, gh, keys);
@@ -127,7 +130,6 @@ export function useBurstPoll(
       }
     }, POLLING_INTERVALS.BURST_CONFIRM);
 
-    // Stop burst after duration
     burstTimeoutRef.current = setTimeout(() => {
       if (burstIntervalRef.current) {
         clearInterval(burstIntervalRef.current);
@@ -147,7 +149,6 @@ export function useBurstPoll(
     }
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopBurst();

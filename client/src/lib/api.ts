@@ -20,8 +20,8 @@ type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
 class ApiClient {
   private csrfToken: string | null = null;
+  private csrfPromise: Promise<string> | null = null; // ✅ in-flight guard
 
-  // ✅ Helper กลาง: ทุก request ผ่านที่เดียว
   private async request<T>(
     method: HttpMethod,
     endpoint: string,
@@ -34,7 +34,6 @@ class ApiClient {
       console.log(`🔵 [API ${method}]`, url, body ?? '');
     }
 
-    // ✅ Mobile: ใช้ CapacitorHttp เสมอ (กัน cookie/session หลุด)
     if (ENV.IS_CAPACITOR) {
       const response = await CapacitorHttp.request({
         url,
@@ -55,7 +54,6 @@ class ApiClient {
       return response.data as ApiResponse<T>;
     }
 
-    // ✅ Web: fetch ปกติ
     const response = await fetch(url, {
       method,
       credentials: 'include',
@@ -71,7 +69,6 @@ class ApiClient {
       console.log(`🟢 [API ${method}] Status:`, response.status);
     }
 
-    // รองรับกรณี server ส่ง text error
     const text = await response.text();
     try {
       return JSON.parse(text) as ApiResponse<T>;
@@ -80,36 +77,37 @@ class ApiClient {
     }
   }
 
-  /**
-   * Fetch CSRF token — ✅ ใช้ CapacitorHttp ผ่าน request() แล้ว
-   */
   async getCsrfToken(): Promise<string> {
     if (this.csrfToken) return this.csrfToken;
+    if (this.csrfPromise) return this.csrfPromise; // ✅ ถ้ากำลัง fetch อยู่ รอตัวเดิม
 
-    try {
-      const data = await this.request<{ csrfToken: string }>('GET', '/auth/csrf');
-      if (data.success && data.data?.csrfToken) {
-        this.csrfToken = data.data.csrfToken;
-        return this.csrfToken;
-      }
-    } catch (e) {
-      console.error('Failed to get CSRF token:', e);
-    }
+    this.csrfPromise = this.request<{ csrfToken: string }>('GET', '/auth/csrf')
+      .then((data) => {
+        if (data.success && data.data?.csrfToken) {
+          this.csrfToken = data.data.csrfToken;
+        }
+        this.csrfPromise = null;
+        return this.csrfToken ?? '';
+      })
+      .catch((e) => {
+        console.error('Failed to get CSRF token:', e);
+        this.csrfPromise = null;
+        return '';
+      });
 
-    return '';
+    return this.csrfPromise;
   }
 
-  /** Clear CSRF token (call on logout) */
   clearCsrfToken(): void {
     this.csrfToken = null;
+    this.csrfPromise = null; // ✅ clear promise ด้วย
   }
 
-  /** Set CSRF token (call after login) */
   setCsrfToken(token: string): void {
     this.csrfToken = token;
+    this.csrfPromise = null; // ✅ clear promise ด้วย
   }
 
-  /** GET */
   async get<T>(endpoint: string): Promise<ApiResponse<T>> {
     try {
       return await this.request<T>('GET', endpoint);
@@ -119,7 +117,6 @@ class ApiClient {
     }
   }
 
-  /** POST (ไม่มี CSRF — สำหรับ login) */
   async postWithoutCsrf<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {
     try {
       return await this.request<T>('POST', endpoint, body);
@@ -129,7 +126,6 @@ class ApiClient {
     }
   }
 
-  /** POST (มี CSRF) */
   async post<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {
     try {
       const csrf = await this.getCsrfToken();
@@ -140,7 +136,6 @@ class ApiClient {
     }
   }
 
-  /** PUT (มี CSRF) */
   async put<T>(endpoint: string, body?: unknown): Promise<ApiResponse<T>> {
     try {
       const csrf = await this.getCsrfToken();
@@ -151,7 +146,6 @@ class ApiClient {
     }
   }
 
-  /** DELETE (มี CSRF) */
   async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
     try {
       const csrf = await this.getCsrfToken();
@@ -163,10 +157,8 @@ class ApiClient {
   }
 }
 
-// Export singleton instance
 export const api = new ApiClient();
 
-// Auth API functions
 export const authApi = {
   login: (username: string, password: string) =>
     api.postWithoutCsrf<{ user: { id: number; username: string; role: string }; csrfToken: string }>(
@@ -196,7 +188,6 @@ export const authApi = {
     api.post('/auth/change-password', { currentPassword, newPassword }),
 };
 
-// Health check
 export const healthApi = {
   check: () => api.get<{ status: string; timestamp: string; uptime: number }>('/health'),
 };
