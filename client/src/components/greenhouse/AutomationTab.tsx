@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Fan, Droplets, Lightbulb, Sun, Zap, Clock, Activity } from 'lucide-react';
-import { useThingsBoardRPC } from '@/hooks/useThingsBoardRPC';
 import { useThingsBoardAttributes } from '@/hooks/useThingsBoardAttributes';
 import { RPC_METHODS } from '@/config/dataKeys';
 import AutoDeviceCard from './AutoDeviceCard';
@@ -13,53 +12,66 @@ interface AutomationTabProps {
   userRole: string;
 }
 
+type DeviceColor = 'blue' | 'cyan' | 'yellow' | 'orange' | 'purple';
+
+interface AutoDeviceConfig {
+  id: 'fan_1' | 'fan_2' | 'water' | 'light_1' | 'motor';
+  name: string;
+  icon: React.ComponentType<any>;
+  color: DeviceColor;
+  conditionMethod?: string;
+  intervalMethod?: string;
+  supportsModes: readonly ('daily' | 'condition' | 'interval')[];
+  special?: 'sequential' | 'allZones';
+}
+
 // Device configurations
-const AUTO_DEVICES = [
+const AUTO_DEVICES: AutoDeviceConfig[] = [
   {
     id: 'fan_1',
     name: 'พัดลมใหญ่',
     icon: Fan,
-    color: 'blue' as const,
+    color: 'blue',
     conditionMethod: RPC_METHODS.CONDITION?.SET_FAN_1_CONDITION || '',
     intervalMethod: RPC_METHODS.INTERVAL?.SET_FAN_1_INTERVAL || '',
-    supportsModes: ['daily', 'condition', 'interval'] as const,
+    supportsModes: ['daily', 'condition', 'interval'],
   },
   {
     id: 'fan_2',
     name: 'พัดลมกวนอากาศ',
     icon: Fan,
-    color: 'cyan' as const,
+    color: 'cyan',
     conditionMethod: RPC_METHODS.CONDITION?.SET_FAN_2_CONDITION || '',
     intervalMethod: RPC_METHODS.INTERVAL?.SET_FAN_2_INTERVAL || '',
-    supportsModes: ['daily', 'condition', 'interval'] as const,
+    supportsModes: ['daily', 'condition', 'interval'],
   },
   {
     id: 'water',
     name: 'เปิดน้ำ (4 โซน)',
     icon: Droplets,
-    color: 'blue' as const,
+    color: 'blue',
     intervalMethod: RPC_METHODS.INTERVAL?.SET_WATER_INTERVAL || '',
-    supportsModes: ['interval'] as const,
-    special: 'sequential' as const,
+    supportsModes: ['daily', 'interval'],
+    special: 'sequential',
   },
   {
     id: 'light_1',
     name: 'แสงเสริม',
     icon: Lightbulb,
-    color: 'yellow' as const,
+    color: 'yellow',
     conditionMethod: RPC_METHODS.CONDITION?.SET_LIGHT_1_CONDITION || '',
     intervalMethod: RPC_METHODS.INTERVAL?.SET_LIGHT_1_INTERVAL || '',
-    supportsModes: ['daily', 'condition', 'interval'] as const,
+    supportsModes: ['daily', 'condition', 'interval'],
   },
   {
     id: 'motor',
     name: 'ระบบพรางแสง (4 โซน)',
     icon: Sun,
-    color: 'orange' as const,
+    color: 'orange',
     conditionMethod: RPC_METHODS.CONDITION?.SET_MOTOR_CONDITION || '',
     intervalMethod: RPC_METHODS.INTERVAL?.SET_MOTOR_INTERVAL || '',
-    supportsModes: ['daily', 'condition', 'interval'] as const,
-    special: 'allZones' as const,
+    supportsModes: ['daily', 'condition', 'interval'],
+    special: 'allZones',
   },
 ];
 
@@ -87,44 +99,67 @@ const CONDITION_OPTIONS = [
   { value: '<=', label: 'น้อยกว่าหรือเท่ากับ (≤)' },
 ];
 
-export default function AutomationTab({ 
-  project, 
-  gh, 
-  isReady, 
-  isOnline, 
-  userRole 
+const iconColorClasses: Record<DeviceColor, string> = {
+  blue: 'bg-blue-100 text-blue-600',
+  cyan: 'bg-cyan-100 text-cyan-600',
+  yellow: 'bg-yellow-100 text-yellow-600',
+  orange: 'bg-orange-100 text-orange-600',
+  purple: 'bg-purple-100 text-purple-600',
+};
+
+function normalizeModeValue(raw: unknown): number {
+  if (raw === undefined || raw === null) return 0;
+  const n = typeof raw === 'string' ? parseInt(raw, 10) : Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+export default function AutomationTab({
+  project,
+  gh,
+  isReady,
+  isOnline,
+  userRole,
 }: AutomationTabProps) {
   const [activeMode, setActiveMode] = useState<'overview' | 'detail'>('overview');
-  
+
   // Get device ID from project/gh keys
   const deviceId = `${project}_${gh}`;
-  
+
   const { attributes, isLoading: isAttrLoading, refresh } = useThingsBoardAttributes(deviceId, {
-    // Faster polling on this screen so the UI reflects ESP32-published
-    // advanced-auto attributes quickly after RPC writes.
     pollingMs: 5000,
   });
 
-  const getDeviceStatus = (device: any) => {
+  const getDeviceStatus = (device: AutoDeviceConfig) => {
     let isActive = false;
     let autoModeCode = 0;
 
-    // เช็คเปิด/ปิด (Active)
+    // Active status
     if (device.id === 'water') {
-      isActive = attributes['valve_1_cmd'] === true || attributes['valve_2_cmd'] === true || 
-                attributes['valve_3_cmd'] === true || attributes['valve_4_cmd'] === true;
+      isActive =
+        attributes['valve_1_cmd'] === true ||
+        attributes['valve_2_cmd'] === true ||
+        attributes['valve_3_cmd'] === true ||
+        attributes['valve_4_cmd'] === true;
     } else if (device.id === 'motor') {
       isActive = attributes['motor_1_fw'] === true || attributes['motor_1_re'] === true;
     } else {
       isActive = attributes[`${device.id}_cmd`] === true;
     }
 
-    // เช็คโหมด (Auto Mode) ตาม Firmware v2.3
-    if (device.id === 'water') autoModeCode = attributes['water_mode'] ?? (attributes['valve_1_auto'] ? 1 : 0);
-    else if (device.id === 'motor') autoModeCode = attributes['motor_mode'] ?? (attributes['global_motor_auto'] ? 1 : 0);
-    else {
-      const modeKey = device.id.replace('_', '') + '_mode'; // แปลง fan_1 เป็น fan1_mode
-      autoModeCode = attributes[modeKey] ?? (attributes[`${device.id}_auto`] ? 1 : 0);
+    // Auto mode status from firmware-published attributes
+    if (device.id === 'water') {
+      autoModeCode = normalizeModeValue(
+        attributes['water_mode'] ?? (attributes['valve_1_auto'] ? 1 : 0)
+      );
+    } else if (device.id === 'motor') {
+      autoModeCode = normalizeModeValue(
+        attributes['motor_mode'] ?? (attributes['global_motor_auto'] ? 1 : 0)
+      );
+    } else {
+      const modeKey = device.id.replace('_', '') + '_mode'; // fan_1 -> fan1_mode
+      autoModeCode = normalizeModeValue(
+        attributes[modeKey] ?? (attributes[`${device.id}_auto`] ? 1 : 0)
+      );
     }
 
     return { isActive, autoModeCode };
@@ -234,30 +269,46 @@ export default function AutomationTab({
               const { isActive, autoModeCode } = getDeviceStatus(device);
               const isAutoEnabled = autoModeCode > 0;
 
-              const modeNames = ["Manual", "ตั้งเวลา (Daily)", "การทำงานตามเงื่อนไข", "การทํางานเป็นรอบ"];
-              const currentModeName = modeNames[autoModeCode] || "Manual";
+              const modeNames = [
+                'Manual',
+                'ตั้งเวลา (Daily)',
+                'การทำงานตามเงื่อนไข',
+                'การทํางานเป็นรอบ',
+              ];
+              const currentModeName = modeNames[autoModeCode] || 'Manual';
 
               return (
-                <div key={device.id} className={`relative overflow-hidden rounded-2xl p-4 border transition-all ${
-                  isActive ? 'bg-white border-emerald-200 shadow-md' : 'bg-slate-50 border-slate-200'
-                }`}>
-
-                  {/* 👇👇👇 วางโค้ดตรงนี้เลยครับ (บรรทัดแรกสุดในการ์ด) 👇👇👇 */}
+                <div
+                  key={device.id}
+                  className={`relative overflow-hidden rounded-2xl p-4 border transition-all ${
+                    isActive
+                      ? 'bg-white border-emerald-200 shadow-md'
+                      : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
                   <div className="absolute top-4 right-4 flex items-center gap-2">
-                    <span className={`text-[10px] font-bold uppercase ${isActive ? 'text-emerald-600' : 'text-slate-400'}`}>
+                    <span
+                      className={`text-[10px] font-bold uppercase ${
+                        isActive ? 'text-emerald-600' : 'text-slate-400'
+                      }`}
+                    >
                       {isActive ? 'Working' : 'Idle'}
                     </span>
-                    <span className={`flex h-2.5 w-2.5 rounded-full ${
-                      isActive ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-300'
-                    }`} />
+                    <span
+                      className={`flex h-2.5 w-2.5 rounded-full ${
+                        isActive
+                          ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]'
+                          : 'bg-slate-300'
+                      }`}
+                    />
                   </div>
-                  {/* 👆👆👆 จบโค้ดที่แทรก 👆👆👆 */}
 
-                  {/* แทนที่คอมเมนต์ ... ส่วนแสดงผล Icon และ Name เหมือนเดิม ... ด้วยโค้ดนี้ */}
                   <div className="flex items-start gap-4 mb-3">
-                    <div className={`p-3 rounded-xl flex items-center justify-center transition-colors ${
-                      isActive ? `bg-${device.color}-100 text-${device.color}-600` : 'bg-slate-200 text-slate-500'
-                    }`}>
+                    <div
+                      className={`p-3 rounded-xl flex items-center justify-center transition-colors ${
+                        isActive ? iconColorClasses[device.color] : 'bg-slate-200 text-slate-500'
+                      }`}
+                    >
                       <device.icon className="w-6 h-6" />
                     </div>
                     <div>
@@ -269,14 +320,17 @@ export default function AutomationTab({
                       </p>
                     </div>
                   </div>
-                  
-                  {/* ส่วนป้ายโหมดด้านล่างที่ต้องแก้ */}
+
                   <div className="mt-4 pt-3 border-t">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-gray-500">ระบบควบคุม</span>
-                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
-                        isAutoEnabled ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'
-                      }`}>
+                      <span
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                          isAutoEnabled
+                            ? 'bg-purple-100 text-purple-700'
+                            : 'bg-orange-100 text-orange-700'
+                        }`}
+                      >
                         {isAutoEnabled ? currentModeName : 'Manual'}
                       </span>
                     </div>
