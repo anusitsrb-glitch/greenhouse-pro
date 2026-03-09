@@ -90,6 +90,7 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
       if (opt === null || opt === undefined) continue;
       if (data[relay.cmdKey] === undefined) continue; // ← guard เพิ่ม
       const real = normalizeBoolean(data[relay.cmdKey]);
+      console.log(`[relay] ${relay.key} | opt=${opt} | real=${real} | raw=${data[relay.cmdKey]}`);
       if (real === opt) clearRelayOptimistic(relay.key);
     }
   }, [data]);

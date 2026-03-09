@@ -210,7 +210,7 @@ export default function AutoDeviceCard({
       action,
     };
 
-    await conditionRpc.sendCommand(params);
+    conditionRpc.sendCommand(params);
     doRefresh();
   };
 
@@ -226,7 +226,7 @@ export default function AutoDeviceCard({
       maxCycles: parseInt(maxCycles, 10),
     };
 
-    await intervalRpc.sendCommand(params);
+    intervalRpc.sendCommand(params);
     doRefresh();
   };
 
