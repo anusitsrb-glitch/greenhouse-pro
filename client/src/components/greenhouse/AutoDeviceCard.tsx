@@ -1,6 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, ComponentType } from 'react';
 import {
-  LucideIcon,
   ChevronDown,
   ChevronUp,
   Clock,
@@ -14,7 +13,7 @@ import { normalizeBoolean } from '@/lib/utils';
 interface DeviceConfig {
   id: string;
   name: string;
-  icon: LucideIcon;
+  icon: ComponentType<any>;
   color: 'blue' | 'cyan' | 'yellow' | 'orange' | 'purple';
   conditionMethod?: string;
   intervalMethod?: string;
