@@ -193,12 +193,6 @@ export default function AutoDeviceCard({
     hydratedRef.current = true;
   }, [attributes, attrPrefix, isExpanded]);
 
-  const doRefresh = () => {
-    if (!onRefresh) return;
-    setTimeout(() => onRefresh(), 300);
-    setTimeout(() => onRefresh(), 1200);
-  };
-
   const handleConditionSave = async () => {
     if (!device.conditionMethod) return;
 
@@ -210,8 +204,12 @@ export default function AutoDeviceCard({
       action,
     };
 
-    conditionRpc.sendCommand(params);
-    doRefresh();
+    try {
+      await conditionRpc.sendCommand(params);
+      onRefresh?.();
+    } catch (error) {
+      console.error('Failed to save condition config:', error);
+    }
   };
 
   const handleIntervalSave = async () => {
@@ -226,8 +224,12 @@ export default function AutoDeviceCard({
       maxCycles: parseInt(maxCycles, 10),
     };
 
-    intervalRpc.sendCommand(params);
-    doRefresh();
+    try {
+      await intervalRpc.sendCommand(params);
+      onRefresh?.();
+    } catch (error) {
+      console.error('Failed to save interval config:', error);
+    }
   };
 
   const selectedSensorInfo = sensorOptions.find((s) => s.value === selectedSensor);
@@ -241,7 +243,6 @@ export default function AutoDeviceCard({
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-      {/* Header */}
       <div
         className={`bg-gradient-to-r ${colorClasses[device.color]} p-5 text-white cursor-pointer`}
         onClick={() => setIsExpanded(!isExpanded)}
@@ -266,17 +267,14 @@ export default function AutoDeviceCard({
         </div>
       </div>
 
-      {/* Expanded Content */}
       {isExpanded && (
         <div className="p-6">
-          {/* Current mode */}
           <div className="mb-4 flex items-center justify-between">
             <div className="text-sm text-gray-700 dark:text-gray-300">
               โหมดปัจจุบัน: <span className="font-semibold">{modeLabel}</span>
             </div>
           </div>
 
-          {/* Mode Tabs */}
           <div className="flex gap-2 mb-6 p-1 bg-gray-100 dark:bg-gray-700 rounded-xl">
             {device.supportsModes.includes('daily') && (
               <button
@@ -327,7 +325,6 @@ export default function AutoDeviceCard({
             )}
           </div>
 
-          {/* Daily Schedule */}
           {activeTab === 'daily' && (
             <div className="space-y-4">
               <div className="flex items-start gap-2 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
@@ -341,7 +338,6 @@ export default function AutoDeviceCard({
             </div>
           )}
 
-          {/* Condition-based */}
           {activeTab === 'condition' && device.supportsModes.includes('condition') && (
             <div className="space-y-5">
               <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-xl">
@@ -497,7 +493,6 @@ export default function AutoDeviceCard({
             </div>
           )}
 
-          {/* Interval Loop */}
           {activeTab === 'interval' && device.supportsModes.includes('interval') && (
             <div className="space-y-5">
               <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-xl">
