@@ -16,7 +16,7 @@ async function seed() {
     const passwordHash = await bcrypt.hash('superadmin123', SALT_ROUNDS);
     await query(`
       INSERT INTO users (username, email, password_hash, role, language, theme, is_active)
-      VALUES ($1, $2, $3, 'superadmin', 'th', 'light', true)
+      VALUES ($1, $2, $3, 'superadmin', 'th', 'light', 1)
     `, ['superadmin', 'superadmin@greenhouse.local', passwordHash]);
 
     console.log('');
@@ -41,7 +41,7 @@ async function seed() {
     const passwordHash = await bcrypt.hash(env.ADMIN_PASSWORD, SALT_ROUNDS);
     await query(`
       INSERT INTO users (username, email, password_hash, role, language, theme, is_active)
-      VALUES ($1, $2, $3, 'superadmin', 'th', 'light', true)
+      VALUES ($1, $2, $3, 'superadmin', 'th', 'light', 1)
     `, [env.ADMIN_USERNAME, 'admin@greenhouse.local', passwordHash]);
 
     console.log('');
@@ -70,7 +70,7 @@ async function seed() {
       const passwordHash = await bcrypt.hash(user.password, SALT_ROUNDS);
       await query(`
         INSERT INTO users (username, email, password_hash, role, language, theme, is_active)
-        VALUES ($1, $2, $3, $4, 'th', 'light', true)
+        VALUES ($1, $2, $3, $4, 'th', 'light', 1)
       `, [user.username, user.email, passwordHash, user.role]);
     }
   }
@@ -187,8 +187,8 @@ async function seed() {
   // 9. Seed Default Notification Channels
   // ============================================================
   const channels = [
-    { name: 'Line Notify หลัก', channel_type: 'line', config: '{}', is_default: true },
-    { name: 'SMS หลัก', channel_type: 'sms', config: '{}', is_default: false },
+    { name: 'Line Notify หลัก', channel_type: 'line', config: '{}', is_default: 1 },
+{ name: 'SMS หลัก', channel_type: 'sms', config: '{}', is_default: 0 },
   ];
 
   for (const channel of channels) {
@@ -196,7 +196,7 @@ async function seed() {
     if (existing.rows.length === 0) {
       await query(`
         INSERT INTO notification_channels (name, channel_type, config, is_default, is_active)
-        VALUES ($1, $2, $3, $4, true)
+        VALUES ($1, $2, $3, $4, 1)
       `, [channel.name, channel.channel_type, channel.config, channel.is_default]);
     }
   }
@@ -241,7 +241,7 @@ async function seed() {
     if (existing.rows.length === 0) {
       await query(`
         INSERT INTO notification_templates (name, template_type, subject, body_template, variables, is_active)
-        VALUES ($1, $2, $3, $4, $5, true)
+        VALUES ($1, $2, $3, $4, $5, 1)
       `, [template.name, template.template_type, template.subject, template.body_template, template.variables]);
     }
   }
@@ -335,7 +335,7 @@ async function seed() {
         if (existing.rows.length === 0) {
           await query(`
             INSERT INTO heatmap_configs (greenhouse_id, name, sensor_key, color_ranges, is_default)
-            VALUES ($1, $2, $3, $4, true)
+            VALUES ($1, $2, $3, $4, 1)
           `, [gh.id, config.name, config.sensor_key, config.color_ranges]);
         }
       }
