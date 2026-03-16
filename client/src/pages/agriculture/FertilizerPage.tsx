@@ -54,7 +54,10 @@ export function FertilizerPage() {
   const handleComplete = async (schedule: FertilizerSchedule) => {
     try {
       await api.put(`/agriculture/fertilizer/${schedule.id}/complete`, {});
-      addToast({ type: 'success', message: 'บันทึกสำเร็จ' });
+      addToast({ 
+        type: 'success', 
+        message: 'บันทึกสำเร็จ ดูประวัติได้ที่ ✓ แสดงที่เสร็จแล้ว' 
+      });
       fetchSchedules();
     } catch { addToast({ type: 'error', message: 'เกิดข้อผิดพลาด' }); }
   };
@@ -225,8 +228,20 @@ function ScheduleCard({ schedule, onComplete, onEdit, onDelete, isOverdue, isTod
               </Button>
             </div>
           )}
-          {isCompleted && schedule.completed_at && (
-            <p className="text-xs text-gray-400 mt-1">เสร็จ: {new Date(schedule.completed_at).toLocaleString('th-TH')}</p>
+          {isCompleted && (
+            <div className="text-right">
+              {schedule.completed_at && (
+                <p className="text-xs text-gray-400 mt-1">เสร็จ: {new Date(schedule.completed_at).toLocaleString('th-TH')}</p>
+              )}
+              <div className="flex gap-1 mt-2 justify-end">
+                <Button size="sm" variant="outline" onClick={() => onEdit(schedule)}>
+                  <Pencil className="w-4 h-4" />
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => onDelete(schedule)} className="text-red-600">
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
           )}
         </div>
       </div>
