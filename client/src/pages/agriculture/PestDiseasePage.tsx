@@ -266,7 +266,16 @@ function PestDiseaseModal({ record, projects, onClose, onSuccess }: {
     setIsLoading(true);
     try {
       if (record) {
-        await api.put(`/agriculture/pest-disease/${record.id}`, form);
+        // Edit: ส่งแค่ fields ที่แก้ได้ ไม่ส่ง project_key/gh_key
+        await api.put(`/agriculture/pest-disease/${record.id}`, {
+          record_type: form.record_type,
+          name: form.name,
+          severity: form.severity,
+          affected_area: form.affected_area,
+          treatment: form.treatment,
+          photo_url: form.photo_url,
+          notes: form.notes,
+        });
       } else {
         await api.post('/agriculture/pest-disease', form);
       }
