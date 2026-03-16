@@ -2,6 +2,7 @@ import pkg from 'pg';
 import bcrypt from 'bcrypt';
 import { env } from '../config/env.js';
 import { runMigrations } from './migrate.js';
+import { seed } from './seed.js'; 
 
 const { Pool } = pkg;
 
@@ -72,5 +73,6 @@ async function seedAdminIfMissing() {
 export async function initDB() {
   await runMigrations();
   await seedAdminIfMissing();
+  await seed(); 
   console.log('[DB] PostgreSQL connected and ready');
 }
