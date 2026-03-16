@@ -3,7 +3,7 @@
  * Handles sending notifications via Line Notify API
  */
 
-import { db } from '../db/connection.js';
+import { query } from '../db/connection.js';
 
 interface LineNotifyConfig {
   enabled: boolean;
@@ -30,28 +30,19 @@ interface AlertData {
   direction?: 'above' | 'below';
 }
 
-/**
- * Get Line Notify configuration from database
- */
-export function getLineNotifyConfig(): LineNotifyConfig | null {
+export async function getLineNotifyConfig(): Promise<LineNotifyConfig | null> {
   try {
-    const setting = db.prepare(`
-      SELECT value FROM app_settings WHERE key = 'line_notify'
-    `).get() as { value: string } | undefined;
-
+    const result = await query(`SELECT value FROM app_settings WHERE key = 'line_notify'`, []);
+    const setting = result.rows[0] as { value: string } | undefined;
     if (!setting) return null;
-
     return JSON.parse(setting.value) as LineNotifyConfig;
   } catch {
     return null;
   }
 }
 
-/**
- * Send notification via Line Notify
- */
 export async function sendLineNotification(message: string): Promise<boolean> {
-  const config = getLineNotifyConfig();
+  const config = await getLineNotifyConfig();
 
   if (!config || !config.enabled || !config.token) {
     console.log('Line Notify is disabled or not configured');
@@ -80,15 +71,10 @@ export async function sendLineNotification(message: string): Promise<boolean> {
   }
 }
 
-/**
- * Send alert notification
- */
 export async function sendAlert(data: AlertData): Promise<boolean> {
-  const config = getLineNotifyConfig();
+  const config = await getLineNotifyConfig();
 
   if (!config || !config.enabled) return false;
-
-  // Check if this alert type is enabled
   if (data.alertType === 'offline' && !config.alertOnOffline) return false;
   if (data.alertType === 'threshold' && !config.alertOnThreshold) return false;
 
@@ -109,16 +95,12 @@ export async function sendAlert(data: AlertData): Promise<boolean> {
   return sendLineNotification(message);
 }
 
-/**
- * Check sensor values against thresholds and send alerts
- */
 export async function checkThresholds(
   projectName: string,
   greenhouseName: string,
   sensorData: Record<string, number | null>
 ): Promise<void> {
-  const config = getLineNotifyConfig();
-
+  const config = await getLineNotifyConfig();
   if (!config || !config.enabled || !config.alertOnThreshold) return;
 
   const checks = [
@@ -126,7 +108,6 @@ export async function checkThresholds(
     { key: 'air_humidity', name: 'ความชื้นอากาศ', min: config.thresholds.humidity_min, max: config.thresholds.humidity_max, unit: '%' },
   ];
 
-  // Add soil moisture checks for nodes 1-10
   for (let i = 1; i <= 10; i++) {
     checks.push({
       key: `soil${i}_moisture`,
@@ -142,44 +123,19 @@ export async function checkThresholds(
     if (value === null || value === undefined) continue;
 
     if (value < check.min) {
-      await sendAlert({
-        projectName,
-        greenhouseName,
-        alertType: 'threshold',
-        sensorName: check.name,
-        currentValue: value,
-        threshold: check.min,
-        direction: 'below',
-      });
+      await sendAlert({ projectName, greenhouseName, alertType: 'threshold', sensorName: check.name, currentValue: value, threshold: check.min, direction: 'below' });
     } else if (value > check.max) {
-      await sendAlert({
-        projectName,
-        greenhouseName,
-        alertType: 'threshold',
-        sensorName: check.name,
-        currentValue: value,
-        threshold: check.max,
-        direction: 'above',
-      });
+      await sendAlert({ projectName, greenhouseName, alertType: 'threshold', sensorName: check.name, currentValue: value, threshold: check.max, direction: 'above' });
     }
   }
 }
 
-/**
- * Send daily summary report
- */
 export async function sendDailySummary(
   projectName: string,
   greenhouseName: string,
-  summary: {
-    avgTemp: number;
-    avgHumidity: number;
-    avgSoilMoisture: number;
-    alertCount: number;
-  }
+  summary: { avgTemp: number; avgHumidity: number; avgSoilMoisture: number; alertCount: number }
 ): Promise<boolean> {
-  const config = getLineNotifyConfig();
-
+  const config = await getLineNotifyConfig();
   if (!config || !config.enabled) return false;
 
   const message = `

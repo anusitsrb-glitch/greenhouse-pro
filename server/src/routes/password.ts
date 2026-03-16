@@ -5,7 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
-import { db } from '../db/connection.js';
+import { query } from '../db/connection.js';
 import { sendSuccess, sendError, ThaiErrors } from '../utils/response.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { logAudit, AuditActions } from '../utils/audit.js';
@@ -41,7 +41,7 @@ function checkPasswordStrength(password: string): { score: number; feedback: str
 }
 
 /**
- * GET /api/password/strength
+ * POST /api/password/strength
  * Check password strength
  */
 router.post('/strength', (req: Request, res: Response) => {
@@ -53,7 +53,7 @@ router.post('/strength', (req: Request, res: Response) => {
   }
 
   const result = checkPasswordStrength(password);
-  
+
   let level: string;
   if (result.score <= 2) level = 'weak';
   else if (result.score <= 4) level = 'medium';
@@ -91,7 +91,8 @@ router.post('/change', requireAuth, async (req: Request, res: Response) => {
     }
 
     // Get current user
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.userId) as any;
+    const userResult = await query('SELECT * FROM users WHERE id = $1', [req.session.userId]);
+    const user = userResult.rows[0] as any;
 
     if (!user) {
       sendError(res, 'ไม่พบผู้ใช้', 404);
@@ -109,11 +110,12 @@ router.post('/change', requireAuth, async (req: Request, res: Response) => {
     const newHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
 
     // Update password
-    db.prepare(`
-      UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?
-    `).run(newHash, req.session.userId);
+    await query(
+      'UPDATE users SET password_hash = $1, updated_at = now()::text WHERE id = $2',
+      [newHash, req.session.userId]
+    );
 
-    logAudit({
+    await logAudit({
       userId: req.session.userId ?? null,
       action: AuditActions.PASSWORD_CHANGED,
       detail: { username: user.username },
@@ -141,7 +143,8 @@ router.post('/reset/:userId', requireAdmin, async (req: Request, res: Response) 
     }
 
     // Get target user
-    const targetUser = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as any;
+    const targetResult = await query('SELECT * FROM users WHERE id = $1', [userId]);
+    const targetUser = targetResult.rows[0] as any;
 
     if (!targetUser) {
       sendError(res, 'ไม่พบผู้ใช้', 404);
@@ -158,11 +161,12 @@ router.post('/reset/:userId', requireAdmin, async (req: Request, res: Response) 
     const newHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
 
     // Update password
-    db.prepare(`
-      UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?
-    `).run(newHash, userId);
+    await query(
+      'UPDATE users SET password_hash = $1, updated_at = now()::text WHERE id = $2',
+      [newHash, userId]
+    );
 
-    logAudit({
+    await logAudit({
       userId: req.session.userId ?? null,
       action: AuditActions.PASSWORD_RESET,
       detail: { targetUserId: userId, targetUsername: targetUser.username },

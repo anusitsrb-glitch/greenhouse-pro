@@ -29,12 +29,7 @@ import { startDeviceMonitoring } from './services/deviceMonitor.js';
 import { startSensorMonitoring } from './services/sensorMonitor.js';
 import agricultureRoutes from './routes/agriculture.js';
 
-// ✅ ใช้ DB instance เพื่อทำ SQLite session store
-import { db } from './db/connection.js';
-import './db/migrate.js';
-
-// ✅ SQLite Session Store (แทน MemoryStore)
-import BetterSqlite3SessionStore from 'better-sqlite3-session-store';
+import { initDB } from './db/connection.js';
 
 const app = express();
 
@@ -127,18 +122,9 @@ app.use(cookieParser());
 // ============================================================
 // ✅ SESSION - Updated for Capacitor Support
 // ============================================================
-const SqliteStore = BetterSqlite3SessionStore(session);
-
 app.use(
   session({
-    store: new SqliteStore({
-      client: db,
-      table: 'sessions',
-      expired: {
-        clear: true,
-        intervalMs: 15 * 60 * 1000,
-      },
-    }),
+    store: undefined,
     secret: env.APP_SESSION_SECRET,
     name: 'greenhouse.sid',
     resave: false,
@@ -147,8 +133,8 @@ app.use(
     rolling: true,
     cookie: {
       httpOnly: true,
-      secure: true,  // ✅ เปลี่ยนเป็น true เสมอ (Railway ใช้ HTTPS)
-      sameSite: 'none',  // ✅ เปลี่ยนเป็น 'none' เสมอ
+      secure: true,
+      sameSite: 'none',
       maxAge: 7 * 24 * 60 * 60 * 1000,
       domain: undefined,
     },
@@ -248,6 +234,7 @@ app.use(errorHandler);
 
 const PORT = Number(process.env.PORT) || env.PORT || 3000;
 
+initDB().then(() => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('════════════════════════════════════════════════════════');
@@ -300,5 +287,5 @@ function startMonitoringServices() {
     console.error('❌ Failed to start monitoring services:', error);
   }
 }
-
+});
 export default app;

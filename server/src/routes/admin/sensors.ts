@@ -1,10 +1,5 @@
-/**
- * Sensor Configuration Routes
- * Manage dynamic sensor configurations per greenhouse
- */
-
 import { Router, Request, Response } from 'express';
-import { db } from '../../db/connection.js';
+import { query } from '../../db/connection.js';
 import { sendSuccess, sendError, ThaiErrors } from '../../utils/response.js';
 import { requireAdmin } from '../../middleware/auth.js';
 import { logAudit, AuditActions } from '../../utils/audit.js';
@@ -12,10 +7,6 @@ import { z } from 'zod';
 
 const router = Router();
 router.use(requireAdmin);
-
-// ============================================================
-// Validation Schemas
-// ============================================================
 
 const sensorConfigSchema = z.object({
   sensor_key: z.string().min(1).max(50).regex(/^[a-z0-9_]+$/),
@@ -35,315 +26,184 @@ const sensorConfigSchema = z.object({
   is_active: z.boolean().optional(),
 });
 
-// ============================================================
-// Routes
-// ============================================================
+// Helper: get greenhouse id
+async function getGreenhouseId(projectKey: string, ghKey: string): Promise<number | null> {
+  const result = await query(`
+    SELECT g.id FROM greenhouses g
+    JOIN projects p ON g.project_id = p.id
+    WHERE p.key = $1 AND g.gh_key = $2
+  `, [projectKey, ghKey]);
+  return result.rows[0]?.id ?? null;
+}
 
-/**
- * GET /api/admin/sensors/:projectKey/:ghKey
- * Get all sensor configs for a greenhouse
- */
-router.get('/:projectKey/:ghKey', (req: Request, res: Response) => {
+// GET /api/admin/sensors/:projectKey/:ghKey
+router.get('/:projectKey/:ghKey', async (req: Request, res: Response) => {
   try {
     const { projectKey, ghKey } = req.params;
+    const ghId = await getGreenhouseId(projectKey, ghKey);
+    if (!ghId) { sendError(res, 'ไม่พบโรงเรือน', 404); return; }
 
-    const greenhouse = db.prepare(`
-      SELECT g.id FROM greenhouses g
-      JOIN projects p ON g.project_id = p.id
-      WHERE p.key = ? AND g.gh_key = ?
-    `).get(projectKey, ghKey) as { id: number } | undefined;
-
-    if (!greenhouse) {
-      sendError(res, 'ไม่พบโรงเรือน', 404);
-      return;
-    }
-
-    const sensors = db.prepare(`
-      SELECT * FROM sensor_configs 
-      WHERE greenhouse_id = ?
+    const result = await query(`
+      SELECT * FROM sensor_configs WHERE greenhouse_id = $1
       ORDER BY sort_order, sensor_type, name_th
-    `).all(greenhouse.id);
-
-    sendSuccess(res, { sensors });
+    `, [ghId]);
+    sendSuccess(res, { sensors: result.rows });
   } catch (error) {
-    console.error('Error fetching sensors:', error);
     sendError(res, ThaiErrors.SERVER_ERROR, 500);
   }
 });
 
-/**
- * POST /api/admin/sensors/:projectKey/:ghKey
- * Create new sensor config
- */
-router.post('/:projectKey/:ghKey', (req: Request, res: Response) => {
+// POST /api/admin/sensors/:projectKey/:ghKey
+router.post('/:projectKey/:ghKey', async (req: Request, res: Response) => {
   try {
     const { projectKey, ghKey } = req.params;
     const parsed = sensorConfigSchema.safeParse(req.body);
+    if (!parsed.success) { sendError(res, ThaiErrors.INVALID_INPUT, 400); return; }
 
-    if (!parsed.success) {
-      sendError(res, ThaiErrors.INVALID_INPUT, 400);
-      return;
-    }
+    const ghId = await getGreenhouseId(projectKey, ghKey);
+    if (!ghId) { sendError(res, 'ไม่พบโรงเรือน', 404); return; }
 
-    const greenhouse = db.prepare(`
-      SELECT g.id FROM greenhouses g
-      JOIN projects p ON g.project_id = p.id
-      WHERE p.key = ? AND g.gh_key = ?
-    `).get(projectKey, ghKey) as { id: number } | undefined;
+    const existing = await query(`SELECT id FROM sensor_configs WHERE greenhouse_id = $1 AND sensor_key = $2`, [ghId, parsed.data.sensor_key]);
+    if (existing.rows.length > 0) { sendError(res, 'Sensor key นี้มีอยู่แล้ว', 400); return; }
 
-    if (!greenhouse) {
-      sendError(res, 'ไม่พบโรงเรือน', 404);
-      return;
-    }
-
-    // Check if sensor_key already exists
-    const existing = db.prepare(`
-      SELECT id FROM sensor_configs WHERE greenhouse_id = ? AND sensor_key = ?
-    `).get(greenhouse.id, parsed.data.sensor_key);
-
-    if (existing) {
-      sendError(res, 'Sensor key นี้มีอยู่แล้ว', 400);
-      return;
-    }
-
-    const result = db.prepare(`
+    const d = parsed.data;
+    const result = await query(`
       INSERT INTO sensor_configs (
         greenhouse_id, sensor_key, name_th, sensor_type, data_key, unit,
         icon, color, min_value, max_value, alert_min, alert_max,
         calibration_offset, calibration_scale, sort_order, is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      greenhouse.id,
-      parsed.data.sensor_key,
-      parsed.data.name_th,
-      parsed.data.sensor_type,
-      parsed.data.data_key,
-      parsed.data.unit,
-      parsed.data.icon || 'Thermometer',
-      parsed.data.color || '#10b981',
-      parsed.data.min_value ?? null,
-      parsed.data.max_value ?? null,
-      parsed.data.alert_min ?? null,
-      parsed.data.alert_max ?? null,
-      parsed.data.calibration_offset ?? 0,
-      parsed.data.calibration_scale ?? 1,
-      parsed.data.sort_order ?? 0,
-      parsed.data.is_active !== false ? 1 : 0
-    );
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id
+    `, [
+      ghId, d.sensor_key, d.name_th, d.sensor_type, d.data_key, d.unit,
+      d.icon || 'Thermometer', d.color || '#10b981',
+      d.min_value ?? null, d.max_value ?? null, d.alert_min ?? null, d.alert_max ?? null,
+      d.calibration_offset ?? 0, d.calibration_scale ?? 1,
+      d.sort_order ?? 0, d.is_active !== false ? 1 : 0
+    ]);
 
-    logAudit({
-      userId: req.session.userId ?? null,
-      action: AuditActions.SENSOR_CREATED,
-      projectKey,
-      ghKey,
-      detail: { sensorKey: parsed.data.sensor_key, sensorName: parsed.data.name_th },
-    });
-
-    sendSuccess(res, { 
-      message: 'สร้าง Sensor สำเร็จ', 
-      sensor: { id: result.lastInsertRowid } 
-    });
+    logAudit({ userId: req.session.userId ?? null, action: AuditActions.SENSOR_CREATED, projectKey, ghKey, detail: { sensorKey: d.sensor_key, sensorName: d.name_th } });
+    sendSuccess(res, { message: 'สร้าง Sensor สำเร็จ', sensor: { id: result.rows[0].id } });
   } catch (error) {
-    console.error('Error creating sensor:', error);
     sendError(res, ThaiErrors.SERVER_ERROR, 500);
   }
 });
 
-/**
- * PUT /api/admin/sensors/:projectKey/:ghKey/:sensorKey
- * Update sensor config
- */
-router.put('/:projectKey/:ghKey/:sensorKey', (req: Request, res: Response) => {
+// PUT /api/admin/sensors/:projectKey/:ghKey/:sensorKey
+router.put('/:projectKey/:ghKey/:sensorKey', async (req: Request, res: Response) => {
   try {
     const { projectKey, ghKey, sensorKey } = req.params;
     const parsed = sensorConfigSchema.partial().safeParse(req.body);
+    if (!parsed.success) { sendError(res, ThaiErrors.INVALID_INPUT, 400); return; }
 
-    if (!parsed.success) {
-      sendError(res, ThaiErrors.INVALID_INPUT, 400);
-      return;
-    }
-
-    const sensor = db.prepare(`
+    const sensorRes = await query(`
       SELECT sc.id FROM sensor_configs sc
       JOIN greenhouses g ON sc.greenhouse_id = g.id
       JOIN projects p ON g.project_id = p.id
-      WHERE p.key = ? AND g.gh_key = ? AND sc.sensor_key = ?
-    `).get(projectKey, ghKey, sensorKey) as { id: number } | undefined;
+      WHERE p.key = $1 AND g.gh_key = $2 AND sc.sensor_key = $3
+    `, [projectKey, ghKey, sensorKey]);
+    const sensor = sensorRes.rows[0];
+    if (!sensor) { sendError(res, 'ไม่พบ Sensor', 404); return; }
 
-    if (!sensor) {
-      sendError(res, 'ไม่พบ Sensor', 404);
-      return;
-    }
-
+    const d = parsed.data;
     const updates: string[] = [];
     const values: any[] = [];
+    let idx = 1;
 
-    const data = parsed.data;
-    if (data.name_th !== undefined) { updates.push('name_th = ?'); values.push(data.name_th); }
-    if (data.sensor_type !== undefined) { updates.push('sensor_type = ?'); values.push(data.sensor_type); }
-    if (data.data_key !== undefined) { updates.push('data_key = ?'); values.push(data.data_key); }
-    if (data.unit !== undefined) { updates.push('unit = ?'); values.push(data.unit); }
-    if (data.icon !== undefined) { updates.push('icon = ?'); values.push(data.icon); }
-    if (data.color !== undefined) { updates.push('color = ?'); values.push(data.color); }
-    if (data.min_value !== undefined) { updates.push('min_value = ?'); values.push(data.min_value); }
-    if (data.max_value !== undefined) { updates.push('max_value = ?'); values.push(data.max_value); }
-    if (data.alert_min !== undefined) { updates.push('alert_min = ?'); values.push(data.alert_min); }
-    if (data.alert_max !== undefined) { updates.push('alert_max = ?'); values.push(data.alert_max); }
-    if (data.calibration_offset !== undefined) { updates.push('calibration_offset = ?'); values.push(data.calibration_offset); }
-    if (data.calibration_scale !== undefined) { updates.push('calibration_scale = ?'); values.push(data.calibration_scale); }
-    if (data.sort_order !== undefined) { updates.push('sort_order = ?'); values.push(data.sort_order); }
-    if (data.is_active !== undefined) { updates.push('is_active = ?'); values.push(data.is_active ? 1 : 0); }
+    if (d.name_th !== undefined) { updates.push(`name_th = $${idx++}`); values.push(d.name_th); }
+    if (d.sensor_type !== undefined) { updates.push(`sensor_type = $${idx++}`); values.push(d.sensor_type); }
+    if (d.data_key !== undefined) { updates.push(`data_key = $${idx++}`); values.push(d.data_key); }
+    if (d.unit !== undefined) { updates.push(`unit = $${idx++}`); values.push(d.unit); }
+    if (d.icon !== undefined) { updates.push(`icon = $${idx++}`); values.push(d.icon); }
+    if (d.color !== undefined) { updates.push(`color = $${idx++}`); values.push(d.color); }
+    if (d.min_value !== undefined) { updates.push(`min_value = $${idx++}`); values.push(d.min_value); }
+    if (d.max_value !== undefined) { updates.push(`max_value = $${idx++}`); values.push(d.max_value); }
+    if (d.alert_min !== undefined) { updates.push(`alert_min = $${idx++}`); values.push(d.alert_min); }
+    if (d.alert_max !== undefined) { updates.push(`alert_max = $${idx++}`); values.push(d.alert_max); }
+    if (d.calibration_offset !== undefined) { updates.push(`calibration_offset = $${idx++}`); values.push(d.calibration_offset); }
+    if (d.calibration_scale !== undefined) { updates.push(`calibration_scale = $${idx++}`); values.push(d.calibration_scale); }
+    if (d.sort_order !== undefined) { updates.push(`sort_order = $${idx++}`); values.push(d.sort_order); }
+    if (d.is_active !== undefined) { updates.push(`is_active = $${idx++}`); values.push(d.is_active ? 1 : 0); }
 
     if (updates.length > 0) {
-      updates.push("updated_at = datetime('now')");
+      updates.push(`updated_at = now()::text`);
       values.push(sensor.id);
-
-      db.prepare(`
-        UPDATE sensor_configs SET ${updates.join(', ')} WHERE id = ?
-      `).run(...values);
+      await query(`UPDATE sensor_configs SET ${updates.join(', ')} WHERE id = $${idx}`, values);
     }
 
-    logAudit({
-      userId: req.session.userId ?? null,
-      action: AuditActions.SENSOR_UPDATED,
-      projectKey,
-      ghKey,
-      detail: { sensorKey, changes: data },
-    });
-
+    logAudit({ userId: req.session.userId ?? null, action: AuditActions.SENSOR_UPDATED, projectKey, ghKey, detail: { sensorKey, changes: d } });
     sendSuccess(res, { message: 'บันทึก Sensor สำเร็จ' });
   } catch (error) {
-    console.error('Error updating sensor:', error);
     sendError(res, ThaiErrors.SERVER_ERROR, 500);
   }
 });
 
-/**
- * DELETE /api/admin/sensors/:projectKey/:ghKey/:sensorKey
- * Delete sensor config
- */
-router.delete('/:projectKey/:ghKey/:sensorKey', (req: Request, res: Response) => {
+// DELETE /api/admin/sensors/:projectKey/:ghKey/:sensorKey
+router.delete('/:projectKey/:ghKey/:sensorKey', async (req: Request, res: Response) => {
   try {
     const { projectKey, ghKey, sensorKey } = req.params;
-
-    const sensor = db.prepare(`
+    const sensorRes = await query(`
       SELECT sc.id, sc.name_th FROM sensor_configs sc
       JOIN greenhouses g ON sc.greenhouse_id = g.id
       JOIN projects p ON g.project_id = p.id
-      WHERE p.key = ? AND g.gh_key = ? AND sc.sensor_key = ?
-    `).get(projectKey, ghKey, sensorKey) as { id: number; name_th: string } | undefined;
+      WHERE p.key = $1 AND g.gh_key = $2 AND sc.sensor_key = $3
+    `, [projectKey, ghKey, sensorKey]);
+    const sensor = sensorRes.rows[0];
+    if (!sensor) { sendError(res, 'ไม่พบ Sensor', 404); return; }
 
-    if (!sensor) {
-      sendError(res, 'ไม่พบ Sensor', 404);
-      return;
-    }
-
-    db.prepare('DELETE FROM sensor_configs WHERE id = ?').run(sensor.id);
-
-    logAudit({
-      userId: req.session.userId ?? null,
-      action: AuditActions.SENSOR_DELETED,
-      projectKey,
-      ghKey,
-      detail: { sensorKey, sensorName: sensor.name_th },
-    });
-
+    await query('DELETE FROM sensor_configs WHERE id = $1', [sensor.id]);
+    logAudit({ userId: req.session.userId ?? null, action: AuditActions.SENSOR_DELETED, projectKey, ghKey, detail: { sensorKey, sensorName: sensor.name_th } });
     sendSuccess(res, { message: 'ลบ Sensor สำเร็จ' });
   } catch (error) {
-    console.error('Error deleting sensor:', error);
     sendError(res, ThaiErrors.SERVER_ERROR, 500);
   }
 });
 
-/**
- * POST /api/admin/sensors/:projectKey/:ghKey/calibrate/:sensorKey
- * Update calibration for a sensor
- */
-router.post('/:projectKey/:ghKey/calibrate/:sensorKey', (req: Request, res: Response) => {
+// POST /api/admin/sensors/:projectKey/:ghKey/calibrate/:sensorKey
+router.post('/:projectKey/:ghKey/calibrate/:sensorKey', async (req: Request, res: Response) => {
   try {
     const { projectKey, ghKey, sensorKey } = req.params;
     const { offset, scale } = req.body;
 
-    const sensor = db.prepare(`
+    const sensorRes = await query(`
       SELECT sc.id FROM sensor_configs sc
       JOIN greenhouses g ON sc.greenhouse_id = g.id
       JOIN projects p ON g.project_id = p.id
-      WHERE p.key = ? AND g.gh_key = ? AND sc.sensor_key = ?
-    `).get(projectKey, ghKey, sensorKey) as { id: number } | undefined;
+      WHERE p.key = $1 AND g.gh_key = $2 AND sc.sensor_key = $3
+    `, [projectKey, ghKey, sensorKey]);
+    const sensor = sensorRes.rows[0];
+    if (!sensor) { sendError(res, 'ไม่พบ Sensor', 404); return; }
 
-    if (!sensor) {
-      sendError(res, 'ไม่พบ Sensor', 404);
-      return;
-    }
+    await query(`
+      UPDATE sensor_configs
+      SET calibration_offset = $1, calibration_scale = $2,
+          calibration_date = now()::text, updated_at = now()::text
+      WHERE id = $3
+    `, [offset ?? 0, scale ?? 1, sensor.id]);
 
-    db.prepare(`
-      UPDATE sensor_configs 
-      SET calibration_offset = ?, calibration_scale = ?, calibration_date = datetime('now'), updated_at = datetime('now')
-      WHERE id = ?
-    `).run(offset ?? 0, scale ?? 1, sensor.id);
-
-    logAudit({
-      userId: req.session.userId ?? null,
-      action: AuditActions.SENSOR_CALIBRATED,
-      projectKey,
-      ghKey,
-      detail: { sensorKey, offset, scale },
-    });
-
+    logAudit({ userId: req.session.userId ?? null, action: AuditActions.SENSOR_CALIBRATED, projectKey, ghKey, detail: { sensorKey, offset, scale } });
     sendSuccess(res, { message: 'บันทึกการ Calibrate สำเร็จ' });
   } catch (error) {
-    console.error('Error calibrating sensor:', error);
     sendError(res, ThaiErrors.SERVER_ERROR, 500);
   }
 });
 
-/**
- * POST /api/admin/sensors/:projectKey/:ghKey/bulk-create
- * Create multiple sensors at once (for templates)
- */
-router.post('/:projectKey/:ghKey/bulk-create', (req: Request, res: Response) => {
+// POST /api/admin/sensors/:projectKey/:ghKey/bulk-create
+router.post('/:projectKey/:ghKey/bulk-create', async (req: Request, res: Response) => {
   try {
     const { projectKey, ghKey } = req.params;
     const { sensors, template } = req.body;
 
-    const greenhouse = db.prepare(`
-      SELECT g.id FROM greenhouses g
-      JOIN projects p ON g.project_id = p.id
-      WHERE p.key = ? AND g.gh_key = ?
-    `).get(projectKey, ghKey) as { id: number } | undefined;
+    const ghId = await getGreenhouseId(projectKey, ghKey);
+    if (!ghId) { sendError(res, 'ไม่พบโรงเรือน', 404); return; }
 
-    if (!greenhouse) {
-      sendError(res, 'ไม่พบโรงเรือน', 404);
-      return;
-    }
-
-    // Predefined templates
     const templates: Record<string, any[]> = {
       'standard_10_soil': [
         { sensor_key: 'air_temp', name_th: 'อุณหภูมิอากาศ', sensor_type: 'air', data_key: 'air_temp', unit: '°C', icon: 'Thermometer', color: '#ef4444' },
         { sensor_key: 'air_humidity', name_th: 'ความชื้นอากาศ', sensor_type: 'air', data_key: 'air_humidity', unit: '%', icon: 'Droplets', color: '#3b82f6' },
         { sensor_key: 'air_co2', name_th: 'CO₂', sensor_type: 'air', data_key: 'air_co2', unit: 'ppm', icon: 'Wind', color: '#8b5cf6' },
         { sensor_key: 'air_light', name_th: 'แสง', sensor_type: 'light', data_key: 'air_light', unit: 'lux', icon: 'Sun', color: '#f59e0b' },
-        ...Array.from({ length: 10 }, (_, i) => ({
-          sensor_key: `soil${i + 1}_moisture`,
-          name_th: `ความชื้นดิน จุด ${i + 1}`,
-          sensor_type: 'soil',
-          data_key: `soil${i + 1}_moisture`,
-          unit: '%',
-          icon: 'Sprout',
-          color: '#10b981',
-          sort_order: i + 10,
-        })),
-        ...Array.from({ length: 10 }, (_, i) => ({
-          sensor_key: `soil${i + 1}_temp`,
-          name_th: `อุณหภูมิดิน จุด ${i + 1}`,
-          sensor_type: 'soil',
-          data_key: `soil${i + 1}_temp`,
-          unit: '°C',
-          icon: 'Thermometer',
-          color: '#f97316',
-          sort_order: i + 20,
-        })),
+        ...Array.from({ length: 10 }, (_, i) => ({ sensor_key: `soil${i+1}_moisture`, name_th: `ความชื้นดิน จุด ${i+1}`, sensor_type: 'soil', data_key: `soil${i+1}_moisture`, unit: '%', icon: 'Sprout', color: '#10b981', sort_order: i + 10 })),
+        ...Array.from({ length: 10 }, (_, i) => ({ sensor_key: `soil${i+1}_temp`, name_th: `อุณหภูมิดิน จุด ${i+1}`, sensor_type: 'soil', data_key: `soil${i+1}_temp`, unit: '°C', icon: 'Thermometer', color: '#f97316', sort_order: i + 20 })),
       ],
       'simple_air_only': [
         { sensor_key: 'air_temp', name_th: 'อุณหภูมิอากาศ', sensor_type: 'air', data_key: 'air_temp', unit: '°C', icon: 'Thermometer', color: '#ef4444' },
@@ -352,46 +212,21 @@ router.post('/:projectKey/:ghKey/bulk-create', (req: Request, res: Response) => 
     };
 
     const sensorsToCreate = template ? templates[template] : sensors;
-
-    if (!sensorsToCreate || !Array.isArray(sensorsToCreate)) {
-      sendError(res, 'ไม่มีข้อมูล Sensor หรือ Template', 400);
-      return;
-    }
-
-    const insertStmt = db.prepare(`
-      INSERT OR IGNORE INTO sensor_configs (
-        greenhouse_id, sensor_key, name_th, sensor_type, data_key, unit,
-        icon, color, sort_order, is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-    `);
+    if (!sensorsToCreate || !Array.isArray(sensorsToCreate)) { sendError(res, 'ไม่มีข้อมูล Sensor หรือ Template', 400); return; }
 
     let created = 0;
-    for (const sensor of sensorsToCreate) {
-      const result = insertStmt.run(
-        greenhouse.id,
-        sensor.sensor_key,
-        sensor.name_th,
-        sensor.sensor_type,
-        sensor.data_key,
-        sensor.unit,
-        sensor.icon || 'Thermometer',
-        sensor.color || '#10b981',
-        sensor.sort_order || 0
-      );
-      if (result.changes > 0) created++;
+    for (const s of sensorsToCreate) {
+      const result = await query(`
+        INSERT INTO sensor_configs (greenhouse_id, sensor_key, name_th, sensor_type, data_key, unit, icon, color, sort_order, is_active)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,1)
+        ON CONFLICT (greenhouse_id, sensor_key) DO NOTHING
+      `, [ghId, s.sensor_key, s.name_th, s.sensor_type, s.data_key, s.unit, s.icon || 'Thermometer', s.color || '#10b981', s.sort_order || 0]);
+      if (result.rowCount && result.rowCount > 0) created++;
     }
 
-    logAudit({
-      userId: req.session.userId ?? null,
-      action: AuditActions.SENSORS_BULK_CREATED,
-      projectKey,
-      ghKey,
-      detail: { template, count: created },
-    });
-
+    logAudit({ userId: req.session.userId ?? null, action: AuditActions.SENSORS_BULK_CREATED, projectKey, ghKey, detail: { template, count: created } });
     sendSuccess(res, { message: `สร้าง Sensor ${created} รายการสำเร็จ`, created });
   } catch (error) {
-    console.error('Error bulk creating sensors:', error);
     sendError(res, ThaiErrors.SERVER_ERROR, 500);
   }
 });
