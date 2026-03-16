@@ -356,4 +356,4 @@ async function seed() {
   console.log('');
 }
 
-seed().catch(console.error);
+export { seed };
