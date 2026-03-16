@@ -23,6 +23,7 @@ interface Crop {
   name: string;
   variety: string;
   greenhouse_name: string;
+  status: string;
 }
 
 const HEALTH_CONFIG = {
@@ -53,8 +54,14 @@ export function GrowthRecordsPage() {
 
   const fetchCrops = async () => {
     try {
-      const response = await api.get<{ crops: Crop[] }>('/agriculture/crops?status=growing');
-      if (response.success && response.data) setCrops(response.data.crops);
+      // ดึงทั้ง planted และ growing
+      const response = await api.get<{ crops: Crop[] }>('/agriculture/crops');
+      if (response.success && response.data) {
+        const active = response.data.crops.filter(
+          c => (c as any).status === 'planted' || (c as any).status === 'growing'
+        );
+        setCrops(active);
+      }
     } catch {}
   };
 
