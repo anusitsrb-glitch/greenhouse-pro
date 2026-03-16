@@ -29,7 +29,8 @@ import { startDeviceMonitoring } from './services/deviceMonitor.js';
 import { startSensorMonitoring } from './services/sensorMonitor.js';
 import agricultureRoutes from './routes/agriculture.js';
 
-import { initDB } from './db/connection.js';
+import { initDB, pool } from './db/connection.js';
+import connectPgSimple from 'connect-pg-simple';
 
 const app = express();
 
@@ -45,39 +46,29 @@ app.set('trust proxy', 1);
 // Security middleware
 app.use(helmet({ contentSecurityPolicy: false }));
 
-// ============================================================
-// ✅ CORS - Production-Ready (Web + Capacitor Android/iOS)
-// ============================================================
-
-// Parse comma-separated origins from env (Railway Variables)
-// Example: CORS_ORIGINS="https://greenhouse-pro-server-production.up.railway.app"
 const corsOrigins =
   (process.env.CORS_ORIGINS ?? '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
 
-// Capacitor / Ionic app origins
 const appOrigins = [
   'capacitor://localhost',
   'ionic://localhost',
-  'http://localhost', // fallback (บางเคส)
+  'http://localhost',
   'https://localhost',
 ];
 
-// Dev web origins (vite/อื่นๆ)
 const devWebOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   'http://localhost:8080',
 ];
 
-// Final allowlist
 const allowedOrigins = isDev
   ? [...devWebOrigins, ...appOrigins, ...corsOrigins]
   : [...appOrigins, ...corsOrigins];
 
-// Debug (ช่วยเช็คตอน deploy)
 console.log('📡 isDev:', isDev);
 console.log('📡 CORS_ORIGINS env:', corsOrigins);
 console.log('📡 CORS Allowed Origins (exact):', allowedOrigins);
@@ -85,13 +76,8 @@ console.log('📡 CORS Allowed Origins (exact):', allowedOrigins);
 app.use(
   cors({
     origin: (origin, callback) => {
-      // ✅ Allow requests with no origin (curl/health checks/native requestsบางแบบ)
       if (!origin) return callback(null, true);
-
-      // ✅ Exact allowlist
       if (allowedOrigins.includes(origin)) return callback(null, true);
-
-      // ✅ Dev: allow localhost/127.0.0.1 any port (กัน dev port เปลี่ยนแล้วพัง)
       if (isDev) {
         try {
           const u = new URL(origin);
@@ -103,8 +89,6 @@ app.use(
         }
         return callback(null, true);
       }
-
-      // ❌ Reject other origins in production
       console.error('❌ [CORS BLOCKED] Origin:', origin);
       return callback(new Error('Not allowed by CORS'));
     },
@@ -120,11 +104,17 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // ============================================================
-// ✅ SESSION - Updated for Capacitor Support
+// ✅ SESSION - PostgreSQL Store
 // ============================================================
+const PgStore = connectPgSimple(session);
+
 app.use(
   session({
-    store: undefined,
+    store: new PgStore({
+      pool: pool as any,
+      tableName: 'user_sessions_store',
+      createTableIfMissing: true,
+    }) as any,
     secret: env.APP_SESSION_SECRET,
     name: 'greenhouse.sid',
     resave: false,
@@ -138,7 +128,7 @@ app.use(
       maxAge: 7 * 24 * 60 * 60 * 1000,
       domain: undefined,
     },
-  })
+  })  as any
 );
 
 // ============================================================
@@ -202,7 +192,6 @@ app.use('/api/export', exportRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/control-history', controlHistoryRoutes);
 app.use('/api/agriculture', agricultureRoutes);
-// ✅ วาง notFound เป็น "ตัวสุดท้าย" ของ /api เสมอ
 app.use('/api', notFoundHandler);
 
 // ============================================================
@@ -235,57 +224,52 @@ app.use(errorHandler);
 const PORT = Number(process.env.PORT) || env.PORT || 3000;
 
 initDB().then(() => {
-app.listen(PORT, '0.0.0.0', () => {
-  console.log('');
-  console.log('════════════════════════════════════════════════════════');
-  console.log('🌿 GreenHouse Pro V2 Server');
-  console.log('════════════════════════════════════════════════════════');
-  console.log(`   Environment: ${env.NODE_ENV}`);
-  console.log(`   Port: ${PORT}`);
-  console.log(`   Database: ${env.DB_PATH}`);
-  console.log(`   ThingsBoard: ${env.TB_BASE_URL}`);
-  console.log(`   CORS Origins: ${allowedOrigins.length} allowed`);
-  console.log('════════════════════════════════════════════════════════');
-  console.log('');
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log('');
+    console.log('════════════════════════════════════════════════════════');
+    console.log('🌿 GreenHouse Pro V2 Server');
+    console.log('════════════════════════════════════════════════════════');
+    console.log(`   Environment: ${env.NODE_ENV}`);
+    console.log(`   Port: ${PORT}`);
+    console.log(`   Database: PostgreSQL`);
+    console.log(`   ThingsBoard: ${env.TB_BASE_URL}`);
+    console.log(`   CORS Origins: ${allowedOrigins.length} allowed`);
+    console.log('════════════════════════════════════════════════════════');
+    console.log('');
 
-  // ✅ Start monitoring services
-  startMonitoringServices();
-});
+    startMonitoringServices();
+  });
 
-// ✅ เพิ่มฟังก์ชันนี้ก่อน export default app
-function startMonitoringServices() {
-  try {
-    console.log('🚀 Starting monitoring services...');
+  function startMonitoringServices() {
+    try {
+      console.log('🚀 Starting monitoring services...');
 
-    // Start device status monitoring (every 30 seconds)
-    startDeviceMonitoring(30);
+      startDeviceMonitoring(30);
+      startSensorMonitoring(60);
 
-    // Start sensor alert monitoring (every 60 seconds)
-    startSensorMonitoring(60);
+      const selfUrl = process.env.RAILWAY_PUBLIC_DOMAIN
+        ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/api/health`
+        : null;
 
-    // ✅ Keep-alive ping (ป้องกัน Railway sleep)
-    const selfUrl = process.env.RAILWAY_PUBLIC_DOMAIN
-      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}/api/health`
-      : null;
+      if (selfUrl) {
+        setInterval(async () => {
+          try {
+            await fetch(selfUrl);
+            console.log('💓 Keep-alive ping sent');
+          } catch (e) {
+            console.error('💔 Keep-alive ping failed:', e);
+          }
+        }, 5 * 60 * 1000);
+        console.log('✅ Keep-alive ping started:', selfUrl);
+      } else {
+        console.log('⚠️ Keep-alive ping skipped (RAILWAY_PUBLIC_DOMAIN not set)');
+      }
 
-    if (selfUrl) {
-      setInterval(async () => {
-        try {
-          await fetch(selfUrl);
-          console.log('💓 Keep-alive ping sent');
-        } catch (e) {
-          console.error('💔 Keep-alive ping failed:', e);
-        }
-      }, 5 * 60 * 1000); // ทุก 5 นาที
-      console.log('✅ Keep-alive ping started:', selfUrl);
-    } else {
-      console.log('⚠️ Keep-alive ping skipped (RAILWAY_PUBLIC_DOMAIN not set)');
+      console.log('✅ All monitoring services started');
+    } catch (error) {
+      console.error('❌ Failed to start monitoring services:', error);
     }
-
-    console.log('✅ All monitoring services started');
-  } catch (error) {
-    console.error('❌ Failed to start monitoring services:', error);
   }
-}
 });
+
 export default app;
