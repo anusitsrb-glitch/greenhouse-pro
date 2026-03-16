@@ -72,7 +72,6 @@ async function seedAdminIfMissing() {
 
 export async function initDB() {
   await runMigrations();
-  await seedAdminIfMissing();
-  await seed(); 
+  await seed();
   console.log('[DB] PostgreSQL connected and ready');
 }
