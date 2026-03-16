@@ -4,3 +4,4 @@ export { FertilizerPage } from './FertilizerPage';
 export { PestDiseasePage } from './PestDiseasePage';
 export { YieldPage } from './YieldPage';
 export { WaterUsagePage } from './WaterUsagePage';
+export { AgriculturePage } from './AgriculturePage';

@@ -14,10 +14,6 @@ import {
   AutomationPage, ScenesPage, ControlHistoryPage as AdminControlHistoryPage,
   AdminLayout
 } from '@/pages/admin';
-import { 
-  CropsPage, GrowthRecordsPage, FertilizerPage, 
-  PestDiseasePage, YieldPage, WaterUsagePage 
-} from '@/pages/agriculture';
 
 import {
   ControlHistoryPage,
@@ -31,6 +27,12 @@ import { ENV } from '@/config/env';
 
 // ✅ Patch M2: Android back button
 import { App as CapacitorApp } from '@capacitor/app';
+
+import { 
+  CropsPage, GrowthRecordsPage, FertilizerPage, 
+  PestDiseasePage, YieldPage, WaterUsagePage,
+  AgriculturePage  // ← เพิ่มตรงนี้
+} from '@/pages/agriculture';
 
 function hasRole(userRole: string | undefined, allowedRoles: string[]): boolean {
   if (!userRole) return false;
@@ -134,7 +136,7 @@ function AppRoutes() {
         <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         <Route path="/project/:projectKey" element={<ProtectedRoute><ProjectPage /></ProtectedRoute>} />
         <Route path="/project/:projectKey/:ghKey" element={<ProtectedRoute><GreenhousePage /></ProtectedRoute>} />
-        
+        <Route path="/agriculture" element={<ProtectedRoute><AgriculturePage /></ProtectedRoute>} />
         <Route path="/agriculture/crops" element={<ProtectedRoute><CropsPage /></ProtectedRoute>} />
         <Route path="/agriculture/growth" element={<ProtectedRoute><GrowthRecordsPage /></ProtectedRoute>} />
         <Route path="/agriculture/fertilizer" element={<ProtectedRoute><FertilizerPage /></ProtectedRoute>} />
