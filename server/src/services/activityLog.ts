@@ -3,7 +3,7 @@
  * Logs device control actions from WebApp and External API
  */
 
-import { db } from '../db/connection.js';
+import { query } from '../db/connection.js';
 
 export interface ControlLogData {
   greenhouseId: number;
@@ -22,43 +22,38 @@ export interface ControlLogData {
 }
 
 /**
- * Log device control action
+ * Log device control action (fire-and-forget)
  */
 export function logDeviceControl(data: ControlLogData): void {
-  try {
-    const stmt = db.prepare(`
-      INSERT INTO control_history 
-      (greenhouse_id, control_key, control_name, action, value, source, source_id, user_id, api_key_prefix, ip_address, user_agent, success, error_message)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    
-    stmt.run(
-      data.greenhouseId,
-      data.controlKey,
-      data.controlName || null,
-      data.action,
-      data.value || null,
-      data.source,
-      data.sourceId || null,
-      data.userId || null,
-      data.apiKeyPrefix || null,
-      data.ipAddress || null,
-      data.userAgent || null,
-      data.success !== false ? 1 : 0,
-      data.errorMessage || null
-    );
-    
+  query(`
+    INSERT INTO control_history
+    (greenhouse_id, control_key, control_name, action, value, source, source_id, user_id, api_key_prefix, ip_address, user_agent, success, error_message)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+  `, [
+    data.greenhouseId,
+    data.controlKey,
+    data.controlName || null,
+    data.action,
+    data.value || null,
+    data.source,
+    data.sourceId || null,
+    data.userId || null,
+    data.apiKeyPrefix || null,
+    data.ipAddress || null,
+    data.userAgent || null,
+    data.success !== false,
+    data.errorMessage || null,
+  ]).then(() => {
     console.log(`📝 [Activity Log] ${data.source}: ${data.controlKey} -> ${data.action}`);
-  } catch (error) {
+  }).catch(error => {
     console.error('❌ Failed to log device control:', error);
-    // Don't throw - logging failure shouldn't break the main operation
-  }
+  });
 }
 
 /**
  * Get control logs for a greenhouse
  */
-export function getControlLogs(
+export async function getControlLogs(
   greenhouseId: number,
   options?: {
     limit?: number;
@@ -67,40 +62,38 @@ export function getControlLogs(
     startDate?: string;
     endDate?: string;
   }
-): any[] {
+): Promise<any[]> {
   try {
-    let query = 'SELECT * FROM control_history WHERE greenhouse_id = ?';
+    let sql = 'SELECT * FROM control_history WHERE greenhouse_id = $1';
     const params: any[] = [greenhouseId];
-    
+    let idx = 2;
+
     if (options?.source) {
-      query += ' AND source = ?';
+      sql += ` AND source = $${idx++}`;
       params.push(options.source);
     }
-    
     if (options?.startDate) {
-      query += ' AND created_at >= ?';
+      sql += ` AND created_at >= $${idx++}`;
       params.push(options.startDate);
     }
-    
     if (options?.endDate) {
-      query += ' AND created_at <= ?';
+      sql += ` AND created_at <= $${idx++}`;
       params.push(options.endDate);
     }
-    
-    query += ' ORDER BY created_at DESC';
-    
+
+    sql += ' ORDER BY created_at DESC';
+
     if (options?.limit) {
-      query += ' LIMIT ?';
+      sql += ` LIMIT $${idx++}`;
       params.push(options.limit);
-      
       if (options?.offset) {
-        query += ' OFFSET ?';
+        sql += ` OFFSET $${idx++}`;
         params.push(options.offset);
       }
     }
-    
-    const stmt = db.prepare(query);
-    return stmt.all(...params);
+
+    const result = await query(sql, params);
+    return result.rows;
   } catch (error) {
     console.error('❌ Failed to get control logs:', error);
     return [];
@@ -110,22 +103,22 @@ export function getControlLogs(
 /**
  * Get control log statistics
  */
-export function getControlLogStats(greenhouseId: number, days: number = 7): any {
+export async function getControlLogStats(greenhouseId: number, days: number = 7): Promise<any[]> {
   try {
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-    
-    const stmt = db.prepare(`
-      SELECT 
+
+    const result = await query(`
+      SELECT
         source,
         COUNT(*) as count,
-        SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as success_count,
-        SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as failure_count
+        SUM(CASE WHEN success = true THEN 1 ELSE 0 END) as success_count,
+        SUM(CASE WHEN success = false THEN 1 ELSE 0 END) as failure_count
       FROM control_history
-      WHERE greenhouse_id = ? AND created_at >= ?
+      WHERE greenhouse_id = $1 AND created_at >= $2
       GROUP BY source
-    `);
-    
-    return stmt.all(greenhouseId, startDate);
+    `, [greenhouseId, startDate]);
+
+    return result.rows;
   } catch (error) {
     console.error('❌ Failed to get control log stats:', error);
     return [];

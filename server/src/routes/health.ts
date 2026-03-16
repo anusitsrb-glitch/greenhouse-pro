@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { db } from '../db/connection.js';
+import { query } from '../db/connection.js';
 import { sendSuccess, sendError } from '../utils/response.js';
 
 const router = Router();
@@ -8,15 +8,15 @@ const router = Router();
  * GET /api/health
  * Health check endpoint
  */
-router.get('/', (req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     // Quick DB check
-    const result = db.prepare('SELECT 1 as ok').get() as { ok: number };
-    
-    if (result?.ok !== 1) {
+    const result = await query('SELECT 1 as ok');
+
+    if (result.rows[0]?.ok !== 1) {
       throw new Error('Database check failed');
     }
-    
+
     sendSuccess(res, {
       status: 'healthy',
       timestamp: new Date().toISOString(),

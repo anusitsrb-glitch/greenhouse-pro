@@ -7,13 +7,10 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-
     "start": "node dist/index.js",
     "start:devseed": "node dist/db/migrate.js && node dist/db/seed.js && node dist/index.js",
-
     "migrate": "node dist/db/migrate.js",
     "seed": "node dist/db/seed.js",
-
     "lint": "eslint src/",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
@@ -36,6 +33,7 @@
     "helmet": "^7.1.0",
     "node-fetch": "^3.3.2",
     "pdfkit": "^0.15.0",
+    "pg": "^8.20.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -49,6 +47,7 @@
     "@types/express-session": "^1.18.0",
     "@types/node": "^22.5.5",
     "@types/pdfkit": "^0.13.4",
+    "@types/pg": "^8.18.0",
     "eslint": "^9.10.0",
     "tsx": "^4.19.1",
     "typescript": "^5.6.2"

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcrypt';
-import { db } from '../../db/connection.js';
+import { query } from '../../db/connection.js';
 import { sendSuccess, sendError, ThaiErrors } from '../../utils/response.js';
 import { requireAdmin } from '../../middleware/auth.js';
 import { logAudit, AuditActions } from '../../utils/audit.js';
@@ -8,11 +8,8 @@ import { z } from 'zod';
 import type { User, UserRole } from '../../types/index.js';
 
 const router = Router();
-
-// Apply admin middleware to all routes
 router.use(requireAdmin);
 
-// Validation schemas
 const createUserSchema = z.object({
   username: z.string().min(3).max(50),
   email: z.string().email().optional().nullable(),
@@ -21,7 +18,7 @@ const createUserSchema = z.object({
 });
 
 const updateUserSchema = z.object({
-  username: z.string().min(3).max(50).optional(), // ✅ เพิ่มให้แก้ username ได้
+  username: z.string().min(3).max(50).optional(),
   email: z.string().email().optional().nullable(),
   role: z.enum(['admin', 'operator', 'viewer']).optional(),
   is_active: z.boolean().optional(),
@@ -39,29 +36,19 @@ const activateUserSchema = z.object({
   is_active: z.boolean(),
 });
 
-/** ✅ helper: ดู role ของผู้กระทำ (actor) แบบไม่พัง แม้ session.role ไม่มี */
-const getActorRole = (req: Request): UserRole | null => {
+const getActorRole = async (req: Request): Promise<UserRole | null> => {
   const actorId = (req as any)?.session?.userId ?? null;
   if (!actorId) return null;
-
-  // ถ้ามี session.role ใช้ได้เลย (เร็ว)
   const sessionRole = (req as any)?.session?.role;
-  if (typeof sessionRole === 'string' && sessionRole.length > 0) {
-    return sessionRole as UserRole;
-  }
-
-  // fallback: อ่านจาก DB
+  if (typeof sessionRole === 'string' && sessionRole.length > 0) return sessionRole as UserRole;
   try {
-    const row = db.prepare('SELECT role FROM users WHERE id = ?').get(actorId) as { role?: UserRole } | undefined;
-    return row?.role ?? null;
-  } catch {
-    return null;
-  }
+    const res = await query('SELECT role FROM users WHERE id = $1', [actorId]);
+    return res.rows[0]?.role ?? null;
+  } catch { return null; }
 };
 
-/** ✅ helper: admin ห้ามแก้ superadmin (กันหลุดทุก endpoint) */
-const denyIfTargetIsSuperadmin = (targetRole: UserRole, req: Request, res: Response) => {
-  const actorRole = getActorRole(req);
+const denyIfTargetIsSuperadmin = async (targetRole: UserRole, req: Request, res: Response): Promise<boolean> => {
+  const actorRole = await getActorRole(req);
   if (targetRole === 'superadmin' && actorRole !== 'superadmin') {
     sendError(res, 'ไม่อนุญาตให้แก้ไข Super Admin', 403);
     return true;
@@ -69,18 +56,13 @@ const denyIfTargetIsSuperadmin = (targetRole: UserRole, req: Request, res: Respo
   return false;
 };
 
-/**
- * GET /api/admin/users
- * List all users
- */
-router.get('/', (req: Request, res: Response) => {
+// GET /api/admin/users
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const users = db.prepare(`
+    const result = await query(`
       SELECT 
-        u.id, u.username, u.email, u.role, 
-        u.is_active, 
-        u.created_at, u.updated_at,
-        GROUP_CONCAT(DISTINCT p.key) as project_keys
+        u.id, u.username, u.email, u.role, u.is_active, u.created_at, u.updated_at,
+        STRING_AGG(DISTINCT p.key, ',') as project_keys
       FROM users u
       LEFT JOIN user_project_access upa ON u.id = upa.user_id
       LEFT JOIN projects p ON upa.project_id = p.id
@@ -94,20 +76,17 @@ router.get('/', (req: Request, res: Response) => {
           ELSE 99
         END,
         u.created_at DESC
-    `).all() as (Omit<User, 'password_hash'> & { project_keys: string | null })[];
-    
-    const formattedUsers = users.map(user => ({
+    `);
+    const formattedUsers = result.rows.map((user: any) => ({
       id: user.id,
       username: user.username,
       email: user.email,
       role: user.role,
-      
       isActive: Boolean(user.is_active),
       createdAt: user.created_at,
       updatedAt: user.updated_at,
       projectKeys: user.project_keys ? user.project_keys.split(',') : [],
     }));
-    
     sendSuccess(res, { users: formattedUsers });
   } catch (error) {
     console.error('Error listing users:', error);
@@ -115,236 +94,96 @@ router.get('/', (req: Request, res: Response) => {
   }
 });
 
-/**
- * GET /api/admin/users/:id
- * Get single user with project access
- */
-router.get('/:id', (req: Request, res: Response) => {
+// GET /api/admin/users/:id
+router.get('/:id', async (req: Request, res: Response) => {
   try {
     const userId = parseInt(req.params.id, 10);
-    
-    if (isNaN(userId)) {
-      sendError(res, ThaiErrors.INVALID_INPUT, 400);
-      return;
-    }
-    
-    const user = db.prepare(`
-      SELECT id, username, email, role, is_active, created_at, updated_at
+    if (isNaN(userId)) { sendError(res, ThaiErrors.INVALID_INPUT, 400); return; }
 
-      FROM users WHERE id = ?
-    `).get(userId) as Omit<User, 'password_hash'> | undefined;
-    
-    if (!user) {
-      sendError(res, ThaiErrors.USER_NOT_FOUND, 404);
-      return;
-    }
-    
-    // Get project access
-    const projectAccess = db.prepare(`
-      SELECT p.id, p.key, p.name_th
-      FROM user_project_access upa
-      JOIN projects p ON upa.project_id = p.id
-      WHERE upa.user_id = ?
-    `).all(userId) as { id: number; key: string; name_th: string }[];
-    
+    const userRes = await query(`SELECT id, username, email, role, is_active, created_at, updated_at FROM users WHERE id = $1`, [userId]);
+    const user = userRes.rows[0];
+    if (!user) { sendError(res, ThaiErrors.USER_NOT_FOUND, 404); return; }
+
+    const accessRes = await query(`
+      SELECT p.id, p.key, p.name_th FROM user_project_access upa
+      JOIN projects p ON upa.project_id = p.id WHERE upa.user_id = $1
+    `, [userId]);
+
     sendSuccess(res, {
       user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-      
-        isActive: Boolean(user.is_active),
-        createdAt: user.created_at,
-        updatedAt: user.updated_at,
-        projects: projectAccess,
+        id: user.id, username: user.username, email: user.email, role: user.role,
+        isActive: Boolean(user.is_active), createdAt: user.created_at, updatedAt: user.updated_at,
+        projects: accessRes.rows,
       },
     });
   } catch (error) {
-    console.error('Error getting user:', error);
     sendError(res, ThaiErrors.SERVER_ERROR, 500);
   }
 });
 
-/**
- * POST /api/admin/users
- * Create new user
- */
+// POST /api/admin/users
 router.post('/', async (req: Request, res: Response) => {
   try {
     const parsed = createUserSchema.safeParse(req.body);
-    
-    if (!parsed.success) {
-      sendError(res, ThaiErrors.INVALID_INPUT, 400);
-      return;
-    }
-    
+    if (!parsed.success) { sendError(res, ThaiErrors.INVALID_INPUT, 400); return; }
+
     const { username, email, password, role } = parsed.data;
-    
-    // Check if username exists
-    const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
-    if (existing) {
-      sendError(res, ThaiErrors.USERNAME_EXISTS, 409);
-      return;
-    }
-    
-    // Hash password
+
+    const existing = await query('SELECT id FROM users WHERE username = $1', [username]);
+    if (existing.rows.length > 0) { sendError(res, ThaiErrors.USERNAME_EXISTS, 409); return; }
+
     const passwordHash = await bcrypt.hash(password, 12);
-    
-    // Insert user
-    const result = db.prepare(`
-      INSERT INTO users (username, email, password_hash, role, is_active)
-      VALUES (?, ?, ?, ?, 1)
-    `).run(username, email ?? null, passwordHash, role);
-    
-    logAudit({
-      userId: req.session.userId ?? null,
-      action: AuditActions.USER_CREATED,
-      detail: { newUserId: result.lastInsertRowid, username, role },
-    });
-    
-    sendSuccess(res, {
-      user: {
-        id: result.lastInsertRowid,
-        username,
-        email: email ?? null,
-        role,
-      },
-      message: 'สร้างผู้ใช้สำเร็จ',
-    }, undefined, 201);
+    const result = await query(
+      `INSERT INTO users (username, email, password_hash, role, is_active) VALUES ($1, $2, $3, $4, 1) RETURNING id`,
+      [username, email ?? null, passwordHash, role]
+    );
+    const newId = result.rows[0].id;
+
+    logAudit({ userId: req.session.userId ?? null, action: AuditActions.USER_CREATED, detail: { newUserId: newId, username, role } });
+    sendSuccess(res, { user: { id: newId, username, email: email ?? null, role }, message: 'สร้างผู้ใช้สำเร็จ' }, undefined, 201);
   } catch (error) {
-    console.error('Error creating user:', error);
     sendError(res, ThaiErrors.SERVER_ERROR, 500);
   }
 });
 
-/**
- * PUT /api/admin/users/:id
- * Update user
- */
-router.put('/:id', (req: Request, res: Response) => {
+// PUT /api/admin/users/:id
+router.put('/:id', async (req: Request, res: Response) => {
   try {
     const userId = parseInt(req.params.id, 10);
-
-    if (isNaN(userId)) {
-      sendError(res, ThaiErrors.INVALID_INPUT, 400);
-      return;
-    }
+    if (isNaN(userId)) { sendError(res, ThaiErrors.INVALID_INPUT, 400); return; }
 
     const parsed = updateUserSchema.safeParse(req.body);
-    if (!parsed.success) {
-      sendError(res, ThaiErrors.INVALID_INPUT, 400);
-      return;
-    }
+    if (!parsed.success) { sendError(res, ThaiErrors.INVALID_INPUT, 400); return; }
 
-    // Check user exists (✅ ต้องรู้ role เพื่อกัน admin แก้ superadmin)
-    const user = db
-      .prepare('SELECT id, username, role, email FROM users WHERE id = ?')
-      .get(userId) as { id: number; username: string; role: UserRole; email: string | null } | undefined;
-
-    if (!user) {
-      sendError(res, ThaiErrors.USER_NOT_FOUND, 404);
-      return;
-    }
-
-    // ✅ กัน admin แก้ superadmin
-    if (denyIfTargetIsSuperadmin(user.role, req, res)) return;
+    const userRes = await query('SELECT id, username, role, email FROM users WHERE id = $1', [userId]);
+    const user = userRes.rows[0];
+    if (!user) { sendError(res, ThaiErrors.USER_NOT_FOUND, 404); return; }
+    if (await denyIfTargetIsSuperadmin(user.role, req, res)) return;
 
     const updates: string[] = [];
-    const values: (string | number | null)[] = [];
+    const values: any[] = [];
+    let idx = 1;
 
     if (parsed.data.username !== undefined) {
       const uname = String(parsed.data.username).trim();
-
-      // กันค่าว่างแบบหลุด schema
-      if (uname.length < 3) {
-        sendError(res, ThaiErrors.INVALID_INPUT, 400);
-        return;
-      }
-
-      // กัน username ซ้ำ
-      const existing = db
-        .prepare('SELECT id FROM users WHERE username = ? AND id != ?')
-        .get(uname, userId);
-
-      if (existing) {
-        sendError(res, ThaiErrors.USERNAME_EXISTS, 409);
-        return;
-      }
-
-      updates.push('username = ?');
-      values.push(uname);
+      if (uname.length < 3) { sendError(res, ThaiErrors.INVALID_INPUT, 400); return; }
+      const dup = await query('SELECT id FROM users WHERE username = $1 AND id != $2', [uname, userId]);
+      if (dup.rows.length > 0) { sendError(res, ThaiErrors.USERNAME_EXISTS, 409); return; }
+      updates.push(`username = $${idx++}`); values.push(uname);
     }
+    if (parsed.data.email !== undefined) { updates.push(`email = $${idx++}`); values.push(parsed.data.email); }
+    if (parsed.data.role !== undefined) { updates.push(`role = $${idx++}`); values.push(parsed.data.role); }
+    if (parsed.data.is_active !== undefined) { updates.push(`is_active = $${idx++}`); values.push(parsed.data.is_active ? 1 : 0); }
 
-    if (parsed.data.email !== undefined) {
-      updates.push('email = ?');
-      values.push(parsed.data.email); // string | null
-    }
+    if (updates.length === 0) { sendError(res, 'ไม่มีข้อมูลที่จะอัปเดต', 400); return; }
 
-    if (parsed.data.role !== undefined) {
-      updates.push('role = ?');
-      values.push(parsed.data.role);
-    }
-
-    if (parsed.data.is_active !== undefined) {
-      updates.push('is_active = ?');
-      values.push(parsed.data.is_active ? 1 : 0);
-    }
-
-    if (updates.length === 0) {
-      sendError(res, 'ไม่มีข้อมูลที่จะอัปเดต', 400);
-      return;
-    }
-
-    updates.push("updated_at = CURRENT_TIMESTAMP");
-
+    updates.push(`updated_at = now()::text`);
     values.push(userId);
 
-    // ✅ ดัก DB error ให้ชัด (ไม่ปล่อยเป็น 500 แบบมึน)
+    await query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${idx}`, values);
+
     try {
-      db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
-    } catch (dbErr: any) {
-      const msg = String(dbErr?.message || '');
-
-      // ตัวอย่าง: email ซ้ำ
-      if (
-        dbErr?.code === 'SQLITE_CONSTRAINT_UNIQUE' ||
-        dbErr?.code === 'SQLITE_CONSTRAINT'
-      ) {
-        if (msg.toLowerCase().includes('email')) {
-          sendError(res, 'อีเมลนี้ถูกใช้งานแล้ว', 409);
-          return;
-        }
-        if (msg.toLowerCase().includes('username')) {
-          sendError(res, ThaiErrors.USERNAME_EXISTS, 409);
-          return;
-        }
-      }
-
-      console.error('DB error updating user:', dbErr);
-      sendError(res, ThaiErrors.SERVER_ERROR, 500);
-      return;
-    }
-
-    // ✅ จุดสำคัญ: อย่าอ้าง req.session แบบเสี่ยง throw
-    const actorId = (req as any).session?.userId ?? null;
-
-    // Audit (ต่อให้พัง ก็ไม่ทำให้ API พัง)
-    try {
-      logAudit({
-        userId: actorId,
-        action: AuditActions.USER_UPDATED,
-        detail: { targetUserId: userId, targetUsername: user.username, updates: parsed.data },
-      });
-    } catch (auditErr) {
-      console.warn('Audit log failed (ignored):', auditErr);
-    }
-
-    // ✅ ถ้าแก้ตัวเอง: sync username ใน session (กัน UI แสดงชื่อเก่า)
-    try {
-      if ((req as any)?.session?.userId === userId && parsed.data.username !== undefined) {
-        (req as any).session.username = String(parsed.data.username).trim();
-      }
+      logAudit({ userId: req.session.userId ?? null, action: AuditActions.USER_UPDATED, detail: { targetUserId: userId, targetUsername: user.username, updates: parsed.data } });
     } catch {}
 
     sendSuccess(res, { message: 'อัปเดตผู้ใช้สำเร็จ' });
@@ -354,300 +193,118 @@ router.put('/:id', (req: Request, res: Response) => {
   }
 });
 
-
-
-/**
- * POST /api/admin/users/:id/roles
- * Update user role
- */
-router.post('/:id/roles', (req: Request, res: Response) => {
+// POST /api/admin/users/:id/roles
+router.post('/:id/roles', async (req: Request, res: Response) => {
   try {
     const userId = parseInt(req.params.id, 10);
-    
-    if (isNaN(userId)) {
-      sendError(res, ThaiErrors.INVALID_INPUT, 400);
-      return;
-    }
-    
-    const parsed = updateRoleSchema.safeParse(req.body);
-    
-    if (!parsed.success) {
-      sendError(res, ThaiErrors.INVALID_INPUT, 400);
-      return;
-    }
-    
-    const user = db.prepare('SELECT id, username, role FROM users WHERE id = ?')
-      .get(userId) as { id: number; username: string; role: UserRole } | undefined;
-    
-    if (!user) {
-      sendError(res, ThaiErrors.USER_NOT_FOUND, 404);
-      return;
-    }
+    if (isNaN(userId)) { sendError(res, ThaiErrors.INVALID_INPUT, 400); return; }
 
-    // ✅ กัน admin แก้ superadmin
-    if (denyIfTargetIsSuperadmin(user.role, req, res)) return;
-    
-    const oldRole = user.role;
-    const newRole = parsed.data.role;
-    
-    db.prepare(`
-      UPDATE users SET role = ?, updated_at = datetime('now') WHERE id = ?
-    `).run(newRole, userId);
-    
-    logAudit({
-      userId: req.session.userId ?? null,
-      action: AuditActions.ROLE_CHANGED,
-      detail: { targetUserId: userId, targetUsername: user.username, oldRole, newRole },
-    });
-    
+    const parsed = updateRoleSchema.safeParse(req.body);
+    if (!parsed.success) { sendError(res, ThaiErrors.INVALID_INPUT, 400); return; }
+
+    const userRes = await query('SELECT id, username, role FROM users WHERE id = $1', [userId]);
+    const user = userRes.rows[0];
+    if (!user) { sendError(res, ThaiErrors.USER_NOT_FOUND, 404); return; }
+    if (await denyIfTargetIsSuperadmin(user.role, req, res)) return;
+
+    const { role: newRole } = parsed.data;
+    await query(`UPDATE users SET role = $1, updated_at = now()::text WHERE id = $2`, [newRole, userId]);
+
+    logAudit({ userId: req.session.userId ?? null, action: AuditActions.ROLE_CHANGED, detail: { targetUserId: userId, oldRole: user.role, newRole } });
     sendSuccess(res, { message: `เปลี่ยนบทบาทเป็น ${newRole} สำเร็จ` });
   } catch (error) {
-    console.error('Error updating role:', error);
     sendError(res, ThaiErrors.SERVER_ERROR, 500);
   }
 });
 
-/**
- * POST /api/admin/users/:id/project-access
- * Update user's project access
- */
-router.post('/:id/project-access', (req: Request, res: Response) => {
+// POST /api/admin/users/:id/project-access
+router.post('/:id/project-access', async (req: Request, res: Response) => {
   try {
     const userId = parseInt(req.params.id, 10);
-    
-    if (isNaN(userId)) {
-      sendError(res, ThaiErrors.INVALID_INPUT, 400);
-      return;
-    }
-    
+    if (isNaN(userId)) { sendError(res, ThaiErrors.INVALID_INPUT, 400); return; }
+
     const parsed = updateProjectAccessSchema.safeParse(req.body);
-    
-    if (!parsed.success) {
-      sendError(res, ThaiErrors.INVALID_INPUT, 400);
-      return;
-    }
-    
-    const user = db.prepare('SELECT id, username, role FROM users WHERE id = ?')
-      .get(userId) as { id: number; username: string; role: UserRole } | undefined;
-    
-    if (!user) {
-      sendError(res, ThaiErrors.USER_NOT_FOUND, 404);
-      return;
-    }
+    if (!parsed.success) { sendError(res, ThaiErrors.INVALID_INPUT, 400); return; }
 
-    // ✅ กัน admin แก้ superadmin
-    if (denyIfTargetIsSuperadmin(user.role, req, res)) return;
-    
+    const userRes = await query('SELECT id, username, role FROM users WHERE id = $1', [userId]);
+    const user = userRes.rows[0];
+    if (!user) { sendError(res, ThaiErrors.USER_NOT_FOUND, 404); return; }
+    if (await denyIfTargetIsSuperadmin(user.role, req, res)) return;
+
     const { project_ids } = parsed.data;
-    
-    // Use transaction
-    const transaction = db.transaction(() => {
-      // Get current access
-      const currentAccess = db.prepare('SELECT project_id FROM user_project_access WHERE user_id = ?')
-        .all(userId) as { project_id: number }[];
-      const currentIds = currentAccess.map(a => a.project_id);
-      
-      // Determine additions and removals
-      const toAdd = project_ids.filter(id => !currentIds.includes(id));
-      const toRemove = currentIds.filter(id => !project_ids.includes(id));
-      
-      // Remove old access
-      if (toRemove.length > 0) {
-        const placeholders = toRemove.map(() => '?').join(',');
-        db.prepare(`DELETE FROM user_project_access WHERE user_id = ? AND project_id IN (${placeholders})`)
-          .run(userId, ...toRemove);
-      }
-      
-      // Add new access
-      const insertStmt = db.prepare('INSERT OR IGNORE INTO user_project_access (user_id, project_id) VALUES (?, ?)');
-      for (const projectId of toAdd) {
-        insertStmt.run(userId, projectId);
-      }
-      
-      return { added: toAdd.length, removed: toRemove.length };
-    });
-    
-    const result = transaction();
-    
-    logAudit({
-      userId: req.session.userId ?? null,
-      action: AuditActions.PROJECT_ACCESS_GRANTED,
-      detail: { targetUserId: userId, targetUsername: user.username, project_ids, ...result },
-    });
-    
-    sendSuccess(res, { 
-      message: 'อัปเดตสิทธิ์การเข้าถึงโปรเจกต์สำเร็จ',
-      added: result.added,
-      removed: result.removed,
-    });
+
+    const currentRes = await query('SELECT project_id FROM user_project_access WHERE user_id = $1', [userId]);
+    const currentIds = currentRes.rows.map((r: any) => r.project_id);
+    const toAdd = project_ids.filter(id => !currentIds.includes(id));
+    const toRemove = currentIds.filter((id: number) => !project_ids.includes(id));
+
+    if (toRemove.length > 0) {
+      await query(`DELETE FROM user_project_access WHERE user_id = $1 AND project_id = ANY($2)`, [userId, toRemove]);
+    }
+    for (const projectId of toAdd) {
+      await query(`INSERT INTO user_project_access (user_id, project_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [userId, projectId]);
+    }
+
+    logAudit({ userId: req.session.userId ?? null, action: AuditActions.PROJECT_ACCESS_GRANTED, detail: { targetUserId: userId, project_ids, added: toAdd.length, removed: toRemove.length } });
+    sendSuccess(res, { message: 'อัปเดตสิทธิ์การเข้าถึงโปรเจกต์สำเร็จ', added: toAdd.length, removed: toRemove.length });
   } catch (error) {
-    console.error('Error updating project access:', error);
     sendError(res, ThaiErrors.SERVER_ERROR, 500);
   }
 });
 
-/**
- * POST /api/admin/users/:id/activate
- * Enable or disable user
- */
-router.post('/:id/activate', (req: Request, res: Response) => {
+// POST /api/admin/users/:id/activate
+router.post('/:id/activate', async (req: Request, res: Response) => {
   try {
     const userId = parseInt(req.params.id, 10);
-    
-    if (isNaN(userId)) {
-      sendError(res, ThaiErrors.INVALID_INPUT, 400);
-      return;
-    }
-    
+    if (isNaN(userId)) { sendError(res, ThaiErrors.INVALID_INPUT, 400); return; }
+
     const parsed = activateUserSchema.safeParse(req.body);
-    
-    if (!parsed.success) {
-      sendError(res, ThaiErrors.INVALID_INPUT, 400);
-      return;
-    }
-    
-    // Prevent self-deactivation
+    if (!parsed.success) { sendError(res, ThaiErrors.INVALID_INPUT, 400); return; }
+
     if (userId === req.session.userId && !parsed.data.is_active) {
-      sendError(res, 'ไม่สามารถปิดบัญชีตัวเองได้', 400);
-      return;
-    }
-    
-    const user = db.prepare('SELECT id, username, role FROM users WHERE id = ?')
-      .get(userId) as { id: number; username: string; role: UserRole } | undefined;
-    
-    if (!user) {
-      sendError(res, ThaiErrors.USER_NOT_FOUND, 404);
-      return;
+      sendError(res, 'ไม่สามารถปิดบัญชีตัวเองได้', 400); return;
     }
 
-    // ✅ กัน admin แก้ superadmin
-    if (denyIfTargetIsSuperadmin(user.role, req, res)) return;
-    
-    db.prepare(`
-      UPDATE users SET is_active = ?, updated_at = datetime('now') WHERE id = ?
-    `).run(parsed.data.is_active ? 1 : 0, userId);
-    
-    logAudit({
-      userId: req.session.userId ?? null,
-      action: parsed.data.is_active ? AuditActions.USER_ENABLED : AuditActions.USER_DISABLED,
-      detail: { targetUserId: userId, targetUsername: user.username },
-    });
-    
-    sendSuccess(res, { 
-      message: parsed.data.is_active ? 'เปิดใช้งานบัญชีสำเร็จ' : 'ปิดใช้งานบัญชีสำเร็จ',
-    });
+    const userRes = await query('SELECT id, username, role FROM users WHERE id = $1', [userId]);
+    const user = userRes.rows[0];
+    if (!user) { sendError(res, ThaiErrors.USER_NOT_FOUND, 404); return; }
+    if (await denyIfTargetIsSuperadmin(user.role, req, res)) return;
+
+    await query(`UPDATE users SET is_active = $1, updated_at = now()::text WHERE id = $2`, [parsed.data.is_active ? 1 : 0, userId]);
+
+    logAudit({ userId: req.session.userId ?? null, action: parsed.data.is_active ? AuditActions.USER_ENABLED : AuditActions.USER_DISABLED, detail: { targetUserId: userId, targetUsername: user.username } });
+    sendSuccess(res, { message: parsed.data.is_active ? 'เปิดใช้งานบัญชีสำเร็จ' : 'ปิดใช้งานบัญชีสำเร็จ' });
   } catch (error) {
-    console.error('Error activating user:', error);
     sendError(res, ThaiErrors.SERVER_ERROR, 500);
   }
 });
 
-/**
- * DELETE /api/admin/users/:id
- * Delete user (soft delete by deactivating)
- */
-router.delete('/:id', (req: Request, res: Response) => {
+// DELETE /api/admin/users/:id
+router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const userId = parseInt(req.params.id, 10);
+    if (isNaN(userId)) { sendError(res, ThaiErrors.INVALID_INPUT, 400); return; }
+    if (userId === req.session.userId) { sendError(res, 'ไม่สามารถลบบัญชีตัวเองได้', 400); return; }
 
-    if (isNaN(userId)) {
-      sendError(res, ThaiErrors.INVALID_INPUT, 400);
-      return;
-    }
+    const targetRes = await query('SELECT id, username, role FROM users WHERE id = $1', [userId]);
+    const target = targetRes.rows[0];
+    if (!target) { sendError(res, ThaiErrors.USER_NOT_FOUND, 404); return; }
+    if (await denyIfTargetIsSuperadmin(target.role, req, res)) return;
 
-    // Prevent self-deletion
-    if (userId === req.session.userId) {
-      sendError(res, 'ไม่สามารถลบบัญชีตัวเองได้', 400);
-      return;
-    }
-
-    const target = db
-      .prepare('SELECT id, username, role FROM users WHERE id = ?')
-      .get(userId) as { id: number; username: string; role: UserRole } | undefined;
-
-    if (!target) {
-      sendError(res, ThaiErrors.USER_NOT_FOUND, 404);
-      return;
-    }
-
-    // ✅ กัน admin ลบ superadmin
-    if (denyIfTargetIsSuperadmin(target.role, req, res)) return;
-
-    // ✅ กันลบ superadmin คนสุดท้าย (กันระบบพัง)
     if (target.role === 'superadmin') {
-      const cnt = db.prepare(`SELECT COUNT(*) as c FROM users WHERE role = 'superadmin'`).get() as any;
-      if ((cnt?.c ?? 0) <= 1) {
-        sendError(res, 'ไม่สามารถลบ Super Admin คนสุดท้ายได้', 400);
-        return;
+      const cnt = await query(`SELECT COUNT(*) as c FROM users WHERE role = 'superadmin'`);
+      if (parseInt(cnt.rows[0].c) <= 1) {
+        sendError(res, 'ไม่สามารถลบ Super Admin คนสุดท้ายได้', 400); return;
       }
     }
 
-    // -------- helpers: เช็คตารางมีอยู่ไหม + ลบแบบไม่พัง --------
-    const tableExists = (name: string) => {
-      const row = db
-        .prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?`)
-        .get(name);
-      return !!row;
-    };
+    await query('DELETE FROM user_project_access WHERE user_id = $1', [userId]);
+    await query('UPDATE audit_log SET user_id = NULL WHERE user_id = $1', [userId]);
+    await query('DELETE FROM users WHERE id = $1', [userId]);
 
-    const safeDelete = (sql: string, params: any[] = []) => {
-      try {
-        db.prepare(sql).run(...params);
-      } catch (e: any) {
-        // ถ้าตารางไม่มี/คอลัมน์ไม่ตรง: ข้าม (เพื่อไม่ให้ลบผู้ใช้ fail)
-        const msg = String(e?.message ?? '').toLowerCase();
-        if (msg.includes('no such table') || msg.includes('no such column')) return;
-        throw e;
-      }
-    };
-
-    // ✅ ลบจริงแบบ transaction
-    const tx = db.transaction((uid: number) => {
-      // 1) ลบ mapping สิทธิ์โปรเจกต์
-      if (tableExists('user_project_access')) {
-        safeDelete('DELETE FROM user_project_access WHERE user_id = ?', [uid]);
-      }
-
-      // 2) ลบ session ของ user (ตารางชื่อ sessions)
-      if (tableExists('sessions')) {
-        // session store มักเก็บ sess เป็น JSON string -> อิง userId อยู่ในนั้น
-        // ใช้ LIKE เพื่อเคลียร์ session ของ user นี้
-        safeDelete(`DELETE FROM sessions WHERE sess LIKE ?`, [`%"userId":${uid}%`]);
-      }
-
-      // 3) ถ้ามี login_history / audit_log ให้ลบ/ทำให้เป็น null ตามนโยบาย
-      if (tableExists('login_history')) {
-        // บาง schema ใช้ user_id, บาง schema ใช้ userId -> ใช้ safeDelete ช่วย
-        safeDelete('DELETE FROM login_history WHERE user_id = ?', [uid]);
-        safeDelete('DELETE FROM login_history WHERE userId = ?', [uid]);
-      }
-
-      if (tableExists('audit_log')) {
-        // แนะนำ “ไม่ลบ” audit เพื่อหลักฐาน แต่ถ้าอยากลบจริง ให้เปิด 2 บรรทัดนี้
-        // safeDelete('DELETE FROM audit_log WHERE user_id = ?', [uid]);
-        // safeDelete('DELETE FROM audit_log WHERE userId = ?', [uid]);
-
-        // ทางเลือกที่ปลอดภัยกว่า: ทำให้ userId เป็น NULL (เก็บ log ไว้)
-        safeDelete('UPDATE audit_log SET user_id = NULL WHERE user_id = ?', [uid]);
-        safeDelete('UPDATE audit_log SET userId = NULL WHERE userId = ?', [uid]);
-      }
-
-      // 4) ลบ user จริง
-      safeDelete('DELETE FROM users WHERE id = ?', [uid]);
-    });
-
-    tx(userId);
-
-    // Audit การลบ (ถ้า audit_log ทำ NULL ได้ ก็ยังเก็บได้)
     try {
-      logAudit({
-        userId: req.session.userId ?? null,
-        action: AuditActions.USER_DELETED,
-        detail: { targetUserId: userId, targetUsername: target.username },
-      });
-    } catch {
-      // ignore
-    }
+      logAudit({ userId: req.session.userId ?? null, action: AuditActions.USER_DELETED, detail: { targetUserId: userId, targetUsername: target.username } });
+    } catch {}
 
     sendSuccess(res, { message: 'ลบผู้ใช้สำเร็จ' });
   } catch (error) {

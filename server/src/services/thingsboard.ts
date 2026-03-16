@@ -1,16 +1,9 @@
 /**
  * ThingsBoard API Client
  * Centralized module for all ThingsBoard interactions
- * 
- * Features:
- * - JWT authentication with auto-refresh
- * - Request timeout handling
- * - Automatic retry on 401/403
- * - Thai error messages
- * - RPC retry logic (แก้ไขแล้ว)
  */
 
-import { db } from '../db/connection.js';
+import { query } from '../db/connection.js';
 import { ThaiErrors } from '../utils/response.js';
 import type { Project } from '../types/index.js';
 
@@ -49,13 +42,13 @@ interface TBRpcResponse {
 }
 
 // ============================================================
-// Configuration (แก้ไขแล้ว)
+// Configuration
 // ============================================================
 
-const REQUEST_TIMEOUT = 30000; // ✅ เพิ่มจาก 10s → 30s
-const TOKEN_EXPIRY_BUFFER = 60000; // Refresh 1 minute before expiry
-const JWT_LIFETIME = 9000000; // ~2.5 hours (ThingsBoard default)
-const RPC_RETRY_ATTEMPTS = 3; // ✅ เพิ่มใหม่
+const REQUEST_TIMEOUT = 30000;
+const TOKEN_EXPIRY_BUFFER = 60000;
+const JWT_LIFETIME = 9000000;
+const RPC_RETRY_ATTEMPTS = 3;
 
 // ============================================================
 // Token Cache (per project)
@@ -67,9 +60,6 @@ const tokenCache = new Map<string, TBTokenCache>();
 // Helper Functions
 // ============================================================
 
-/**
- * Fetch with timeout
- */
 async function fetchWithTimeout(
   url: string,
   options: RequestInit,
@@ -92,15 +82,17 @@ async function fetchWithTimeout(
 /**
  * Get project's ThingsBoard settings from database
  */
-function getProjectTBSettings(projectKey: string): {
+async function getProjectTBSettings(projectKey: string): Promise<{
   baseUrl: string;
   username: string;
   password: string;
-} | null {
-  const project = db.prepare(`
+} | null> {
+  const result = await query(`
     SELECT tb_base_url, tb_username, tb_password
-    FROM projects WHERE key = ?
-  `).get(projectKey) as Pick<Project, 'tb_base_url' | 'tb_username' | 'tb_password'> | undefined;
+    FROM projects WHERE key = $1
+  `, [projectKey]);
+
+  const project = result.rows[0] as Pick<Project, 'tb_base_url' | 'tb_username' | 'tb_password'> | undefined;
 
   if (!project) return null;
 
@@ -114,24 +106,22 @@ function getProjectTBSettings(projectKey: string): {
 /**
  * Get device ID for a greenhouse
  */
-function getDeviceId(projectKey: string, ghKey: string): string | null {
-  const result = db.prepare(`
+async function getDeviceId(projectKey: string, ghKey: string): Promise<string | null> {
+  const result = await query(`
     SELECT g.tb_device_id
     FROM greenhouses g
     JOIN projects p ON g.project_id = p.id
-    WHERE p.key = ? AND g.gh_key = ?
-  `).get(projectKey, ghKey) as { tb_device_id: string | null } | undefined;
+    WHERE p.key = $1 AND g.gh_key = $2
+  `, [projectKey, ghKey]);
 
-  return result?.tb_device_id ?? null;
+  const row = result.rows[0] as { tb_device_id: string | null } | undefined;
+  return row?.tb_device_id ?? null;
 }
 
 // ============================================================
 // ThingsBoard Authentication
 // ============================================================
 
-/**
- * Login to ThingsBoard and get JWT token
- */
 async function tbLogin(
   baseUrl: string,
   username: string,
@@ -142,16 +132,12 @@ async function tbLogin(
   try {
     const response = await fetchWithTimeout(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     });
 
     if (!response.ok) {
-      if (response.status === 401) {
-        throw new Error(ThaiErrors.TB_AUTH_ERROR);
-      }
+      if (response.status === 401) throw new Error(ThaiErrors.TB_AUTH_ERROR);
       throw new Error(ThaiErrors.TB_CONNECTION_ERROR);
     }
 
@@ -159,36 +145,28 @@ async function tbLogin(
     return data as TBAuthResponse;
   } catch (error) {
     if (error instanceof Error) {
-      if (error.name === 'AbortError') {
-        throw new Error(ThaiErrors.TB_TIMEOUT);
-      }
+      if (error.name === 'AbortError') throw new Error(ThaiErrors.TB_TIMEOUT);
       throw error;
     }
     throw new Error(ThaiErrors.TB_CONNECTION_ERROR);
   }
 }
 
-/**
- * Get valid token for a project (with auto-refresh)
- */
 async function getToken(projectKey: string): Promise<string> {
   const cached = tokenCache.get(projectKey);
   const now = Date.now();
 
-  // Check if we have a valid cached token
   if (cached && cached.expiresAt > now + TOKEN_EXPIRY_BUFFER) {
     return cached.token;
   }
 
-  // Need to get new token
-  const settings = getProjectTBSettings(projectKey);
+  const settings = await getProjectTBSettings(projectKey);
   if (!settings) {
     throw new Error(ThaiErrors.PROJECT_NOT_FOUND);
   }
 
   const authResponse = await tbLogin(settings.baseUrl, settings.username, settings.password);
 
-  // Cache the token
   tokenCache.set(projectKey, {
     token: authResponse.token,
     refreshToken: authResponse.refreshToken,
@@ -198,9 +176,6 @@ async function getToken(projectKey: string): Promise<string> {
   return authResponse.token;
 }
 
-/**
- * Clear cached token (force re-login on next request)
- */
 export function clearToken(projectKey: string): void {
   tokenCache.delete(projectKey);
 }
@@ -209,16 +184,12 @@ export function clearToken(projectKey: string): void {
 // ThingsBoard API Requests
 // ============================================================
 
-/**
- * Make authenticated request to ThingsBoard
- * Automatically retries once on 401/403
- */
 async function tbRequest<T>(
   projectKey: string,
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const settings = getProjectTBSettings(projectKey);
+  const settings = await getProjectTBSettings(projectKey);
   if (!settings) {
     throw new Error(ThaiErrors.PROJECT_NOT_FOUND);
   }
@@ -237,7 +208,6 @@ async function tbRequest<T>(
         },
       });
 
-      // Handle auth errors with retry
       if ((response.status === 401 || response.status === 403) && !retry) {
         console.log(`🔄 Token expired for ${projectKey}, refreshing...`);
         clearToken(projectKey);
@@ -253,16 +223,13 @@ async function tbRequest<T>(
             ? ThaiErrors.TB_AUTH_ERROR
             : ThaiErrors.TB_CONNECTION_ERROR
         );
-        err.status = response.status;      // ✅ สำคัญ
+        err.status = response.status;
         err.tbBody = errorText;
         throw err;
       }
 
-      // Handle empty responses
       const text = await response.text();
-      if (!text) {
-        return {} as T;
-      }
+      if (!text) return {} as T;
 
       return JSON.parse(text) as T;
     } catch (error) {
@@ -288,22 +255,18 @@ async function tbRequest<T>(
 /**
  * Get Project Details
  */
-export function getProject(projectKey: string): Project | undefined {
-  return db.prepare('SELECT * FROM projects WHERE key = ?').get(projectKey) as Project | undefined;
+export async function getProject(projectKey: string): Promise<Project | undefined> {
+  const result = await query('SELECT * FROM projects WHERE key = $1', [projectKey]);
+  return result.rows[0] as Project | undefined;
 }
 
-/**
- * Get latest telemetry values
- */
 export async function getLatestTelemetry(
   projectKey: string,
   ghKey: string,
   keys: string[]
 ): Promise<TBTelemetryResponse> {
-  const deviceId = getDeviceId(projectKey, ghKey);
-  if (!deviceId) {
-    throw new Error(ThaiErrors.GREENHOUSE_DEVELOPING);
-  }
+  const deviceId = await getDeviceId(projectKey, ghKey);
+  if (!deviceId) throw new Error(ThaiErrors.GREENHOUSE_DEVELOPING);
 
   const keysParam = keys.join(',');
   const endpoint = `/api/plugins/telemetry/DEVICE/${deviceId}/values/timeseries?keys=${keysParam}&limit=1`;
@@ -311,9 +274,6 @@ export async function getLatestTelemetry(
   return tbRequest<TBTelemetryResponse>(projectKey, endpoint);
 }
 
-/**
- * Get telemetry timeseries for charts
- */
 export async function getTelemetryTimeseries(
   projectKey: string,
   ghKey: string,
@@ -324,10 +284,8 @@ export async function getTelemetryTimeseries(
   agg?: string,
   limit?: number
 ): Promise<TBTelemetryResponse> {
-  const deviceId = getDeviceId(projectKey, ghKey);
-  if (!deviceId) {
-    throw new Error(ThaiErrors.GREENHOUSE_DEVELOPING);
-  }
+  const deviceId = await getDeviceId(projectKey, ghKey);
+  if (!deviceId) throw new Error(ThaiErrors.GREENHOUSE_DEVELOPING);
 
   const params = new URLSearchParams({
     keys: keys.join(','),
@@ -344,18 +302,13 @@ export async function getTelemetryTimeseries(
   return tbRequest<TBTelemetryResponse>(projectKey, endpoint);
 }
 
-/**
- * Get device attributes
- */
 export async function getAttributes(
   projectKey: string,
   ghKey: string,
   keys: string[]
 ): Promise<Record<string, unknown>> {
-  const deviceId = getDeviceId(projectKey, ghKey);
-  if (!deviceId) {
-    throw new Error(ThaiErrors.GREENHOUSE_DEVELOPING);
-  }
+  const deviceId = await getDeviceId(projectKey, ghKey);
+  if (!deviceId) throw new Error(ThaiErrors.GREENHOUSE_DEVELOPING);
 
   const wantsAll = !keys || keys.length === 0 || keys.includes('*');
 
@@ -372,18 +325,14 @@ export async function getAttributes(
   return result;
 }
 
-
-
 export async function setAttributes(
   projectKey: string,
   ghKey: string,
   attributes: Record<string, unknown>,
   scope: 'SHARED_SCOPE' | 'SERVER_SCOPE' = 'SHARED_SCOPE'
 ): Promise<void> {
-  const deviceId = getDeviceId(projectKey, ghKey);
-  if (!deviceId) {
-    throw new Error(ThaiErrors.GREENHOUSE_DEVELOPING);
-  }
+  const deviceId = await getDeviceId(projectKey, ghKey);
+  if (!deviceId) throw new Error(ThaiErrors.GREENHOUSE_DEVELOPING);
 
   const endpoint = `/api/plugins/telemetry/DEVICE/${deviceId}/attributes/${scope}`;
 
@@ -393,27 +342,16 @@ export async function setAttributes(
   });
 }
 
-
-
-
-/**
- * Send RPC command to device (two-way)
- * ✅ แก้ไขแล้ว: เพิ่ม retry logic
- */
 export async function sendRpcCommand(
   projectKey: string,
   ghKey: string,
   method: string,
   params: unknown,
-  timeout?: number // ✅ ไม่มี default แล้ว
+  timeout?: number
 ): Promise<TBRpcResponse> {
-  const deviceId = getDeviceId(projectKey, ghKey);
-  if (!deviceId) {
-    throw new Error(ThaiErrors.GREENHOUSE_DEVELOPING);
-  }
+  const deviceId = await getDeviceId(projectKey, ghKey);
+  if (!deviceId) throw new Error(ThaiErrors.GREENHOUSE_DEVELOPING);
 
-  // ✅ ถ้าส่ง timeout มา = two-way (ต้องการ response)
-  // ✅ ถ้าไม่ส่ง timeout = one-way (ส่งแล้วจบ)
   const isTwoWay = typeof timeout === 'number' && timeout > 0;
 
   const endpoint = isTwoWay
@@ -426,20 +364,14 @@ export async function sendRpcCommand(
 
   console.log(`🚀 RPC ${isTwoWay ? 'two-way' : 'one-way'} to ${ghKey}: ${method}`);
 
-  // ✅ ไม่ retry เพื่อกันสั่งซ้ำ (toggle จะเพี้ยนได้)
   return tbRequest<TBRpcResponse>(projectKey, endpoint, {
     method: 'POST',
     body: JSON.stringify(body),
   });
 }
 
-
-// Alias for compatibility
 export const sendRpc = sendRpcCommand;
 
-/**
- * Check if device is online
- */
 export async function isDeviceOnline(
   projectKey: string,
   ghKey: string
@@ -447,16 +379,14 @@ export async function isDeviceOnline(
   try {
     console.log(`🔍 [isDeviceOnline] Checking ${ghKey}...`);
 
-    const OFFLINE_THRESHOLD_SEC = 180; // 3 นาที
+    const OFFLINE_THRESHOLD_SEC = 180;
 
-    // 1) อ่าน attributes ก่อน
     const attrs = await getAttributes(projectKey, ghKey, ['status', 'last_seen']);
     console.log(`  📦 Attributes:`, attrs);
 
     const statusRaw =
       typeof attrs.status === 'string' ? attrs.status.trim().toLowerCase() : '';
 
-    // last_seen อาจเป็น number หรือ string → แปลงให้เป็น number
     const lastSeenVal = (attrs as any).last_seen;
     const lastSeenSec =
       typeof lastSeenVal === 'number'
@@ -465,7 +395,6 @@ export async function isDeviceOnline(
           ? Number(lastSeenVal)
           : NaN;
 
-    // ✅ ถ้ามี last_seen ใช้เป็นหลัก
     if (!Number.isNaN(lastSeenSec) && lastSeenSec > 0) {
       const nowSec = Math.floor(Date.now() / 1000);
       const age = nowSec - lastSeenSec;
@@ -481,21 +410,19 @@ export async function isDeviceOnline(
       return false;
     }
 
-    // ⚠️ ถ้าไม่มี last_seen: "ห้ามเชื่อ status อย่างเดียว"
     if (statusRaw) {
       console.log(`  ⚠️ Has status="${statusRaw}" but no last_seen → check telemetry...`);
     } else {
       console.log(`  ⚠️ No status in attributes, checking telemetry...`);
     }
 
-    // 2) Fallback: telemetry status (ของเดิมคุณมีอยู่แล้ว แต่ปรับให้อยู่เสมอเมื่อไม่มี last_seen)
     const telemetry = await getLatestTelemetry(projectKey, ghKey, ['status']);
     console.log(`  📊 Telemetry:`, telemetry);
 
     if (telemetry.status && telemetry.status.length > 0) {
       const latest = telemetry.status[0];
       const latestStatus = latest.value;
-      const lastUpdateTs = latest.ts; // ms
+      const lastUpdateTs = latest.ts;
       const nowMs = Date.now();
       const FRESH_MS = 2 * 60 * 1000;
 
@@ -518,20 +445,13 @@ export async function isDeviceOnline(
   }
 }
 
-
-/**
- * Test ThingsBoard connection for a project
- */
 export async function testConnection(projectKey: string): Promise<{
   success: boolean;
   message: string;
 }> {
   try {
     await getToken(projectKey);
-    return {
-      success: true,
-      message: 'เชื่อมต่อ ThingsBoard สำเร็จ',
-    };
+    return { success: true, message: 'เชื่อมต่อ ThingsBoard สำเร็จ' };
   } catch (error) {
     return {
       success: false,
@@ -540,12 +460,11 @@ export async function testConnection(projectKey: string): Promise<{
   }
 }
 
-// Export for use in routes
 export const tbService = {
   getLatestTelemetry,
   getTelemetryTimeseries,
   getAttributes,
-  setAttributes, // ✅ เพิ่ม
+  setAttributes,
   sendRpcCommand,
   sendRpc,
   isDeviceOnline,

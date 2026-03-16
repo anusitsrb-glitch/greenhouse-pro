@@ -7,7 +7,7 @@
 
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { db } from '../db/connection.js';
+import { query } from '../db/connection.js';
 import { sendSuccess, sendError, ThaiErrors } from '../utils/response.js';
 import { tbService } from '../services/thingsboard.js';
 import { notificationService } from '../services/notificationService.js';
@@ -19,26 +19,26 @@ const bodySchema = z.object({
   scope: z.enum(['SHARED_SCOPE', 'SERVER_SCOPE']).optional(),
 });
 
-function hasProjectAccess(userId: number, userRole: string, projectKey: string): boolean {
+async function hasProjectAccess(userId: number, userRole: string, projectKey: string): Promise<boolean> {
   if (userRole === 'admin' || userRole === 'superadmin') return true;
 
-  const access = db.prepare(`
+  const result = await query(`
     SELECT 1 FROM user_project_access upa
     JOIN projects p ON upa.project_id = p.id
-    WHERE upa.user_id = ? AND p.key = ?
-  `).get(userId, projectKey);
+    WHERE upa.user_id = $1 AND p.key = $2
+  `, [userId, projectKey]);
 
-  return !!access;
+  return result.rows.length > 0;
 }
 
-function getGreenhouseId(projectKey: string, ghKey: string): number | null {
+async function getGreenhouseId(projectKey: string, ghKey: string): Promise<number | null> {
   try {
-    const result = db.prepare(`
+    const result = await query(`
       SELECT g.id FROM greenhouses g
       JOIN projects p ON g.project_id = p.id
-      WHERE p.key = ? AND g.gh_key = ?
-    `).get(projectKey, ghKey) as { id: number } | undefined;
-    return result?.id || null;
+      WHERE p.key = $1 AND g.gh_key = $2
+    `, [projectKey, ghKey]);
+    return result.rows[0]?.id || null;
   } catch {
     return null;
   }
@@ -53,51 +53,43 @@ export async function setAttributesHandler(req: Request, res: Response) {
     }
 
     const { project, gh, attributes, scope } = parsed.data;
-
     const userId = req.session.userId!;
     const role = req.session.role!;
 
-    if (!hasProjectAccess(userId, role, project)) {
+    if (!await hasProjectAccess(userId, role, project)) {
       sendError(res, ThaiErrors.NO_PROJECT_ACCESS, 403);
       return;
     }
 
-    // Set attributes to ThingsBoard
     await tbService.setAttributes(project, gh, attributes, scope ?? 'SHARED_SCOPE');
 
-    // ✅ เช็คว่ามีการเปลี่ยน auto mode หรือไม่
-    const autoModeKeys = Object.keys(attributes).filter(key => 
-      key.includes('_auto') || 
+    // เช็คว่ามีการเปลี่ยน auto mode หรือไม่
+    const autoModeKeys = Object.keys(attributes).filter(key =>
+      key.includes('_auto') ||
       key.includes('auto_mode') ||
       key.includes('_time') ||
       key.includes('_condition')
     );
 
     if (autoModeKeys.length > 0) {
-      const greenhouseId = getGreenhouseId(project, gh);
-      
+      const greenhouseId = await getGreenhouseId(project, gh);
+
       if (greenhouseId) {
-        const info = db.prepare(`
+        const infoResult = await query(`
           SELECT g.name_th as greenhouse_name, p.id as project_id, u.username
           FROM greenhouses g
           JOIN projects p ON g.project_id = p.id
-          LEFT JOIN users u ON u.id = ?
-          WHERE g.id = ?
-        `).get(userId, greenhouseId) as any;
+          LEFT JOIN users u ON u.id = $1
+          WHERE g.id = $2
+        `, [userId, greenhouseId]);
+        const info = infoResult.rows[0] as any;
 
         if (info) {
-          // สร้างข้อความที่อ่านเข้าใจง่าย
           const changedSettings = autoModeKeys.map(key => {
             const value = attributes[key];
-            if (key.includes('_auto')) {
-              return value ? 'เปิดโหมดอัตโนมัติ' : 'ปิดโหมดอัตโนมัติ';
-            }
-            if (key.includes('_time')) {
-              return `ตั้งเวลา: ${value}`;
-            }
-            if (key.includes('_condition')) {
-              return `ตั้งเงื่อนไข: ${value}`;
-            }
+            if (key.includes('_auto')) return value ? 'เปิดโหมดอัตโนมัติ' : 'ปิดโหมดอัตโนมัติ';
+            if (key.includes('_time')) return `ตั้งเวลา: ${value}`;
+            if (key.includes('_condition')) return `ตั้งเงื่อนไข: ${value}`;
             return `เปลี่ยน ${key}`;
           });
 
@@ -106,7 +98,7 @@ export async function setAttributesHandler(req: Request, res: Response) {
             severity: 'info',
             title: `เปลี่ยนการตั้งค่า Auto`,
             message: `${info.username || 'ระบบ'} ${changedSettings[0]} ที่ ${info.greenhouse_name}`,
-            metadata: { 
+            metadata: {
               changes: autoModeKeys,
               values: attributes,
               greenhouseName: info.greenhouse_name,

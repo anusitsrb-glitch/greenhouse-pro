@@ -1,20 +1,11 @@
-/**
- * Alert History Routes
- * View and manage alert history
- */
-
 import { Router, Request, Response } from 'express';
-import { db } from '../db/connection.js';
+import { query } from '../db/connection.js';
 import { sendSuccess, sendError, ThaiErrors } from '../utils/response.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { logAudit, AuditActions } from '../utils/audit.js';
 import { z } from 'zod';
 
 const router = Router();
-
-// ============================================================
-// Validation Schemas
-// ============================================================
 
 const alertQuerySchema = z.object({
   project_key: z.string().optional(),
@@ -40,49 +31,30 @@ const createAlertSchema = z.object({
   message: z.string(),
 });
 
-// ============================================================
-// Helper Functions
-// ============================================================
-
-function hasProjectAccess(userId: number, userRole: string, projectKey?: string): boolean {
+async function hasProjectAccess(userId: number, userRole: string, projectKey?: string): Promise<boolean> {
   if (userRole === 'admin' || userRole === 'superadmin') return true;
   if (!projectKey) return false;
-
-  const access = db.prepare(`
+  const result = await query(`
     SELECT 1 FROM user_project_access upa
     JOIN projects p ON upa.project_id = p.id
-    WHERE upa.user_id = ? AND p.key = ?
-  `).get(userId, projectKey);
-
-  return !!access;
+    WHERE upa.user_id = $1 AND p.key = $2
+  `, [userId, projectKey]);
+  return result.rows.length > 0;
 }
 
-// ============================================================
-// Routes
-// ============================================================
-
-/**
- * GET /api/alerts
- * Get alert history with filters
- */
-router.get('/', requireAuth, (req: Request, res: Response) => {
+// GET /api/alerts
+router.get('/', requireAuth, async (req: Request, res: Response) => {
   try {
     const parsed = alertQuerySchema.safeParse(req.query);
-    if (!parsed.success) {
-      sendError(res, ThaiErrors.INVALID_INPUT, 400);
-      return;
-    }
+    if (!parsed.success) { sendError(res, ThaiErrors.INVALID_INPUT, 400); return; }
 
     const { project_key, gh_key, alert_type, severity, is_acknowledged, start_date, end_date, limit, offset } = parsed.data;
+    const limitNum = parseInt(limit || '50');
+    const offsetNum = parseInt(offset || '0');
 
-    // Build query
-    let query = `
-      SELECT 
-        ah.*,
-        g.gh_key,
-        g.name_th as greenhouse_name,
-        p.key as project_key,
-        p.name_th as project_name,
+    let sql = `
+      SELECT ah.*, g.gh_key, g.name_th as greenhouse_name,
+        p.key as project_key, p.name_th as project_name,
         u.username as acknowledged_by_name
       FROM alert_history ah
       JOIN greenhouses g ON ah.greenhouse_id = g.id
@@ -91,287 +63,157 @@ router.get('/', requireAuth, (req: Request, res: Response) => {
       WHERE 1=1
     `;
     const params: any[] = [];
+    let idx = 1;
 
-    // Project access check for non-admin
     if (req.session.role !== 'admin' && req.session.role !== 'superadmin') {
-      query += ` AND p.id IN (SELECT project_id FROM user_project_access WHERE user_id = ?)`;
+      sql += ` AND p.id IN (SELECT project_id FROM user_project_access WHERE user_id = $${idx++})`;
       params.push(req.session.userId);
     }
+    if (project_key) { sql += ` AND p.key = $${idx++}`; params.push(project_key); }
+    if (gh_key) { sql += ` AND g.gh_key = $${idx++}`; params.push(gh_key); }
+    if (alert_type) { sql += ` AND ah.alert_type = $${idx++}`; params.push(alert_type); }
+    if (severity) { sql += ` AND ah.severity = $${idx++}`; params.push(severity); }
+    if (is_acknowledged !== undefined) { sql += ` AND ah.is_acknowledged = $${idx++}`; params.push(is_acknowledged === 'true' ? 1 : 0); }
+    if (start_date) { sql += ` AND ah.created_at >= $${idx++}`; params.push(start_date); }
+    if (end_date) { sql += ` AND ah.created_at <= $${idx++}`; params.push(end_date); }
 
-    if (project_key) {
-      query += ` AND p.key = ?`;
-      params.push(project_key);
-    }
-    if (gh_key) {
-      query += ` AND g.gh_key = ?`;
-      params.push(gh_key);
-    }
-    if (alert_type) {
-      query += ` AND ah.alert_type = ?`;
-      params.push(alert_type);
-    }
-    if (severity) {
-      query += ` AND ah.severity = ?`;
-      params.push(severity);
-    }
-    if (is_acknowledged !== undefined) {
-      query += ` AND ah.is_acknowledged = ?`;
-      params.push(is_acknowledged === 'true' ? 1 : 0);
-    }
-    if (start_date) {
-      query += ` AND ah.created_at >= ?`;
-      params.push(start_date);
-    }
-    if (end_date) {
-      query += ` AND ah.created_at <= ?`;
-      params.push(end_date);
-    }
-
-    query += ` ORDER BY ah.created_at DESC`;
-
-    // Pagination
-    const limitNum = parseInt(limit || '50');
-    const offsetNum = parseInt(offset || '0');
-    query += ` LIMIT ? OFFSET ?`;
+    sql += ` ORDER BY ah.created_at DESC LIMIT $${idx++} OFFSET $${idx++}`;
     params.push(limitNum, offsetNum);
 
-    const alerts = db.prepare(query).all(...params);
-
-    // Get total count
-    let countQuery = `
+    // Count query
+    let countSql = `
       SELECT COUNT(*) as total FROM alert_history ah
       JOIN greenhouses g ON ah.greenhouse_id = g.id
       JOIN projects p ON g.project_id = p.id
       WHERE 1=1
     `;
     const countParams: any[] = [];
+    let cidx = 1;
 
     if (req.session.role !== 'admin' && req.session.role !== 'superadmin') {
-      countQuery += ` AND p.id IN (SELECT project_id FROM user_project_access WHERE user_id = ?)`;
+      countSql += ` AND p.id IN (SELECT project_id FROM user_project_access WHERE user_id = $${cidx++})`;
       countParams.push(req.session.userId);
     }
-    if (project_key) { countQuery += ` AND p.key = ?`; countParams.push(project_key); }
-    if (gh_key) { countQuery += ` AND g.gh_key = ?`; countParams.push(gh_key); }
-    if (alert_type) { countQuery += ` AND ah.alert_type = ?`; countParams.push(alert_type); }
-    if (severity) { countQuery += ` AND ah.severity = ?`; countParams.push(severity); }
-    if (is_acknowledged !== undefined) { countQuery += ` AND ah.is_acknowledged = ?`; countParams.push(is_acknowledged === 'true' ? 1 : 0); }
+    if (project_key) { countSql += ` AND p.key = $${cidx++}`; countParams.push(project_key); }
+    if (gh_key) { countSql += ` AND g.gh_key = $${cidx++}`; countParams.push(gh_key); }
+    if (alert_type) { countSql += ` AND ah.alert_type = $${cidx++}`; countParams.push(alert_type); }
+    if (severity) { countSql += ` AND ah.severity = $${cidx++}`; countParams.push(severity); }
+    if (is_acknowledged !== undefined) { countSql += ` AND ah.is_acknowledged = $${cidx++}`; countParams.push(is_acknowledged === 'true' ? 1 : 0); }
 
-    const { total } = db.prepare(countQuery).get(...countParams) as { total: number };
+    const [result, countResult] = await Promise.all([query(sql, params), query(countSql, countParams)]);
+    const total = parseInt(countResult.rows[0]?.total ?? '0');
 
-    sendSuccess(res, { 
-      alerts, 
-      pagination: { total, limit: limitNum, offset: offsetNum } 
-    });
+    sendSuccess(res, { alerts: result.rows, pagination: { total, limit: limitNum, offset: offsetNum } });
   } catch (error) {
-    console.error('Error fetching alerts:', error);
     sendError(res, ThaiErrors.SERVER_ERROR, 500);
   }
 });
 
-/**
- * POST /api/alerts
- * Create new alert (for system use)
- */
-router.post('/', requireAdmin, (req: Request, res: Response) => {
+// POST /api/alerts
+router.post('/', requireAdmin, async (req: Request, res: Response) => {
   try {
     const parsed = createAlertSchema.safeParse(req.body);
-    if (!parsed.success) {
-      sendError(res, ThaiErrors.INVALID_INPUT, 400);
-      return;
-    }
+    if (!parsed.success) { sendError(res, ThaiErrors.INVALID_INPUT, 400); return; }
 
-    const data = parsed.data;
+    const d = parsed.data;
+    const result = await query(`
+      INSERT INTO alert_history (greenhouse_id, alert_type, severity, sensor_key, sensor_name, current_value, threshold_value, direction, message)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id
+    `, [d.greenhouse_id, d.alert_type, d.severity, d.sensor_key || null, d.sensor_name || null, d.current_value ?? null, d.threshold_value ?? null, d.direction || null, d.message]);
 
-    const result = db.prepare(`
-      INSERT INTO alert_history (
-        greenhouse_id, alert_type, severity, sensor_key, sensor_name,
-        current_value, threshold_value, direction, message
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      data.greenhouse_id,
-      data.alert_type,
-      data.severity,
-      data.sensor_key || null,
-      data.sensor_name || null,
-      data.current_value ?? null,
-      data.threshold_value ?? null,
-      data.direction || null,
-      data.message
-    );
-
-    sendSuccess(res, { message: 'สร้าง Alert สำเร็จ', alert: { id: result.lastInsertRowid } });
+    sendSuccess(res, { message: 'สร้าง Alert สำเร็จ', alert: { id: result.rows[0].id } });
   } catch (error) {
-    console.error('Error creating alert:', error);
     sendError(res, ThaiErrors.SERVER_ERROR, 500);
   }
 });
 
-/**
- * PUT /api/alerts/:id/acknowledge
- * Acknowledge an alert
- */
-router.put('/:id/acknowledge', requireAuth, (req: Request, res: Response) => {
+// PUT /api/alerts/acknowledge-all
+router.put('/acknowledge-all', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { project_key, gh_key } = req.query;
+    let sql = `
+      UPDATE alert_history SET is_acknowledged = 1, acknowledged_by = $1, acknowledged_at = now()::text
+      WHERE is_acknowledged = 0 AND greenhouse_id IN (
+        SELECT g.id FROM greenhouses g JOIN projects p ON g.project_id = p.id WHERE 1=1
+    `;
+    const params: any[] = [req.session.userId];
+    let idx = 2;
+
+    if (req.session.role !== 'admin' && req.session.role !== 'superadmin') {
+      sql += ` AND p.id IN (SELECT project_id FROM user_project_access WHERE user_id = $${idx++})`;
+      params.push(req.session.userId);
+    }
+    if (project_key) { sql += ` AND p.key = $${idx++}`; params.push(project_key); }
+    if (gh_key) { sql += ` AND g.gh_key = $${idx++}`; params.push(gh_key); }
+    sql += `)`;
+
+    const result = await query(sql, params);
+    logAudit({ userId: req.session.userId ?? null, action: AuditActions.ALERTS_ACKNOWLEDGED_ALL, detail: { count: result.rowCount, project_key, gh_key } });
+    sendSuccess(res, { message: `รับทราบ ${result.rowCount} Alert สำเร็จ` });
+  } catch (error) {
+    sendError(res, ThaiErrors.SERVER_ERROR, 500);
+  }
+});
+
+// PUT /api/alerts/:id/acknowledge
+router.put('/:id/acknowledge', requireAuth, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-
-    // Check if alert exists and user has access
-    const alert = db.prepare(`
+    const alertRes = await query(`
       SELECT ah.*, p.key as project_key FROM alert_history ah
       JOIN greenhouses g ON ah.greenhouse_id = g.id
       JOIN projects p ON g.project_id = p.id
-      WHERE ah.id = ?
-    `).get(id) as any;
-
-    if (!alert) {
-      sendError(res, 'ไม่พบ Alert', 404);
-      return;
+      WHERE ah.id = $1
+    `, [id]);
+    const alert = alertRes.rows[0];
+    if (!alert) { sendError(res, 'ไม่พบ Alert', 404); return; }
+    if (!await hasProjectAccess(req.session.userId!, req.session.role!, alert.project_key)) {
+      sendError(res, ThaiErrors.NO_PROJECT_ACCESS, 403); return;
     }
 
-    if (!hasProjectAccess(req.session.userId!, req.session.role!, alert.project_key)) {
-      sendError(res, ThaiErrors.NO_PROJECT_ACCESS, 403);
-      return;
-    }
-
-    db.prepare(`
-      UPDATE alert_history 
-      SET is_acknowledged = 1, acknowledged_by = ?, acknowledged_at = datetime('now')
-      WHERE id = ?
-    `).run(req.session.userId, id);
-
-    logAudit({
-      userId: req.session.userId ?? null,
-      action: AuditActions.ALERT_ACKNOWLEDGED,
-      projectKey: alert.project_key,
-      detail: { alertId: id },
-    });
-
+    await query(`UPDATE alert_history SET is_acknowledged = 1, acknowledged_by = $1, acknowledged_at = now()::text WHERE id = $2`, [req.session.userId, id]);
+    logAudit({ userId: req.session.userId ?? null, action: AuditActions.ALERT_ACKNOWLEDGED, projectKey: alert.project_key, detail: { alertId: id } });
     sendSuccess(res, { message: 'รับทราบ Alert สำเร็จ' });
   } catch (error) {
-    console.error('Error acknowledging alert:', error);
     sendError(res, ThaiErrors.SERVER_ERROR, 500);
   }
 });
 
-/**
- * PUT /api/alerts/acknowledge-all
- * Acknowledge all unacknowledged alerts (with optional filters)
- */
-router.put('/acknowledge-all', requireAuth, (req: Request, res: Response) => {
-  try {
-    const { project_key, gh_key } = req.query;
-
-    let query = `
-      UPDATE alert_history 
-      SET is_acknowledged = 1, acknowledged_by = ?, acknowledged_at = datetime('now')
-      WHERE is_acknowledged = 0 AND greenhouse_id IN (
-        SELECT g.id FROM greenhouses g
-        JOIN projects p ON g.project_id = p.id
-        WHERE 1=1
-    `;
-    const params: any[] = [req.session.userId];
-
-    if (req.session.role !== 'admin' && req.session.role !== 'superadmin') {
-      query += ` AND p.id IN (SELECT project_id FROM user_project_access WHERE user_id = ?)`;
-      params.push(req.session.userId);
-    }
-    if (project_key) {
-      query += ` AND p.key = ?`;
-      params.push(project_key);
-    }
-    if (gh_key) {
-      query += ` AND g.gh_key = ?`;
-      params.push(gh_key);
-    }
-
-    query += `)`;
-
-    const result = db.prepare(query).run(...params);
-
-    logAudit({
-      userId: req.session.userId ?? null,
-      action: AuditActions.ALERTS_ACKNOWLEDGED_ALL,
-      detail: { count: result.changes, project_key, gh_key },
-    });
-
-    sendSuccess(res, { message: `รับทราบ ${result.changes} Alert สำเร็จ` });
-  } catch (error) {
-    console.error('Error acknowledging all alerts:', error);
-    sendError(res, ThaiErrors.SERVER_ERROR, 500);
-  }
-});
-
-/**
- * GET /api/alerts/stats
- * Get alert statistics
- */
-router.get('/stats', requireAuth, (req: Request, res: Response) => {
+// GET /api/alerts/stats
+router.get('/stats', requireAuth, async (req: Request, res: Response) => {
   try {
     const { project_key, gh_key, days } = req.query;
     const daysNum = parseInt(days as string) || 7;
 
-    let whereClause = `WHERE ah.created_at >= datetime('now', '-${daysNum} days')`;
+    let where = `WHERE ah.created_at::timestamp >= NOW() - INTERVAL '${daysNum} days'`;
     const params: any[] = [];
+    let idx = 1;
 
     if (req.session.role !== 'admin' && req.session.role !== 'superadmin') {
-      whereClause += ` AND p.id IN (SELECT project_id FROM user_project_access WHERE user_id = ?)`;
+      where += ` AND p.id IN (SELECT project_id FROM user_project_access WHERE user_id = $${idx++})`;
       params.push(req.session.userId);
     }
-    if (project_key) {
-      whereClause += ` AND p.key = ?`;
-      params.push(project_key);
-    }
-    if (gh_key) {
-      whereClause += ` AND g.gh_key = ?`;
-      params.push(gh_key);
-    }
+    if (project_key) { where += ` AND p.key = $${idx++}`; params.push(project_key); }
+    if (gh_key) { where += ` AND g.gh_key = $${idx++}`; params.push(gh_key); }
 
-    // Total counts by severity
-    const severityCounts = db.prepare(`
-      SELECT severity, COUNT(*) as count FROM alert_history ah
-      JOIN greenhouses g ON ah.greenhouse_id = g.id
-      JOIN projects p ON g.project_id = p.id
-      ${whereClause}
-      GROUP BY severity
-    `).all(...params) as { severity: string; count: number }[];
+    const baseJoin = `FROM alert_history ah JOIN greenhouses g ON ah.greenhouse_id = g.id JOIN projects p ON g.project_id = p.id`;
 
-    // Total counts by type
-    const typeCounts = db.prepare(`
-      SELECT alert_type, COUNT(*) as count FROM alert_history ah
-      JOIN greenhouses g ON ah.greenhouse_id = g.id
-      JOIN projects p ON g.project_id = p.id
-      ${whereClause}
-      GROUP BY alert_type
-    `).all(...params) as { alert_type: string; count: number }[];
-
-    // Unacknowledged count
-    const { unacknowledged } = db.prepare(`
-      SELECT COUNT(*) as unacknowledged FROM alert_history ah
-      JOIN greenhouses g ON ah.greenhouse_id = g.id
-      JOIN projects p ON g.project_id = p.id
-      ${whereClause} AND ah.is_acknowledged = 0
-    `).get(...params) as { unacknowledged: number };
-
-    // Daily trend
-    const dailyTrend = db.prepare(`
-      SELECT DATE(created_at) as date, COUNT(*) as count FROM alert_history ah
-      JOIN greenhouses g ON ah.greenhouse_id = g.id
-      JOIN projects p ON g.project_id = p.id
-      ${whereClause}
-      GROUP BY DATE(created_at)
-      ORDER BY date DESC
-      LIMIT ?
-    `).all(...params, daysNum) as { date: string; count: number }[];
+    const [severityRes, typeRes, unackRes, trendRes] = await Promise.all([
+      query(`SELECT severity, COUNT(*) as count ${baseJoin} ${where} GROUP BY severity`, params),
+      query(`SELECT alert_type, COUNT(*) as count ${baseJoin} ${where} GROUP BY alert_type`, params),
+      query(`SELECT COUNT(*) as unacknowledged ${baseJoin} ${where} AND ah.is_acknowledged = 0`, params),
+      query(`SELECT DATE(ah.created_at::timestamp) as date, COUNT(*) as count ${baseJoin} ${where} GROUP BY DATE(ah.created_at::timestamp) ORDER BY date DESC LIMIT ${daysNum}`, params),
+    ]);
 
     sendSuccess(res, {
       stats: {
-        bySeverity: Object.fromEntries(severityCounts.map(s => [s.severity, s.count])),
-        byType: Object.fromEntries(typeCounts.map(t => [t.alert_type, t.count])),
-        unacknowledged,
-        dailyTrend,
+        bySeverity: Object.fromEntries(severityRes.rows.map((s: any) => [s.severity, parseInt(s.count)])),
+        byType: Object.fromEntries(typeRes.rows.map((t: any) => [t.alert_type, parseInt(t.count)])),
+        unacknowledged: parseInt(unackRes.rows[0]?.unacknowledged ?? '0'),
+        dailyTrend: trendRes.rows,
       }
     });
   } catch (error) {
-    console.error('Error fetching alert stats:', error);
     sendError(res, ThaiErrors.SERVER_ERROR, 500);
   }
 });

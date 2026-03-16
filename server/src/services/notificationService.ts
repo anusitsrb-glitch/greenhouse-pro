@@ -1,28 +1,8 @@
-/**
- * Notification Service
- * Handle notification creation, distribution, and auto-cleanup
- *
- * ✅ FIX:
- * 1) NotificationType union syntax
- * 2) DB dedup for sensor_offline summary + sensor_alert (prevents spam, survives restart)
- * 3) json_extract uses $.sensorKey (camelCase) to match metadata from sensorMonitor.ts
- */
-
-import { db } from '../db/connection.js';
-
-// ============================================================
-// Types
-// ============================================================
+import { query } from '../db/connection.js';
 
 export type NotificationType =
-  | 'device_offline'
-  | 'device_online'
-  | 'sensor_alert'
-  | 'sensor_offline'
-  | 'control_action'
-  | 'auto_mode_changed'
-  | 'system_error'
-  | 'info';
+  | 'device_offline' | 'device_online' | 'sensor_alert' | 'sensor_offline'
+  | 'control_action' | 'auto_mode_changed' | 'system_error' | 'info';
 
 export type NotificationSeverity = 'info' | 'warning' | 'critical';
 
@@ -34,7 +14,7 @@ export interface CreateNotificationData {
   metadata?: Record<string, any>;
   projectId?: number;
   greenhouseId?: number;
-  userId?: number; // ถ้าระบุ = ส่งให้ user คนเดียว, ไม่ระบุ = ส่งให้ทุกคนที่มีสิทธิ์
+  userId?: number;
   autoDismiss?: boolean;
   dismissAfterSeconds?: number;
 }
@@ -59,185 +39,91 @@ export interface NotificationSettings {
 }
 
 // ============================================================
-// Dedup helpers (DB)
+// Dedup helpers
 // ============================================================
 
-function hasRecentNotification(params: {
+async function hasRecentNotification(params: {
   userId: number;
   type: NotificationType;
   greenhouseId?: number;
-  sensorKey?: string;      // for sensor_alert
-  triggered?: 'low' | 'high'; // for sensor_alert
+  sensorKey?: string;
+  triggered?: 'low' | 'high';
   windowMinutes: number;
-}): boolean {
-  const whereGh = params.greenhouseId ? `AND greenhouse_id = ?` : '';
-
-  // sensor_alert specific filters
-  const whereSensor =
-    params.sensorKey ? `AND json_extract(metadata, '$.sensorKey') = ?` : '';
-  const whereTriggered =
-    params.triggered ? `AND json_extract(metadata, '$.triggered') = ?` : '';
-
-  const q = `
+}): Promise<boolean> {
+  let sql = `
     SELECT id FROM notifications
-    WHERE user_id = ?
-      AND type = ?
-      ${whereGh}
-      ${whereSensor}
-      ${whereTriggered}
-      AND created_at >= datetime('now', ?)
-    ORDER BY created_at DESC
-    LIMIT 1
+    WHERE user_id = $1 AND type = $2
   `;
-
   const args: any[] = [params.userId, params.type];
-  if (params.greenhouseId) args.push(params.greenhouseId);
-  if (params.sensorKey) args.push(params.sensorKey);
-  if (params.triggered) args.push(params.triggered);
-  args.push(`-${params.windowMinutes} minutes`);
+  let idx = 3;
 
-  const row = db.prepare(q).get(...args);
-  return !!row;
+  if (params.greenhouseId) { sql += ` AND greenhouse_id = $${idx++}`; args.push(params.greenhouseId); }
+  if (params.sensorKey) { sql += ` AND metadata::json->>'sensorKey' = $${idx++}`; args.push(params.sensorKey); }
+  if (params.triggered) { sql += ` AND metadata::json->>'triggered' = $${idx++}`; args.push(params.triggered); }
+  sql += ` AND created_at::timestamp >= NOW() - INTERVAL '${params.windowMinutes} minutes' LIMIT 1`;
+
+  const result = await query(sql, args);
+  return result.rows.length > 0;
 }
 
-/**
- * ✅ Used by sensorMonitor.ts to dedup BEFORE creating summary
- * (prevents creating the same offline summary again even after restart)
- */
-export function canCreateSensorOfflineSummary(params: {
+export async function canCreateSensorOfflineSummary(params: {
   projectId: number;
   greenhouseId: number;
-  windowMinutes: number; // should be 30
-}): boolean {
+  windowMinutes: number;
+}): Promise<boolean> {
   try {
-    const users = getTargetUsers(params.projectId);
-    // ถ้ามีใครคนใดคนหนึ่งได้รับ summary ภายใน window แล้ว → ให้บล็อค (กันสร้างซ้ำ)
+    const users = await getTargetUsers(params.projectId);
     for (const userId of users) {
-      if (hasRecentNotification({
-        userId,
-        type: 'sensor_offline',
-        greenhouseId: params.greenhouseId,
-        windowMinutes: params.windowMinutes,
-      })) {
+      if (await hasRecentNotification({ userId, type: 'sensor_offline', greenhouseId: params.greenhouseId, windowMinutes: params.windowMinutes })) {
         return false;
       }
     }
     return true;
-  } catch (e) {
-    console.error('❌ canCreateSensorOfflineSummary error:', e);
-    // fail-open เพื่อไม่ทำให้ระบบเงียบสนิท
-    return true;
-  }
+  } catch { return true; }
 }
 
-/**
- * ✅ Used by sensorMonitor.ts to dedup BEFORE creating sensor_alert
- */
-export function canCreateSensorAlert(params: {
+export async function canCreateSensorAlert(params: {
   projectId: number;
   greenhouseId: number;
   sensorKey: string;
   triggered: 'low' | 'high';
   windowMinutes: number;
-}): boolean {
+}): Promise<boolean> {
   try {
-    const users = getTargetUsers(params.projectId);
+    const users = await getTargetUsers(params.projectId);
     for (const userId of users) {
-      if (hasRecentNotification({
-        userId,
-        type: 'sensor_alert',
-        greenhouseId: params.greenhouseId,
-        sensorKey: params.sensorKey,
-        triggered: params.triggered,
-        windowMinutes: params.windowMinutes,
-      })) {
+      if (await hasRecentNotification({ userId, type: 'sensor_alert', greenhouseId: params.greenhouseId, sensorKey: params.sensorKey, triggered: params.triggered, windowMinutes: params.windowMinutes })) {
         return false;
       }
     }
     return true;
-  } catch (e) {
-    console.error('❌ canCreateSensorAlert error:', e);
-    return true;
-  }
+  } catch { return true; }
 }
 
 // ============================================================
-// Main Functions
+// Main create function
 // ============================================================
 
-/**
- * Create and distribute notification
- * - applies user settings
- * - applies DB dedup for sensor_offline (summary) and sensor_alert
- */
-export function createNotification(data: CreateNotificationData): void {
+async function createNotification(data: CreateNotificationData): Promise<void> {
   try {
     const metadata = JSON.stringify(data.metadata || {});
 
-    // ถ้าระบุ userId = สร้างให้ user คนนั้น
     if (data.userId) {
-      const settings = getUserSettings(data.userId);
-      if (!shouldSendNotification(settings, data)) {
-        console.log(`📵 Notification skipped for user ${data.userId} (settings)`);
-        return;
-      }
-
-      // ✅ DB dedup per user
-      if (shouldDedup(data)) {
-        const ok = canInsertForUser(data.userId, data);
-        if (!ok) {
-          console.log(`🛑 Dedup ${data.type}: user=${data.userId} gh=${data.greenhouseId}`);
-          return;
-        }
-      }
-
-      insertNotification({
-        userId: data.userId,
-        type: data.type,
-        severity: data.severity,
-        title: data.title,
-        message: data.message,
-        metadata,
-        projectId: data.projectId,
-        greenhouseId: data.greenhouseId,
-        autoDismiss: data.autoDismiss !== false ? 1 : 0,
-        dismissAfterSeconds: data.dismissAfterSeconds || 300,
-      });
-
-      console.log(`🔔 Notification created for user ${data.userId}: ${data.type}`);
+      const settings = await getUserSettings(data.userId);
+      if (!shouldSendNotification(settings, data)) return;
+      if (shouldDedup(data) && !await canInsertForUser(data.userId, data)) return;
+      await insertNotification({ userId: data.userId, ...data, metadata });
       return;
     }
 
-    // ไม่ระบุ userId = ส่งให้ทุกคนที่มีสิทธิ์เข้าถึง project
-    const targetUsers = getTargetUsers(data.projectId);
-
+    const targetUsers = await getTargetUsers(data.projectId);
     let sentCount = 0;
+
     for (const userId of targetUsers) {
-      const settings = getUserSettings(userId);
+      const settings = await getUserSettings(userId);
       if (!shouldSendNotification(settings, data)) continue;
-
-      // ✅ DB dedup per user
-      if (shouldDedup(data)) {
-        const ok = canInsertForUser(userId, data);
-        if (!ok) {
-          // ไม่ส่งให้ user นี้ แต่ user อื่นยังส่งได้ตาม settings/dedup
-          continue;
-        }
-      }
-
-      insertNotification({
-        userId,
-        type: data.type,
-        severity: data.severity,
-        title: data.title,
-        message: data.message,
-        metadata,
-        projectId: data.projectId,
-        greenhouseId: data.greenhouseId,
-        autoDismiss: data.autoDismiss !== false ? 1 : 0,
-        dismissAfterSeconds: data.dismissAfterSeconds || 300,
-      });
-
+      if (shouldDedup(data) && !await canInsertForUser(userId, data)) continue;
+      await insertNotification({ userId, ...data, metadata });
       sentCount++;
     }
 
@@ -247,45 +133,20 @@ export function createNotification(data: CreateNotificationData): void {
   }
 }
 
-// ============================================================
-// Dedup policy
-// ============================================================
-
 function shouldDedup(data: CreateNotificationData): boolean {
   return data.type === 'sensor_offline' || data.type === 'sensor_alert';
 }
 
-function canInsertForUser(userId: number, data: CreateNotificationData): boolean {
-  // sensor_offline = summary per greenhouse every 30 minutes
+async function canInsertForUser(userId: number, data: CreateNotificationData): Promise<boolean> {
   if (data.type === 'sensor_offline') {
-    const windowMinutes = 30;
-    return !hasRecentNotification({
-      userId,
-      type: 'sensor_offline',
-      greenhouseId: data.greenhouseId,
-      windowMinutes,
-    });
+    return !await hasRecentNotification({ userId, type: 'sensor_offline', greenhouseId: data.greenhouseId, windowMinutes: 30 });
   }
-
-  // sensor_alert = per sensorKey + triggered every 10 minutes (default)
   if (data.type === 'sensor_alert') {
     const sensorKey = (data.metadata as any)?.sensorKey;
     const triggered = (data.metadata as any)?.triggered;
-
-    // ถ้า metadata ไม่ครบ → ให้ส่งได้ (fail-open) แต่ควรแก้ให้ครบใน sensorMonitor.ts
     if (typeof sensorKey !== 'string' || (triggered !== 'low' && triggered !== 'high')) return true;
-
-    const windowMinutes = 10;
-    return !hasRecentNotification({
-      userId,
-      type: 'sensor_alert',
-      greenhouseId: data.greenhouseId,
-      sensorKey,
-      triggered,
-      windowMinutes,
-    });
+    return !await hasRecentNotification({ userId, type: 'sensor_alert', greenhouseId: data.greenhouseId, sensorKey, triggered, windowMinutes: 10 });
   }
-
   return true;
 }
 
@@ -293,110 +154,75 @@ function canInsertForUser(userId: number, data: CreateNotificationData): boolean
 // Target users + settings
 // ============================================================
 
-function getTargetUsers(projectId?: number): number[] {
+async function getTargetUsers(projectId?: number): Promise<number[]> {
   try {
     if (!projectId) {
-      const users = db.prepare(`
-        SELECT id FROM users 
-        WHERE is_active = 1 AND role IN ('admin', 'superadmin', 'operator')
-      `).all() as { id: number }[];
-      return users.map(u => u.id);
+      const result = await query(`SELECT id FROM users WHERE is_active = 1 AND role IN ('admin', 'superadmin', 'operator')`);
+      return result.rows.map((u: any) => u.id);
     }
-
-    const users = db.prepare(`
+    const result = await query(`
       SELECT DISTINCT u.id FROM users u
       LEFT JOIN user_project_access upa ON u.id = upa.user_id
-      WHERE u.is_active = 1
-        AND (u.role IN ('admin', 'superadmin') OR upa.project_id = ?)
-    `).all(projectId) as { id: number }[];
-
-    return users.map(u => u.id);
-  } catch (error) {
-    console.error('❌ Failed to get target users:', error);
-    return [];
-  }
+      WHERE u.is_active = 1 AND (u.role IN ('admin', 'superadmin') OR upa.project_id = $1)
+    `, [projectId]);
+    return result.rows.map((u: any) => u.id);
+  } catch { return []; }
 }
 
-export function getUserSettings(userId: number): NotificationSettings | null {
+export async function getUserSettings(userId: number): Promise<NotificationSettings | null> {
   try {
-    const settings = db.prepare(`
-      SELECT * FROM notification_settings WHERE user_id = ?
-    `).get(userId) as any;
-
-    if (!settings) {
-      createDefaultSettings(userId);
+    const result = await query(`SELECT * FROM notification_settings WHERE user_id = $1`, [userId]);
+    if (result.rows.length === 0) {
+      await createDefaultSettings(userId);
       return getUserSettings(userId);
     }
-
+    const s = result.rows[0];
     return {
-      enabled: Boolean(settings.enabled),
-      device_offline: Boolean(settings.device_offline),
-      device_online: Boolean(settings.device_online),
-      sensor_alert: Boolean(settings.sensor_alert),
-      sensor_offline: Boolean(settings.sensor_offline),
-      control_action: Boolean(settings.control_action),
-      auto_mode_changed: Boolean(settings.auto_mode_changed),
-      system_error: Boolean(settings.system_error),
-      show_info: Boolean(settings.show_info),
-      show_warning: Boolean(settings.show_warning),
-      show_critical: Boolean(settings.show_critical),
-      project_filter: JSON.parse(settings.project_filter || '[]'),
-      greenhouse_filter: JSON.parse(settings.greenhouse_filter || '[]'),
-      quiet_hours_enabled: Boolean(settings.quiet_hours_enabled),
-      quiet_hours_start: settings.quiet_hours_start || '22:00',
-      quiet_hours_end: settings.quiet_hours_end || '07:00',
+      enabled: Boolean(s.enabled),
+      device_offline: Boolean(s.device_offline),
+      device_online: Boolean(s.device_online),
+      sensor_alert: Boolean(s.sensor_alert),
+      sensor_offline: Boolean(s.sensor_offline),
+      control_action: Boolean(s.control_action),
+      auto_mode_changed: Boolean(s.auto_mode_changed),
+      system_error: Boolean(s.system_error),
+      show_info: Boolean(s.show_info),
+      show_warning: Boolean(s.show_warning),
+      show_critical: Boolean(s.show_critical),
+      project_filter: JSON.parse(s.project_filter || '[]'),
+      greenhouse_filter: JSON.parse(s.greenhouse_filter || '[]'),
+      quiet_hours_enabled: Boolean(s.quiet_hours_enabled),
+      quiet_hours_start: s.quiet_hours_start || '22:00',
+      quiet_hours_end: s.quiet_hours_end || '07:00',
     };
-  } catch (error) {
-    console.error('❌ Failed to get user settings:', error);
-    return null;
-  }
+  } catch { return null; }
 }
 
-function createDefaultSettings(userId: number): void {
+async function createDefaultSettings(userId: number): Promise<void> {
   try {
-    db.prepare(`INSERT INTO notification_settings (user_id) VALUES (?)`).run(userId);
-  } catch (error) {
-    console.error('❌ Failed to create default settings:', error);
-  }
+    await query(`INSERT INTO notification_settings (user_id) VALUES ($1) ON CONFLICT DO NOTHING`, [userId]);
+  } catch {}
 }
 
 function shouldSendNotification(settings: NotificationSettings | null, data: CreateNotificationData): boolean {
   if (!settings || !settings.enabled) return false;
-
-  // type filter
   if (!settings[data.type as keyof NotificationSettings]) return false;
-
-  // severity filter
   if (data.severity === 'info' && !settings.show_info) return false;
   if (data.severity === 'warning' && !settings.show_warning) return false;
   if (data.severity === 'critical' && !settings.show_critical) return false;
-
-  // project filter
   if (settings.project_filter.length > 0 && data.projectId) {
     if (!settings.project_filter.includes(data.projectId.toString())) return false;
   }
-
-  // greenhouse filter
   if (settings.greenhouse_filter.length > 0 && data.greenhouseId) {
     if (!settings.greenhouse_filter.includes(data.greenhouseId.toString())) return false;
   }
-
-  // quiet hours
   if (settings.quiet_hours_enabled) {
     const now = new Date();
-    const currentTime =
-      `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-
-    const start = settings.quiet_hours_start;
-    const end = settings.quiet_hours_end;
-
-    if (start < end) {
-      if (currentTime >= start && currentTime <= end) return false;
-    } else {
-      if (currentTime >= start || currentTime <= end) return false;
-    }
+    const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    const { quiet_hours_start: start, quiet_hours_end: end } = settings;
+    if (start < end) { if (currentTime >= start && currentTime <= end) return false; }
+    else { if (currentTime >= start || currentTime <= end) return false; }
   }
-
   return true;
 }
 
@@ -404,7 +230,7 @@ function shouldSendNotification(settings: NotificationSettings | null, data: Cre
 // DB operations
 // ============================================================
 
-function insertNotification(data: {
+async function insertNotification(data: {
   userId: number;
   type: NotificationType;
   severity: NotificationSeverity;
@@ -413,88 +239,49 @@ function insertNotification(data: {
   metadata: string;
   projectId?: number;
   greenhouseId?: number;
-  autoDismiss: number;
-  dismissAfterSeconds: number;
-}): void {
-  db.prepare(`
-    INSERT INTO notifications (
-      user_id, type, severity, title, message, metadata,
-      project_id, greenhouse_id, auto_dismiss, dismiss_after_seconds
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    data.userId,
-    data.type,
-    data.severity,
-    data.title,
-    data.message,
-    data.metadata,
-    data.projectId || null,
-    data.greenhouseId || null,
-    data.autoDismiss,
-    data.dismissAfterSeconds
-  );
+  autoDismiss?: boolean;
+  dismissAfterSeconds?: number;
+}): Promise<void> {
+  await query(`
+    INSERT INTO notifications (user_id, type, severity, title, message, metadata, project_id, greenhouse_id, auto_dismiss, dismiss_after_seconds)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+  `, [
+    data.userId, data.type, data.severity, data.title, data.message, data.metadata,
+    data.projectId || null, data.greenhouseId || null,
+    data.autoDismiss !== false ? 1 : 0,
+    data.dismissAfterSeconds || 300,
+  ]);
 }
 
-// ============================================================
-// Read / cleanup / device status change (ของเดิม)
-// ============================================================
-
-export function markAsRead(notificationId: number, userId: number): boolean {
+export async function markAsRead(notificationId: number, userId: number): Promise<boolean> {
   try {
-    const result = db.prepare(`
-      UPDATE notifications 
-      SET is_read = 1, read_at = datetime('now')
-      WHERE id = ? AND user_id = ?
-    `).run(notificationId, userId);
-
-    return result.changes > 0;
-  } catch (error) {
-    console.error('❌ Failed to mark notification as read:', error);
-    return false;
-  }
+    const result = await query(`UPDATE notifications SET is_read = 1, read_at = now()::text WHERE id = $1 AND user_id = $2`, [notificationId, userId]);
+    return (result.rowCount ?? 0) > 0;
+  } catch { return false; }
 }
 
-export function markAllAsRead(userId: number, projectId?: number): number {
+export async function markAllAsRead(userId: number, projectId?: number): Promise<number> {
   try {
-    let query = `
-      UPDATE notifications 
-      SET is_read = 1, read_at = datetime('now')
-      WHERE user_id = ? AND is_read = 0
-    `;
+    let sql = `UPDATE notifications SET is_read = 1, read_at = now()::text WHERE user_id = $1 AND is_read = 0`;
     const params: any[] = [userId];
-
-    if (projectId) {
-      query += ` AND project_id = ?`;
-      params.push(projectId);
-    }
-
-    const result = db.prepare(query).run(...params);
-    return result.changes;
-  } catch (error) {
-    console.error('❌ Failed to mark all as read:', error);
-    return 0;
-  }
+    if (projectId) { sql += ` AND project_id = $2`; params.push(projectId); }
+    const result = await query(sql, params);
+    return result.rowCount ?? 0;
+  } catch { return 0; }
 }
 
-export function cleanupOldNotifications(daysToKeep: number = 30): number {
+export async function cleanupOldNotifications(daysToKeep: number = 30): Promise<number> {
   try {
-    const result = db.prepare(`
-      DELETE FROM notifications 
-      WHERE is_read = 1 
-        AND read_at < datetime('now', '-${daysToKeep} days')
-    `).run();
-
-    if (result.changes > 0) {
-      console.log(`🧹 Cleaned up ${result.changes} old notifications`);
-    }
-    return result.changes;
-  } catch (error) {
-    console.error('❌ Failed to cleanup notifications:', error);
-    return 0;
-  }
+    const result = await query(`
+      DELETE FROM notifications WHERE is_read = 1
+      AND read_at::timestamp < NOW() - INTERVAL '${daysToKeep} days'
+    `);
+    if ((result.rowCount ?? 0) > 0) console.log(`🧹 Cleaned up ${result.rowCount} old notifications`);
+    return result.rowCount ?? 0;
+  } catch { return 0; }
 }
 
-export function logDeviceStatusChange(data: {
+export async function logDeviceStatusChange(data: {
   greenhouseId: number;
   previousStatus: 'online' | 'offline' | 'unknown';
   newStatus: 'online' | 'offline' | 'unknown';
@@ -504,71 +291,41 @@ export function logDeviceStatusChange(data: {
   ipAddress?: string;
   firmwareVersion?: string;
   offlineDuration?: number;
-}): void {
+}): Promise<void> {
   try {
-    db.prepare(`
-      INSERT INTO device_status_logs (
-        greenhouse_id, previous_status, new_status, reason,
-        signal_strength, wifi_ssid, ip_address, firmware_version,
-        offline_duration
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      data.greenhouseId,
-      data.previousStatus,
-      data.newStatus,
-      data.reason || null,
-      data.signalStrength || null,
-      data.wifiSsid || null,
-      data.ipAddress || null,
-      data.firmwareVersion || null,
-      data.offlineDuration || null
-    );
+    await query(`
+      INSERT INTO device_status_logs (greenhouse_id, previous_status, new_status, reason, signal_strength, wifi_ssid, ip_address, firmware_version, offline_duration)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    `, [data.greenhouseId, data.previousStatus, data.newStatus, data.reason || null, data.signalStrength || null, data.wifiSsid || null, data.ipAddress || null, data.firmwareVersion || null, data.offlineDuration || null]);
 
-    const greenhouse = db.prepare(`
+    const ghResult = await query(`
       SELECT g.name_th, p.id as project_id, p.name_th as project_name
-      FROM greenhouses g
-      JOIN projects p ON g.project_id = p.id
-      WHERE g.id = ?
-    `).get(data.greenhouseId) as any;
-
+      FROM greenhouses g JOIN projects p ON g.project_id = p.id WHERE g.id = $1
+    `, [data.greenhouseId]);
+    const greenhouse = ghResult.rows[0];
     if (!greenhouse) return;
 
     if (data.newStatus === 'offline') {
-      createNotification({
-        type: 'device_offline',
-        severity: 'critical',
+      await createNotification({
+        type: 'device_offline', severity: 'critical',
         title: `${greenhouse.name_th} ออฟไลน์`,
         message: `${greenhouse.name_th} (${greenhouse.project_name}) ไม่สามารถเชื่อมต่อได้`,
         metadata: { greenhouseName: greenhouse.name_th, projectName: greenhouse.project_name, reason: data.reason },
-        projectId: greenhouse.project_id,
-        greenhouseId: data.greenhouseId,
-        autoDismiss: false,
+        projectId: greenhouse.project_id, greenhouseId: data.greenhouseId, autoDismiss: false,
       });
     } else if (data.newStatus === 'online' && data.previousStatus === 'offline') {
-      createNotification({
-        type: 'device_online',
-        severity: 'info',
+      await createNotification({
+        type: 'device_online', severity: 'info',
         title: `${greenhouse.name_th} กลับมาออนไลน์`,
-        message: `${greenhouse.name_th} เชื่อมต่อได้แล้ว${
-          data.offlineDuration ? ` (ออฟไลน์ ${Math.floor(data.offlineDuration / 60)} นาที)` : ''
-        }`,
-        metadata: { greenhouseName: greenhouse.name_th, projectName: greenhouse.project_name, offlineDuration: data.offlineDuration },
-        projectId: greenhouse.project_id,
-        greenhouseId: data.greenhouseId,
-        autoDismiss: true,
-        dismissAfterSeconds: 10,
+        message: `${greenhouse.name_th} เชื่อมต่อได้แล้ว${data.offlineDuration ? ` (ออฟไลน์ ${Math.floor(data.offlineDuration / 60)} นาที)` : ''}`,
+        metadata: { greenhouseName: greenhouse.name_th, offlineDuration: data.offlineDuration },
+        projectId: greenhouse.project_id, greenhouseId: data.greenhouseId, autoDismiss: true, dismissAfterSeconds: 10,
       });
     }
-
-    console.log(`📊 Device status logged: ${greenhouse.name_th} ${data.previousStatus} → ${data.newStatus}`);
   } catch (error) {
     console.error('❌ Failed to log device status change:', error);
   }
 }
-
-// ============================================================
-// Exports
-// ============================================================
 
 export const notificationService = {
   create: createNotification,
@@ -577,8 +334,6 @@ export const notificationService = {
   cleanup: cleanupOldNotifications,
   getUserSettings,
   logDeviceStatusChange,
-
-  // ✅ expose helpers for sensorMonitor (optional but used)
   canCreateSensorOfflineSummary,
   canCreateSensorAlert,
 };

@@ -7,7 +7,7 @@
 
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { db } from '../db/connection.js';
+import { query } from '../db/connection.js';
 import { sendSuccess, sendError, ThaiErrors } from '../utils/response.js';
 import { tbService } from '../services/thingsboard.js';
 
@@ -18,16 +18,16 @@ const bodySchema = z.object({
   scope: z.enum(['SHARED_SCOPE', 'SERVER_SCOPE']).optional(),
 });
 
-function hasProjectAccess(userId: number, userRole: string, projectKey: string): boolean {
+async function hasProjectAccess(userId: number, userRole: string, projectKey: string): Promise<boolean> {
   if (userRole === 'admin' || userRole === 'superadmin') return true;
 
-  const access = db.prepare(`
+  const result = await query(`
     SELECT 1 FROM user_project_access upa
     JOIN projects p ON upa.project_id = p.id
-    WHERE upa.user_id = ? AND p.key = ?
-  `).get(userId, projectKey);
+    WHERE upa.user_id = $1 AND p.key = $2
+  `, [userId, projectKey]);
 
-  return !!access;
+  return result.rows.length > 0;
 }
 
 export async function setAttributesHandler(req: Request, res: Response) {
@@ -39,11 +39,10 @@ export async function setAttributesHandler(req: Request, res: Response) {
     }
 
     const { project, gh, attributes, scope } = parsed.data;
-
     const userId = req.session.userId!;
     const role = req.session.role!;
 
-    if (!hasProjectAccess(userId, role, project)) {
+    if (!await hasProjectAccess(userId, role, project)) {
       sendError(res, ThaiErrors.NO_PROJECT_ACCESS, 403);
       return;
     }
