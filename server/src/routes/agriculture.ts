@@ -458,4 +458,170 @@ router.get('/weather', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
+
+// ============================================================
+// GROWTH RECORDS - PUT / DELETE
+// ============================================================
+
+router.put('/growth/:id', requireOperator, (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { record_date, height, leaf_count, health_status, notes, photo_url } = req.body;
+    db.prepare(`
+      UPDATE growth_records SET record_date = ?, height = ?, leaf_count = ?, health_status = ?, notes = ?, photo_url = ?
+      WHERE id = ?
+    `).run(record_date, height || null, leaf_count || null, health_status || null, notes || null, photo_url || null, id);
+    sendSuccess(res, { message: 'อัปเดตสำเร็จ' });
+  } catch (error) {
+    console.error('Error updating growth record:', error);
+    sendError(res, ThaiErrors.SERVER_ERROR, 500);
+  }
+});
+
+router.delete('/growth/:id', requireOperator, (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    db.prepare('DELETE FROM growth_records WHERE id = ?').run(id);
+    sendSuccess(res, { message: 'ลบสำเร็จ' });
+  } catch (error) {
+    console.error('Error deleting growth record:', error);
+    sendError(res, ThaiErrors.SERVER_ERROR, 500);
+  }
+});
+
+// ============================================================
+// FERTILIZER SCHEDULES - PUT / DELETE
+// ============================================================
+
+router.put('/fertilizer/:id', requireOperator, (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { fertilizer_name, fertilizer_type, amount, unit, schedule_date, notes } = req.body;
+    db.prepare(`
+      UPDATE fertilizer_schedules SET fertilizer_name = ?, fertilizer_type = ?, amount = ?, unit = ?, schedule_date = ?, notes = ?
+      WHERE id = ?
+    `).run(fertilizer_name, fertilizer_type || null, amount || null, unit || 'g', schedule_date, notes || null, id);
+    sendSuccess(res, { message: 'อัปเดตสำเร็จ' });
+  } catch (error) {
+    console.error('Error updating fertilizer schedule:', error);
+    sendError(res, ThaiErrors.SERVER_ERROR, 500);
+  }
+});
+
+router.delete('/fertilizer/:id', requireOperator, (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    db.prepare('DELETE FROM fertilizer_schedules WHERE id = ?').run(id);
+    sendSuccess(res, { message: 'ลบสำเร็จ' });
+  } catch (error) {
+    console.error('Error deleting fertilizer schedule:', error);
+    sendError(res, ThaiErrors.SERVER_ERROR, 500);
+  }
+});
+
+// ============================================================
+// PEST/DISEASE RECORDS - PUT / DELETE / RESOLVE
+// ============================================================
+
+router.put('/pest-disease/:id', requireOperator, (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { record_type, name, severity, affected_area, treatment, photo_url, notes } = req.body;
+    db.prepare(`
+      UPDATE pest_disease_records SET record_type = ?, name = ?, severity = ?, affected_area = ?, treatment = ?, photo_url = ?, notes = ?
+      WHERE id = ?
+    `).run(record_type, name, severity || null, affected_area || null, treatment || null, photo_url || null, notes || null, id);
+    sendSuccess(res, { message: 'อัปเดตสำเร็จ' });
+  } catch (error) {
+    console.error('Error updating pest/disease record:', error);
+    sendError(res, ThaiErrors.SERVER_ERROR, 500);
+  }
+});
+
+router.put('/pest-disease/:id/resolve', requireOperator, (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    db.prepare(`
+      UPDATE pest_disease_records SET resolved = 1, resolved_at = datetime('now') WHERE id = ?
+    `).run(id);
+    sendSuccess(res, { message: 'บันทึกการแก้ไขสำเร็จ' });
+  } catch (error) {
+    console.error('Error resolving pest/disease record:', error);
+    sendError(res, ThaiErrors.SERVER_ERROR, 500);
+  }
+});
+
+router.delete('/pest-disease/:id', requireOperator, (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    db.prepare('DELETE FROM pest_disease_records WHERE id = ?').run(id);
+    sendSuccess(res, { message: 'ลบสำเร็จ' });
+  } catch (error) {
+    console.error('Error deleting pest/disease record:', error);
+    sendError(res, ThaiErrors.SERVER_ERROR, 500);
+  }
+});
+
+// ============================================================
+// YIELD RECORDS - PUT / DELETE
+// ============================================================
+
+router.put('/yield/:id', requireOperator, (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { harvest_date, quantity, unit, quality_grade, price_per_unit, notes } = req.body;
+    const total_revenue = (quantity || 0) * (price_per_unit || 0);
+    db.prepare(`
+      UPDATE yield_records SET harvest_date = ?, quantity = ?, unit = ?, quality_grade = ?, price_per_unit = ?, total_revenue = ?, notes = ?
+      WHERE id = ?
+    `).run(harvest_date, quantity, unit || 'kg', quality_grade || null, price_per_unit || null, total_revenue, notes || null, id);
+    sendSuccess(res, { message: 'อัปเดตสำเร็จ' });
+  } catch (error) {
+    console.error('Error updating yield record:', error);
+    sendError(res, ThaiErrors.SERVER_ERROR, 500);
+  }
+});
+
+router.delete('/yield/:id', requireOperator, (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    db.prepare('DELETE FROM yield_records WHERE id = ?').run(id);
+    sendSuccess(res, { message: 'ลบสำเร็จ' });
+  } catch (error) {
+    console.error('Error deleting yield record:', error);
+    sendError(res, ThaiErrors.SERVER_ERROR, 500);
+  }
+});
+
+// ============================================================
+// WATER USAGE - PUT / DELETE
+// ============================================================
+
+router.put('/water-usage/:id', requireOperator, (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { record_date, usage_liters, source, cost, notes } = req.body;
+    db.prepare(`
+      UPDATE water_usage SET record_date = ?, usage_liters = ?, source = ?, cost = ?, notes = ?
+      WHERE id = ?
+    `).run(record_date, usage_liters, source || null, cost || null, notes || null, id);
+    sendSuccess(res, { message: 'อัปเดตสำเร็จ' });
+  } catch (error) {
+    console.error('Error updating water usage record:', error);
+    sendError(res, ThaiErrors.SERVER_ERROR, 500);
+  }
+});
+
+router.delete('/water-usage/:id', requireOperator, (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    db.prepare('DELETE FROM water_usage WHERE id = ?').run(id);
+    sendSuccess(res, { message: 'ลบสำเร็จ' });
+  } catch (error) {
+    console.error('Error deleting water usage record:', error);
+    sendError(res, ThaiErrors.SERVER_ERROR, 500);
+  }
+});
+
+
 export default router;

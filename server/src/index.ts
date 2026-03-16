@@ -27,6 +27,7 @@ import notificationsRoutes from './routes/notifications.js';
 import controlHistoryRoutes from './routes/control-history.js';
 import { startDeviceMonitoring } from './services/deviceMonitor.js';
 import { startSensorMonitoring } from './services/sensorMonitor.js';
+import agricultureRoutes from './routes/agriculture.js';
 
 // ✅ ใช้ DB instance เพื่อทำ SQLite session store
 import { db } from './db/connection.js';
@@ -214,7 +215,7 @@ app.use('/api/external/v1', externalRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/control-history', controlHistoryRoutes);
-
+app.use('/api/agriculture', agricultureRoutes);
 // ✅ วาง notFound เป็น "ตัวสุดท้าย" ของ /api เสมอ
 app.use('/api', notFoundHandler);
 

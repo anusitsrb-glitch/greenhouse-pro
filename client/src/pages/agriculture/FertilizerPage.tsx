@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { PageContainer } from '@/components/layout';
-import { Card, Button, Input, Badge } from '@/components/ui';
+import { Card, Button, Input } from '@/components/ui';
 import { useToast } from '@/hooks/useToast';
 import { api } from '@/lib/api';
 import { adminApi, AdminProject, AdminGreenhouse } from '@/lib/adminApi';
-import { Plus, Check, Calendar, Droplets, AlertCircle } from 'lucide-react';
+import { Plus, Check, Calendar, Droplets, AlertCircle, Pencil, Trash2 } from 'lucide-react';
 
 interface FertilizerSchedule {
   id: number;
@@ -30,6 +30,7 @@ export function FertilizerPage() {
   const [selectedGh, setSelectedGh] = useState('');
   const [showCompleted, setShowCompleted] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState<FertilizerSchedule | null>(null);
 
   useEffect(() => { adminApi.getAdminProjects().then(setProjects).catch(() => {}); }, []);
   useEffect(() => {
@@ -58,12 +59,15 @@ export function FertilizerPage() {
     } catch { addToast({ type: 'error', message: 'เกิดข้อผิดพลาด' }); }
   };
 
-  const getDaysUntil = (date: string) => {
-    const diff = new Date(date).getTime() - new Date().getTime();
-    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  const handleDelete = async (schedule: FertilizerSchedule) => {
+    if (!confirm(`ลบ "${schedule.fertilizer_name}"?`)) return;
+    try {
+      await api.delete(`/agriculture/fertilizer/${schedule.id}`);
+      addToast({ type: 'success', message: 'ลบสำเร็จ' });
+      fetchSchedules();
+    } catch { addToast({ type: 'error', message: 'เกิดข้อผิดพลาด' }); }
   };
 
-  // Group schedules by date
   const today = new Date().toISOString().split('T')[0];
   const overdue = schedules.filter(s => s.schedule_date < today && !s.is_completed);
   const todayTasks = schedules.filter(s => s.schedule_date === today && !s.is_completed);
@@ -77,37 +81,25 @@ export function FertilizerPage() {
         <Card className="p-4 border-l-4 border-red-500">
           <div className="flex items-center gap-3">
             <AlertCircle className="w-8 h-8 text-red-500" />
-            <div>
-              <p className="text-2xl font-bold text-red-600">{overdue.length}</p>
-              <p className="text-sm text-gray-500">เกินกำหนด</p>
-            </div>
+            <div><p className="text-2xl font-bold text-red-600">{overdue.length}</p><p className="text-sm text-gray-500">เกินกำหนด</p></div>
           </div>
         </Card>
         <Card className="p-4 border-l-4 border-yellow-500">
           <div className="flex items-center gap-3">
             <Calendar className="w-8 h-8 text-yellow-500" />
-            <div>
-              <p className="text-2xl font-bold text-yellow-600">{todayTasks.length}</p>
-              <p className="text-sm text-gray-500">วันนี้</p>
-            </div>
+            <div><p className="text-2xl font-bold text-yellow-600">{todayTasks.length}</p><p className="text-sm text-gray-500">วันนี้</p></div>
           </div>
         </Card>
         <Card className="p-4 border-l-4 border-blue-500">
           <div className="flex items-center gap-3">
             <Droplets className="w-8 h-8 text-blue-500" />
-            <div>
-              <p className="text-2xl font-bold text-blue-600">{upcoming.length}</p>
-              <p className="text-sm text-gray-500">กำลังจะมา</p>
-            </div>
+            <div><p className="text-2xl font-bold text-blue-600">{upcoming.length}</p><p className="text-sm text-gray-500">กำลังจะมา</p></div>
           </div>
         </Card>
         <Card className="p-4 border-l-4 border-green-500">
           <div className="flex items-center gap-3">
             <Check className="w-8 h-8 text-green-500" />
-            <div>
-              <p className="text-2xl font-bold text-green-600">{completed.length}</p>
-              <p className="text-sm text-gray-500">เสร็จแล้ว</p>
-            </div>
+            <div><p className="text-2xl font-bold text-green-600">{completed.length}</p><p className="text-sm text-gray-500">เสร็จแล้ว</p></div>
           </div>
         </Card>
       </div>
@@ -127,7 +119,7 @@ export function FertilizerPage() {
           <span className="text-sm">แสดงที่เสร็จแล้ว</span>
         </label>
         <div className="flex-1" />
-        <Button onClick={() => setShowModal(true)}>
+        <Button onClick={() => { setEditingSchedule(null); setShowModal(true); }}>
           <Plus className="w-4 h-4" /> เพิ่มตาราง
         </Button>
       </div>
@@ -137,9 +129,7 @@ export function FertilizerPage() {
         <div className="mb-6">
           <h3 className="text-lg font-semibold text-red-600 mb-3">⚠️ เกินกำหนด ({overdue.length})</h3>
           <div className="grid gap-3">
-            {overdue.map(schedule => (
-              <ScheduleCard key={schedule.id} schedule={schedule} onComplete={handleComplete} isOverdue />
-            ))}
+            {overdue.map(s => <ScheduleCard key={s.id} schedule={s} onComplete={handleComplete} onEdit={(s) => { setEditingSchedule(s); setShowModal(true); }} onDelete={handleDelete} isOverdue />)}
           </div>
         </div>
       )}
@@ -149,9 +139,7 @@ export function FertilizerPage() {
         <div className="mb-6">
           <h3 className="text-lg font-semibold text-yellow-600 mb-3">📅 วันนี้ ({todayTasks.length})</h3>
           <div className="grid gap-3">
-            {todayTasks.map(schedule => (
-              <ScheduleCard key={schedule.id} schedule={schedule} onComplete={handleComplete} isToday />
-            ))}
+            {todayTasks.map(s => <ScheduleCard key={s.id} schedule={s} onComplete={handleComplete} onEdit={(s) => { setEditingSchedule(s); setShowModal(true); }} onDelete={handleDelete} isToday />)}
           </div>
         </div>
       )}
@@ -161,9 +149,7 @@ export function FertilizerPage() {
         <div className="mb-6">
           <h3 className="text-lg font-semibold text-blue-600 mb-3">📆 กำลังจะมา ({upcoming.length})</h3>
           <div className="grid gap-3">
-            {upcoming.map(schedule => (
-              <ScheduleCard key={schedule.id} schedule={schedule} onComplete={handleComplete} />
-            ))}
+            {upcoming.map(s => <ScheduleCard key={s.id} schedule={s} onComplete={handleComplete} onEdit={(s) => { setEditingSchedule(s); setShowModal(true); }} onDelete={handleDelete} />)}
           </div>
         </div>
       )}
@@ -173,21 +159,18 @@ export function FertilizerPage() {
         <div className="mb-6">
           <h3 className="text-lg font-semibold text-green-600 mb-3">✅ เสร็จแล้ว ({completed.length})</h3>
           <div className="grid gap-3">
-            {completed.map(schedule => (
-              <ScheduleCard key={schedule.id} schedule={schedule} onComplete={handleComplete} isCompleted />
-            ))}
+            {completed.map(s => <ScheduleCard key={s.id} schedule={s} onComplete={handleComplete} onEdit={(s) => { setEditingSchedule(s); setShowModal(true); }} onDelete={handleDelete} isCompleted />)}
           </div>
         </div>
       )}
 
-      {/* Empty State */}
       {schedules.length === 0 && !isLoading && (
         <Card><div className="p-8 text-center text-gray-500">ยังไม่มีตารางใส่ปุ๋ย</div></Card>
       )}
 
-      {/* Modal */}
       {showModal && (
         <FertilizerModal
+          schedule={editingSchedule}
           projects={projects}
           onClose={() => setShowModal(false)}
           onSuccess={() => { setShowModal(false); fetchSchedules(); }}
@@ -197,15 +180,17 @@ export function FertilizerPage() {
   );
 }
 
-function ScheduleCard({ schedule, onComplete, isOverdue, isToday, isCompleted }: {
+function ScheduleCard({ schedule, onComplete, onEdit, onDelete, isOverdue, isToday, isCompleted }: {
   schedule: FertilizerSchedule;
   onComplete: (s: FertilizerSchedule) => void;
+  onEdit: (s: FertilizerSchedule) => void;
+  onDelete: (s: FertilizerSchedule) => void;
   isOverdue?: boolean;
   isToday?: boolean;
   isCompleted?: boolean;
 }) {
   const borderColor = isOverdue ? 'border-l-red-500' : isToday ? 'border-l-yellow-500' : isCompleted ? 'border-l-green-500' : 'border-l-blue-500';
-  
+
   return (
     <Card className={`p-4 border-l-4 ${borderColor} ${isCompleted ? 'opacity-60' : ''}`}>
       <div className="flex items-center justify-between">
@@ -219,18 +204,26 @@ function ScheduleCard({ schedule, onComplete, isOverdue, isToday, isCompleted }:
               {schedule.greenhouse_name}
               {schedule.crop_name && ` • ${schedule.crop_name}`}
             </p>
-            <div className="flex gap-2 mt-1">
-              {schedule.fertilizer_type && <Badge variant="secondary">{schedule.fertilizer_type}</Badge>}
-              {schedule.amount && <Badge variant="primary">{schedule.amount} {schedule.unit}</Badge>}
+            <div className="flex gap-2 mt-1 flex-wrap">
+              {schedule.fertilizer_type && <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">{schedule.fertilizer_type}</span>}
+              {schedule.amount && <span className="px-2 py-0.5 bg-blue-100 text-blue-600 rounded text-xs">{schedule.amount} {schedule.unit}</span>}
             </div>
           </div>
         </div>
         <div className="text-right">
           <p className="text-sm font-medium">{new Date(schedule.schedule_date).toLocaleDateString('th-TH')}</p>
           {!isCompleted && (
-            <Button size="sm" className="mt-2" onClick={() => onComplete(schedule)}>
-              <Check className="w-4 h-4" /> เสร็จ
-            </Button>
+            <div className="flex gap-1 mt-2 justify-end">
+              <Button size="sm" onClick={() => onComplete(schedule)}>
+                <Check className="w-4 h-4" />
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => onEdit(schedule)}>
+                <Pencil className="w-4 h-4" />
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => onDelete(schedule)} className="text-red-600">
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
           )}
           {isCompleted && schedule.completed_at && (
             <p className="text-xs text-gray-400 mt-1">เสร็จ: {new Date(schedule.completed_at).toLocaleString('th-TH')}</p>
@@ -242,7 +235,8 @@ function ScheduleCard({ schedule, onComplete, isOverdue, isToday, isCompleted }:
   );
 }
 
-function FertilizerModal({ projects, onClose, onSuccess }: {
+function FertilizerModal({ schedule, projects, onClose, onSuccess }: {
+  schedule: FertilizerSchedule | null;
   projects: AdminProject[];
   onClose: () => void;
   onSuccess: () => void;
@@ -253,12 +247,12 @@ function FertilizerModal({ projects, onClose, onSuccess }: {
   const [form, setForm] = useState({
     project_key: '',
     gh_key: '',
-    fertilizer_name: '',
-    fertilizer_type: '',
-    amount: '',
-    unit: 'g',
-    schedule_date: new Date().toISOString().split('T')[0],
-    notes: '',
+    fertilizer_name: schedule?.fertilizer_name || '',
+    fertilizer_type: schedule?.fertilizer_type || '',
+    amount: schedule?.amount?.toString() || '',
+    unit: schedule?.unit || 'g',
+    schedule_date: schedule?.schedule_date || new Date().toISOString().split('T')[0],
+    notes: schedule?.notes || '',
   });
 
   useEffect(() => {
@@ -269,8 +263,13 @@ function FertilizerModal({ projects, onClose, onSuccess }: {
     e.preventDefault();
     setIsLoading(true);
     try {
-      await api.post('/agriculture/fertilizer', form);
-      addToast({ type: 'success', message: 'เพิ่มตารางสำเร็จ' });
+      if (schedule) {
+        await api.put(`/agriculture/fertilizer/${schedule.id}`, form);
+        addToast({ type: 'success', message: 'อัปเดตสำเร็จ' });
+      } else {
+        await api.post('/agriculture/fertilizer', form);
+        addToast({ type: 'success', message: 'เพิ่มตารางสำเร็จ' });
+      }
       onSuccess();
     } catch (error: any) {
       addToast({ type: 'error', message: error.message || 'เกิดข้อผิดพลาด' });
@@ -283,24 +282,26 @@ function FertilizerModal({ projects, onClose, onSuccess }: {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-md">
         <div className="p-6">
-          <h2 className="text-xl font-bold mb-4">เพิ่มตารางใส่ปุ๋ย</h2>
+          <h2 className="text-xl font-bold mb-4">{schedule ? 'แก้ไขตารางใส่ปุ๋ย' : 'เพิ่มตารางใส่ปุ๋ย'}</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">โปรเจกต์</label>
-                <select value={form.project_key} onChange={(e) => setForm({ ...form, project_key: e.target.value, gh_key: '' })} className="w-full px-3 py-2 border rounded-lg" required>
-                  <option value="">เลือก...</option>
-                  {projects.map(p => <option key={p.key} value={p.key}>{p.nameTh}</option>)}
-                </select>
+            {!schedule && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">โปรเจกต์</label>
+                  <select value={form.project_key} onChange={(e) => setForm({ ...form, project_key: e.target.value, gh_key: '' })} className="w-full px-3 py-2 border rounded-lg" required>
+                    <option value="">เลือก...</option>
+                    {projects.map(p => <option key={p.key} value={p.key}>{p.nameTh}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">โรงเรือน</label>
+                  <select value={form.gh_key} onChange={(e) => setForm({ ...form, gh_key: e.target.value })} className="w-full px-3 py-2 border rounded-lg" required disabled={!form.project_key}>
+                    <option value="">เลือก...</option>
+                    {greenhouses.map(g => <option key={g.ghKey} value={g.ghKey}>{g.nameTh}</option>)}
+                  </select>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">โรงเรือน</label>
-                <select value={form.gh_key} onChange={(e) => setForm({ ...form, gh_key: e.target.value })} className="w-full px-3 py-2 border rounded-lg" required disabled={!form.project_key}>
-                  <option value="">เลือก...</option>
-                  {greenhouses.map(g => <option key={g.ghKey} value={g.ghKey}>{g.nameTh}</option>)}
-                </select>
-              </div>
-            </div>
+            )}
             <Input label="ชื่อปุ๋ย" value={form.fertilizer_name} onChange={(e) => setForm({ ...form, fertilizer_name: e.target.value })} required placeholder="เช่น ปุ๋ยเคมี 16-16-16" />
             <div className="grid grid-cols-2 gap-4">
               <div>
