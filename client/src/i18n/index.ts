@@ -76,6 +76,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'page.greenhouse': 'โรงเรือน',
     'page.loading': 'กำลังโหลด...',
 
+    'greenhouse.ready': 'พร้อมใช้งาน',
+    'greenhouse.offline': 'ออฟไลน์',
+    'greenhouse.checking': 'กำลังตรวจสอบ',
+    'greenhouse.developing': 'กำลังพัฒนา',
+    'greenhouse.noDevice': 'ยังไม่มี Device ID',
+
     'dashboard.soilTab': 'ค่าดิน',
     'dashboard.chartsTab': 'กราฟ',
     'dashboard.controlTab': 'ควบคุม',
@@ -223,6 +229,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'page.greenhouse': 'Greenhouse',
     'page.loading': 'Loading...',
 
+    'greenhouse.ready': 'Ready',
+    'greenhouse.offline': 'Offline',
+    'greenhouse.checking': 'Checking',
+    'greenhouse.developing': 'Developing',
+    'greenhouse.noDevice': 'No Device ID',
+
     'dashboard.soilTab': 'Soil',
     'dashboard.chartsTab': 'Charts',
     'dashboard.controlTab': 'Control',
@@ -369,6 +381,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'page.developing': 'တည်ဆောက်နေဆဲ',
     'page.greenhouse': 'ဖန်လုံအိမ်',
     'page.loading': 'ဖွင့်နေသည်...',
+
+    'greenhouse.ready': 'အသုံးပြုရန်အဆင်သင့်',
+    'greenhouse.offline': 'အော့ဖ်လိုင်း',
+    'greenhouse.checking': 'စစ်ဆေးနေသည်',
+    'greenhouse.developing': 'တည်ဆောက်နေဆဲ',
+    'greenhouse.noDevice': 'Device ID မရှိပါ',
 
     'dashboard.soilTab': 'မြေဆီ',
     'dashboard.chartsTab': 'ဇယားများ',
