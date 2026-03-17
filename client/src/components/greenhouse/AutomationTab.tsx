@@ -3,6 +3,7 @@ import { Fan, Droplets, Lightbulb, Sun, Zap, Clock, Activity } from 'lucide-reac
 import { useThingsBoardAttributes } from '@/hooks/useThingsBoardAttributes';
 import { RPC_METHODS } from '@/config/dataKeys';
 import AutoDeviceCard from './AutoDeviceCard';
+import { useT } from '@/i18n';
 
 interface AutomationTabProps {
   project: string;
@@ -16,7 +17,7 @@ type DeviceColor = 'blue' | 'cyan' | 'yellow' | 'orange' | 'purple';
 
 interface AutoDeviceConfig {
   id: 'fan_1' | 'fan_2' | 'water' | 'light_1' | 'motor';
-  name: string;
+  nameKey: string;
   icon: React.ComponentType<any>;
   color: DeviceColor;
   conditionMethod?: string;
@@ -25,11 +26,10 @@ interface AutoDeviceConfig {
   special?: 'sequential' | 'allZones';
 }
 
-// Device configurations
 const AUTO_DEVICES: AutoDeviceConfig[] = [
   {
     id: 'fan_1',
-    name: 'พัดลมใหญ่',
+    nameKey: 'timers.fan1',
     icon: Fan,
     color: 'blue',
     conditionMethod: RPC_METHODS.CONDITION?.SET_FAN_1_CONDITION || '',
@@ -38,7 +38,7 @@ const AUTO_DEVICES: AutoDeviceConfig[] = [
   },
   {
     id: 'fan_2',
-    name: 'พัดลมกวนอากาศ',
+    nameKey: 'timers.fan2',
     icon: Fan,
     color: 'cyan',
     conditionMethod: RPC_METHODS.CONDITION?.SET_FAN_2_CONDITION || '',
@@ -47,7 +47,7 @@ const AUTO_DEVICES: AutoDeviceConfig[] = [
   },
   {
     id: 'water',
-    name: 'เปิดน้ำ (4 โซน)',
+    nameKey: 'auto.water',
     icon: Droplets,
     color: 'blue',
     intervalMethod: RPC_METHODS.INTERVAL?.SET_WATER_INTERVAL || '',
@@ -56,7 +56,7 @@ const AUTO_DEVICES: AutoDeviceConfig[] = [
   },
   {
     id: 'light_1',
-    name: 'แสงเสริม',
+    nameKey: 'timers.light1',
     icon: Lightbulb,
     color: 'yellow',
     conditionMethod: RPC_METHODS.CONDITION?.SET_LIGHT_1_CONDITION || '',
@@ -65,7 +65,7 @@ const AUTO_DEVICES: AutoDeviceConfig[] = [
   },
   {
     id: 'motor',
-    name: 'ระบบพรางแสง (4 โซน)',
+    nameKey: 'auto.motorShade',
     icon: Sun,
     color: 'orange',
     conditionMethod: RPC_METHODS.CONDITION?.SET_MOTOR_CONDITION || '',
@@ -73,30 +73,6 @@ const AUTO_DEVICES: AutoDeviceConfig[] = [
     supportsModes: ['daily', 'condition', 'interval'],
     special: 'allZones',
   },
-];
-
-const SENSOR_OPTIONS = [
-  { value: 'air_temp', label: 'อุณหภูมิอากาศ', unit: '°C' },
-  { value: 'air_humidity', label: 'ความชื้นอากาศ', unit: '%' },
-  { value: 'air_light', label: 'แสง', unit: 'lux' },
-  { value: 'air_co2', label: 'CO2', unit: 'ppm' },
-  { value: 'soil1_moisture', label: 'ความชื้นดิน จุดที่ 1', unit: '%' },
-  { value: 'soil2_moisture', label: 'ความชื้นดิน จุดที่ 2', unit: '%' },
-  { value: 'soil3_moisture', label: 'ความชื้นดิน จุดที่ 3', unit: '%' },
-  { value: 'soil4_moisture', label: 'ความชื้นดิน จุดที่ 4', unit: '%' },
-  { value: 'soil5_moisture', label: 'ความชื้นดิน จุดที่ 5', unit: '%' },
-  { value: 'soil6_moisture', label: 'ความชื้นดิน จุดที่ 6', unit: '%' },
-  { value: 'soil7_moisture', label: 'ความชื้นดิน จุดที่ 7', unit: '%' },
-  { value: 'soil8_moisture', label: 'ความชื้นดิน จุดที่ 8', unit: '%' },
-  { value: 'soil9_moisture', label: 'ความชื้นดิน จุดที่ 9', unit: '%' },
-  { value: 'soil10_moisture', label: 'ความชื้นดิน จุดที่ 10', unit: '%' },
-];
-
-const CONDITION_OPTIONS = [
-  { value: '>', label: 'มากกว่า (>)' },
-  { value: '<', label: 'น้อยกว่า (<)' },
-  { value: '>=', label: 'มากกว่าหรือเท่ากับ (≥)' },
-  { value: '<=', label: 'น้อยกว่าหรือเท่ากับ (≤)' },
 ];
 
 const iconColorClasses: Record<DeviceColor, string> = {
@@ -120,20 +96,45 @@ export default function AutomationTab({
   isOnline,
   userRole,
 }: AutomationTabProps) {
+  const { t } = useT();
   const [activeMode, setActiveMode] = useState<'overview' | 'detail'>('overview');
 
-  // Get device ID from project/gh keys
   const deviceId = `${project}_${gh}`;
 
   const { attributes, isLoading: isAttrLoading, refresh } = useThingsBoardAttributes(deviceId, {
     pollingMs: 5000,
   });
 
+  const SENSOR_OPTIONS = [
+    { value: 'air_temp', label: t('auto.sensorAirTemp'), unit: '°C' },
+    { value: 'air_humidity', label: t('auto.sensorAirHumidity'), unit: '%' },
+    { value: 'air_light', label: t('auto.sensorLight'), unit: 'lux' },
+    { value: 'air_co2', label: t('auto.sensorCo2'), unit: 'ppm' },
+    ...Array.from({ length: 10 }, (_, i) => ({
+      value: `soil${i + 1}_moisture`,
+      label: t('auto.sensorSoilMoisture').replace('{n}', String(i + 1)),
+      unit: '%',
+    })),
+  ];
+
+  const CONDITION_OPTIONS = [
+    { value: '>', label: t('auto.condGt') },
+    { value: '<', label: t('auto.condLt') },
+    { value: '>=', label: t('auto.condGte') },
+    { value: '<=', label: t('auto.condLte') },
+  ];
+
+  const MODE_NAMES = [
+    'Manual',
+    t('auto.modeDaily'),
+    t('auto.modeCondition'),
+    t('auto.modeCycle'),
+  ];
+
   const getDeviceStatus = (device: AutoDeviceConfig) => {
     let isActive = false;
     let autoModeCode = 0;
 
-    // Active status
     if (device.id === 'water') {
       isActive =
         attributes['valve_1_cmd'] === true ||
@@ -146,7 +147,6 @@ export default function AutomationTab({
       isActive = attributes[`${device.id}_cmd`] === true;
     }
 
-    // Auto mode status from firmware-published attributes
     if (device.id === 'water') {
       autoModeCode = normalizeModeValue(
         attributes['water_mode'] ?? (attributes['valve_1_auto'] ? 1 : 0)
@@ -156,7 +156,7 @@ export default function AutomationTab({
         attributes['motor_mode'] ?? (attributes['global_motor_auto'] ? 1 : 0)
       );
     } else {
-      const modeKey = device.id.replace('_', '') + '_mode'; // fan_1 -> fan1_mode
+      const modeKey = device.id.replace('_', '') + '_mode';
       autoModeCode = normalizeModeValue(
         attributes[modeKey] ?? (attributes[`${device.id}_auto`] ? 1 : 0)
       );
@@ -174,8 +174,8 @@ export default function AutomationTab({
             <Zap className="w-8 h-8" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold">ระบบทำงาน Auto</h2>
-            <p className="text-purple-100 text-sm">ควบคุมอัตโนมัติด้วย 3 ระบบอัจฉริยะ</p>
+            <h2 className="text-2xl font-bold">{t('auto.title')}</h2>
+            <p className="text-purple-100 text-sm">{t('auto.subtitle')}</p>
           </div>
         </div>
 
@@ -191,7 +191,7 @@ export default function AutomationTab({
           >
             <div className="flex items-center justify-center gap-2">
               <Activity className="w-4 h-4" />
-              <span>ภาพรวม</span>
+              <span>{t('auto.overview')}</span>
             </div>
           </button>
           <button
@@ -204,7 +204,7 @@ export default function AutomationTab({
           >
             <div className="flex items-center justify-center gap-2">
               <Clock className="w-4 h-4" />
-              <span>ตั้งค่าโหมด Auto</span>
+              <span>{t('auto.configMode')}</span>
             </div>
           </button>
         </div>
@@ -219,7 +219,7 @@ export default function AutomationTab({
             </div>
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400">Daily Schedule</p>
-              <p className="text-lg font-bold text-blue-600 dark:text-blue-400">ตั้งเวลาเปิด/ปิด</p>
+              <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{t('auto.cardDaily')}</p>
             </div>
           </div>
         </div>
@@ -231,7 +231,7 @@ export default function AutomationTab({
             </div>
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400">Smart Rules</p>
-              <p className="text-lg font-bold text-green-600 dark:text-green-400">การทำงานตามเงื่อนไข</p>
+              <p className="text-lg font-bold text-green-600 dark:text-green-400">{t('auto.cardCondition')}</p>
             </div>
           </div>
         </div>
@@ -243,23 +243,23 @@ export default function AutomationTab({
             </div>
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400">Cycle Timer</p>
-              <p className="text-lg font-bold text-purple-600 dark:text-purple-400">การทํางานเป็นรอบ</p>
+              <p className="text-lg font-bold text-purple-600 dark:text-purple-400">{t('auto.cardCycle')}</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Content */}
+      {/* Overview */}
       {activeMode === 'overview' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
-              สถานะการทำงานแบบ Real-time
+              {t('auto.realtimeStatus')}
             </h3>
             {isAttrLoading && (
               <div className="flex items-center gap-2 text-sm text-gray-400 animate-pulse">
                 <Activity className="w-4 h-4" />
-                <span>กำลังอัปเดต...</span>
+                <span>{t('auto.updating')}</span>
               </div>
             )}
           </div>
@@ -268,52 +268,39 @@ export default function AutomationTab({
             {AUTO_DEVICES.map((device) => {
               const { isActive, autoModeCode } = getDeviceStatus(device);
               const isAutoEnabled = autoModeCode > 0;
-
-              const modeNames = [
-                'Manual',
-                'ตั้งเวลา (Daily)',
-                'การทำงานตามเงื่อนไข',
-                'การทํางานเป็นรอบ',
-              ];
-              const currentModeName = modeNames[autoModeCode] || 'Manual';
+              const currentModeName = MODE_NAMES[autoModeCode] || 'Manual';
 
               return (
                 <div
                   key={device.id}
                   className={`relative overflow-hidden rounded-2xl p-4 border transition-all ${
                     isActive
-                      ? 'bg-white border-emerald-200 shadow-md'
-                      : 'bg-slate-50 border-slate-200'
+                      ? 'bg-white dark:bg-gray-800 border-emerald-200 dark:border-emerald-700 shadow-md'
+                      : 'bg-slate-50 dark:bg-gray-800/50 border-slate-200 dark:border-gray-700'
                   }`}
                 >
                   <div className="absolute top-4 right-4 flex items-center gap-2">
-                    <span
-                      className={`text-[10px] font-bold uppercase ${
-                        isActive ? 'text-emerald-600' : 'text-slate-400'
-                      }`}
-                    >
-                      {isActive ? 'Working' : 'Idle'}
+                    <span className={`text-[10px] font-bold uppercase ${
+                      isActive ? 'text-emerald-600' : 'text-slate-400'
+                    }`}>
+                      {isActive ? t('auto.working') : t('auto.idle')}
                     </span>
-                    <span
-                      className={`flex h-2.5 w-2.5 rounded-full ${
-                        isActive
-                          ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]'
-                          : 'bg-slate-300'
-                      }`}
-                    />
+                    <span className={`flex h-2.5 w-2.5 rounded-full ${
+                      isActive
+                        ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]'
+                        : 'bg-slate-300'
+                    }`} />
                   </div>
 
                   <div className="flex items-start gap-4 mb-3">
-                    <div
-                      className={`p-3 rounded-xl flex items-center justify-center transition-colors ${
-                        isActive ? iconColorClasses[device.color] : 'bg-slate-200 text-slate-500'
-                      }`}
-                    >
+                    <div className={`p-3 rounded-xl flex items-center justify-center transition-colors ${
+                      isActive ? iconColorClasses[device.color] : 'bg-slate-200 text-slate-500'
+                    }`}>
                       <device.icon className="w-6 h-6" />
                     </div>
                     <div>
                       <h4 className="font-bold text-gray-800 dark:text-gray-100 text-lg leading-tight">
-                        {device.name}
+                        {t(device.nameKey)}
                       </h4>
                       <p className="text-[10px] text-gray-400 mt-1 font-mono uppercase tracking-widest">
                         {device.id}
@@ -321,16 +308,14 @@ export default function AutomationTab({
                     </div>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t">
+                  <div className="mt-4 pt-3 border-t dark:border-gray-700">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-gray-500">ระบบควบคุม</span>
-                      <span
-                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
-                          isAutoEnabled
-                            ? 'bg-purple-100 text-purple-700'
-                            : 'bg-orange-100 text-orange-700'
-                        }`}
-                      >
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{t('auto.controlSystem')}</span>
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                        isAutoEnabled
+                          ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300'
+                          : 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300'
+                      }`}>
                         {isAutoEnabled ? currentModeName : 'Manual'}
                       </span>
                     </div>
@@ -341,23 +326,24 @@ export default function AutomationTab({
           </div>
 
           {!isOnline && (
-            <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 flex items-center gap-3 text-rose-700 shadow-sm">
+            <div className="bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-700 rounded-xl p-4 flex items-center gap-3 text-rose-700 dark:text-rose-400 shadow-sm">
               <Zap className="w-5 h-5 fill-rose-500" />
               <div className="text-sm">
-                <p className="font-bold leading-none mb-1">อุปกรณ์ออฟไลน์</p>
-                <p className="opacity-80">ระบบอัตโนมัติจะทำงานตามค่าล่าสุดที่บันทึกไว้ในตัวเครื่อง</p>
+                <p className="font-bold leading-none mb-1">{t('auto.deviceOffline')}</p>
+                <p className="opacity-80">{t('auto.offlineDesc')}</p>
               </div>
             </div>
           )}
         </div>
       )}
 
+      {/* Detail */}
       {activeMode === 'detail' && (
         <div className="space-y-6">
           {AUTO_DEVICES.map((device) => (
             <AutoDeviceCard
               key={device.id}
-              device={device}
+              device={{ ...device, name: t(device.nameKey) }}
               deviceId={deviceId}
               attributes={attributes}
               onRefresh={refresh}
