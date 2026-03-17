@@ -4,6 +4,7 @@
  */
 
 import { useCallback } from 'react';
+import { useAppSettings } from '@/hooks/useAppSettings';
 
 export type Language = 'th' | 'en' | 'mm';
 
@@ -437,4 +438,12 @@ export function t(key: string, lang: Language = 'th'): string {
 export function useTranslation(lang: Language = 'th') {
   const translate = useCallback((key: string) => t(key, lang), [lang]);
   return { t: translate, lang };
+}
+
+
+
+export function useT() {
+  const { language } = useAppSettings();
+  const translate = useCallback((key: string) => t(key, language), [language]);
+  return { t: translate, lang: language };
 }
