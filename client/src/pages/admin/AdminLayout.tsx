@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useT } from '@/i18n';
 import { 
   Leaf, Users, FolderKanban, Home as HomeIcon, Bell, Settings, ArrowLeft, LogOut,
   Gauge, Zap, PlaySquare, Shield, History, Sprout, Droplets, Bug, Package, Activity
@@ -13,59 +14,60 @@ interface AdminLayoutProps {
   subtitle?: string;
 }
 
-const NAV_SECTIONS = [
-  {
-    title: 'ระบบ',
-    items: [
-      { href: '/admin/users', label: 'จัดการผู้ใช้', icon: Users },
-      { href: '/admin/projects', label: 'จัดการโปรเจกต์', icon: FolderKanban },
-      { href: '/admin/greenhouses', label: 'จัดการโรงเรือน', icon: HomeIcon },
-      { href: '/admin/sensors', label: 'จัดการ Sensor', icon: Gauge },
-    ]
-  },
-  {
-    title: 'ควบคุม',
-    items: [
-      { href: '/admin/automation', label: 'Automation Rules', icon: Zap },
-      { href: '/admin/scenes', label: 'Scenes / Presets', icon: PlaySquare },
-      { href: '/admin/control-history', label: 'ประวัติการควบคุม', icon: History },
-    ]
-  },
-  {
-    title: 'การเกษตร',
-    items: [
-      { href: '/agriculture/crops', label: 'จัดการพืช', icon: Sprout },
-      { href: '/agriculture/growth', label: 'บันทึกการเติบโต', icon: Activity },
-      { href: '/agriculture/fertilizer', label: 'ตารางใส่ปุ๋ย', icon: Droplets },
-      { href: '/agriculture/pest-disease', label: 'โรค/แมลง', icon: Bug },
-      { href: '/agriculture/yield', label: 'ผลผลิต', icon: Package },
-      { href: '/agriculture/water', label: 'การใช้น้ำ', icon: Droplets },
-    ]
-  },
-  {
-    title: 'แจ้งเตือน',
-    items: [
-      { href: '/admin/notifications', label: 'ตั้งค่าแจ้งเตือน', icon: Bell },
-      { href: '/admin/alerts', label: 'ประวัติ Alert', icon: Bell },
-    ]
-  },
-  {
-    title: 'ตั้งค่า',
-    items: [
-      { href: '/admin/security', label: 'Security', icon: Shield },
-      { href: '/admin/audit', label: 'Audit Log', icon: History },
-      { href: '/admin/settings', label: 'ตั้งค่าระบบ', icon: Settings },
-    ]
-  },
-];
-
 export function AdminLayout({ children, title, subtitle }: AdminLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const { t } = useT();
+
+  const NAV_SECTIONS = [
+    {
+      title: t('admin.nav.system'),
+      items: [
+        { href: '/admin/users', label: t('admin.users'), icon: Users },
+        { href: '/admin/projects', label: t('admin.projects'), icon: FolderKanban },
+        { href: '/admin/greenhouses', label: t('admin.greenhouses'), icon: HomeIcon },
+        { href: '/admin/sensors', label: t('admin.sensors'), icon: Gauge },
+      ]
+    },
+    {
+      title: t('admin.nav.control'),
+      items: [
+        { href: '/admin/automation', label: t('admin.nav.automation'), icon: Zap },
+        { href: '/admin/scenes', label: t('admin.nav.scenes'), icon: PlaySquare },
+        { href: '/admin/control-history', label: t('admin.nav.controlHistory'), icon: History },
+      ]
+    },
+    {
+      title: t('nav.agriculture'),
+      items: [
+        { href: '/agriculture/crops', label: t('agri.menu.crops'), icon: Sprout },
+        { href: '/agriculture/growth', label: t('agri.menu.growth'), icon: Activity },
+        { href: '/agriculture/fertilizer', label: t('agri.menu.fertilizer'), icon: Droplets },
+        { href: '/agriculture/pest-disease', label: t('agri.menu.pestDisease'), icon: Bug },
+        { href: '/agriculture/yield', label: t('agri.menu.yield'), icon: Package },
+        { href: '/agriculture/water', label: t('agri.menu.water'), icon: Droplets },
+      ]
+    },
+    {
+      title: t('admin.nav.notify'),
+      items: [
+        { href: '/admin/notifications', label: t('admin.notifications'), icon: Bell },
+        { href: '/admin/alerts', label: t('admin.alerts'), icon: Bell },
+      ]
+    },
+    {
+      title: t('admin.nav.settings'),
+      items: [
+        { href: '/admin/security', label: t('admin.security'), icon: Shield },
+        { href: '/admin/audit', label: t('admin.audit'), icon: History },
+        { href: '/admin/settings', label: t('admin.settings'), icon: Settings },
+      ]
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-950">
       {/* Sidebar */}
       <aside className="fixed left-0 top-0 bottom-0 w-64 bg-gray-900 text-white z-40 hidden lg:block overflow-y-auto">
         {/* Logo */}
@@ -76,7 +78,7 @@ export function AdminLayout({ children, title, subtitle }: AdminLayoutProps) {
             </div>
             <div>
               <h1 className="font-bold text-lg">GreenHouse Pro</h1>
-              <p className="text-xs text-gray-400">Admin Panel</p>
+              <p className="text-xs text-gray-400">{t('admin.panel')}</p>
             </div>
           </Link>
         </div>
@@ -113,7 +115,7 @@ export function AdminLayout({ children, title, subtitle }: AdminLayoutProps) {
         <div className="p-4 border-t border-gray-800 mt-4">
           <Link to="/" className="flex items-center gap-3 px-4 py-2 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-white transition-colors text-sm">
             <ArrowLeft className="w-4 h-4" />
-            <span>กลับหน้าหลัก</span>
+            <span>{t('admin.nav.backToApp')}</span>
           </Link>
         </div>
       </aside>
@@ -122,21 +124,32 @@ export function AdminLayout({ children, title, subtitle }: AdminLayoutProps) {
       <header className="lg:hidden bg-gray-900 text-white px-4 py-3 sticky top-0 z-30">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/')} className="p-2 rounded-lg hover:bg-gray-800"><ArrowLeft className="w-5 h-5" /></button>
-            <h1 className="font-semibold">Admin Panel</h1>
+            <button onClick={() => navigate('/')} className="p-2 rounded-lg hover:bg-gray-800">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <h1 className="font-semibold">{t('admin.panel')}</h1>
           </div>
-          <button onClick={logout} className="p-2 rounded-lg hover:bg-gray-800"><LogOut className="w-5 h-5" /></button>
+          <button onClick={logout} className="p-2 rounded-lg hover:bg-gray-800">
+            <LogOut className="w-5 h-5" />
+          </button>
         </div>
       </header>
 
       {/* Mobile navigation */}
-      <nav className="lg:hidden bg-white border-b px-2 py-2 overflow-x-auto sticky top-12 z-20">
+      <nav className="lg:hidden bg-white dark:bg-gray-900 border-b dark:border-gray-800 px-2 py-2 overflow-x-auto sticky top-12 z-20">
         <div className="flex gap-1 min-w-max">
           {NAV_SECTIONS.flatMap(s => s.items).slice(0, 8).map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.href;
             return (
-              <Link key={item.href} to={item.href} className={cn('flex items-center gap-2 px-3 py-2 rounded-lg text-sm whitespace-nowrap transition-colors', isActive ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-100')}>
+              <Link
+                key={item.href}
+                to={item.href}
+                className={cn(
+                  'flex items-center gap-2 px-3 py-2 rounded-lg text-sm whitespace-nowrap transition-colors',
+                  isActive ? 'bg-primary text-white' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                )}
+              >
                 <Icon className="w-4 h-4" /><span>{item.label}</span>
               </Link>
             );
@@ -146,9 +159,9 @@ export function AdminLayout({ children, title, subtitle }: AdminLayoutProps) {
 
       {/* Main content */}
       <main className="lg:ml-64 min-h-screen">
-        <div className="bg-white border-b px-6 py-4">
-          <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
-          {subtitle && <p className="text-gray-500 mt-1">{subtitle}</p>}
+        <div className="bg-white dark:bg-gray-900 border-b dark:border-gray-800 px-6 py-4">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{title}</h1>
+          {subtitle && <p className="text-gray-500 dark:text-gray-400 mt-1">{subtitle}</p>}
         </div>
         <div className="p-6">{children}</div>
       </main>

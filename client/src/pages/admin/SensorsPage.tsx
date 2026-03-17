@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout';
 import { Card, Button, Input, Badge } from '@/components/ui';
 import { useToast } from '@/hooks/useToast';
+import { useT } from '@/i18n';
 import { api } from '@/lib/api';
 import { adminApi, AdminProject, AdminGreenhouse } from '@/lib/adminApi';
-import { Plus, Pencil, Trash2, Search, Thermometer, Wand2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Wand2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SensorConfig {
@@ -23,16 +24,18 @@ interface SensorConfig {
   is_active: number;
 }
 
-const SENSOR_TYPES = [
-  { value: 'air', label: 'อากาศ' },
-  { value: 'soil', label: 'ดิน' },
-  { value: 'water', label: 'น้ำ' },
-  { value: 'light', label: 'แสง' },
-  { value: 'custom', label: 'อื่นๆ' },
-];
-
 export function SensorsPage() {
   const { addToast } = useToast();
+  const { t } = useT();
+
+  const SENSOR_TYPES = [
+    { value: 'air',    label: t('admin.sensor.typeAir') },
+    { value: 'soil',   label: t('admin.sensor.typeSoil') },
+    { value: 'water',  label: t('admin.sensor.typeWater') },
+    { value: 'light',  label: t('admin.sensor.typeLight') },
+    { value: 'custom', label: t('admin.sensor.typeCustom') },
+  ];
+
   const [projects, setProjects] = useState<AdminProject[]>([]);
   const [greenhouses, setGreenhouses] = useState<AdminGreenhouse[]>([]);
   const [sensors, setSensors] = useState<SensorConfig[]>([]);
@@ -60,83 +63,99 @@ export function SensorsPage() {
     try {
       const response = await api.get<{ sensors: SensorConfig[] }>(`/admin/sensors/${selectedProject}/${selectedGh}`);
       if (response.success && response.data) setSensors(response.data.sensors);
-    } catch { addToast({ type: 'error', message: 'ไม่สามารถโหลดข้อมูลได้' }); }
+    } catch { addToast({ type: 'error', message: t('common.error') }); }
     finally { setIsLoading(false); }
   };
 
   const handleDelete = async (sensor: SensorConfig) => {
-    if (!confirm(`ลบ "${sensor.name_th}"?`)) return;
+    if (!confirm(t('admin.sensor.deleteConfirm').replace('{name}', sensor.name_th))) return;
     try {
       await api.delete(`/admin/sensors/${selectedProject}/${selectedGh}/${sensor.sensor_key}`);
-      addToast({ type: 'success', message: 'ลบสำเร็จ' }); fetchSensors();
-    } catch { addToast({ type: 'error', message: 'เกิดข้อผิดพลาด' }); }
+      addToast({ type: 'success', message: t('admin.sensor.deleteSuccess') }); fetchSensors();
+    } catch { addToast({ type: 'error', message: t('common.error') }); }
   };
 
   const handleApplyTemplate = async (template: string) => {
     try {
       await api.post(`/admin/sensors/${selectedProject}/${selectedGh}/bulk-create`, { template });
-      addToast({ type: 'success', message: 'สร้าง Sensor สำเร็จ' }); fetchSensors(); setShowTemplateModal(false);
-    } catch { addToast({ type: 'error', message: 'เกิดข้อผิดพลาด' }); }
+      addToast({ type: 'success', message: t('admin.sensor.templateSuccess') });
+      fetchSensors(); setShowTemplateModal(false);
+    } catch { addToast({ type: 'error', message: t('common.error') }); }
   };
 
-  const filteredSensors = sensors.filter(s => s.name_th.includes(searchTerm) || s.sensor_key.includes(searchTerm));
+  const filteredSensors = sensors.filter(s =>
+    s.name_th.includes(searchTerm) || s.sensor_key.includes(searchTerm)
+  );
 
   return (
-    <AdminLayout title="จัดการ Sensor" subtitle="เพิ่ม แก้ไข Sensor แบบ Dynamic รองรับการขยายในอนาคต">
+    <AdminLayout title={t('admin.sensors')} subtitle={t('admin.sensor.subtitle')}>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">โปรเจกต์ <span className="text-red-500">*</span></label>
-          <select value={selectedProject} onChange={(e) => setSelectedProject(e.target.value)} className="w-full px-3 py-2 border rounded-lg">
-            <option value="">เลือกโปรเจกต์...</option>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            {t('agri.label.project')} <span className="text-red-500">*</span>
+          </label>
+          <select value={selectedProject} onChange={(e) => setSelectedProject(e.target.value)} className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100">
+            <option value="">{t('admin.sensor.selectProject')}</option>
             {projects.map(p => <option key={p.key} value={p.key}>{p.nameTh}</option>)}
           </select>
-          <p className="text-xs text-gray-500 mt-1">เลือกโปรเจกต์ที่ต้องการจัดการ</p>
+          <p className="text-xs text-gray-500 mt-1">{t('admin.sensor.selectProjectHint')}</p>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">โรงเรือน <span className="text-red-500">*</span></label>
-          <select value={selectedGh} onChange={(e) => setSelectedGh(e.target.value)} className="w-full px-3 py-2 border rounded-lg" disabled={!selectedProject}>
-            <option value="">เลือกโรงเรือน...</option>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            {t('agri.label.greenhouse')} <span className="text-red-500">*</span>
+          </label>
+          <select value={selectedGh} onChange={(e) => setSelectedGh(e.target.value)} className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100" disabled={!selectedProject}>
+            <option value="">{t('admin.sensor.selectGh')}</option>
             {greenhouses.map(g => <option key={g.ghKey} value={g.ghKey}>{g.nameTh}</option>)}
           </select>
-          <p className="text-xs text-gray-500 mt-1">เลือกโรงเรือนที่ต้องการตั้งค่า Sensor</p>
+          <p className="text-xs text-gray-500 mt-1">{t('admin.sensor.selectGhHint')}</p>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">ค้นหา</label>
-          <Input placeholder="ค้นหา..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('common.search')}</label>
+          <Input placeholder={t('common.search') + '...'} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
         </div>
         <div className="flex items-end gap-2">
-          <Button onClick={() => setShowTemplateModal(true)} variant="outline" disabled={!selectedGh}><Wand2 className="w-4 h-4" />Template</Button>
-          <Button onClick={() => { setEditingSensor(null); setShowModal(true); }} disabled={!selectedGh}><Plus className="w-4 h-4" />เพิ่ม</Button>
+          <Button onClick={() => setShowTemplateModal(true)} variant="outline" disabled={!selectedGh}>
+            <Wand2 className="w-4 h-4" />Template
+          </Button>
+          <Button onClick={() => { setEditingSensor(null); setShowModal(true); }} disabled={!selectedGh}>
+            <Plus className="w-4 h-4" />{t('common.add')}
+          </Button>
         </div>
       </div>
 
       {!selectedGh ? (
-        <Card><div className="p-8 text-center text-gray-500">กรุณาเลือกโปรเจกต์และโรงเรือน</div></Card>
+        <Card><div className="p-8 text-center text-gray-500">{t('admin.sensor.pleaseSelect')}</div></Card>
       ) : isLoading ? (
-        <Card><div className="p-8 text-center">กำลังโหลด...</div></Card>
+        <Card><div className="p-8 text-center text-gray-500">{t('common.loading')}</div></Card>
       ) : (
         <Card>
           <table className="w-full">
-            <thead className="bg-gray-50 border-b">
+            <thead className="bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700">
               <tr>
-                <th className="text-left px-4 py-3 text-sm">Sensor</th>
-                <th className="text-left px-4 py-3 text-sm">ประเภท</th>
-                <th className="text-left px-4 py-3 text-sm">Data Key</th>
-                <th className="text-left px-4 py-3 text-sm">หน่วย</th>
-                <th className="text-left px-4 py-3 text-sm">แจ้งเตือน</th>
-                <th className="text-right px-4 py-3 text-sm">จัดการ</th>
+                <th className="text-left px-4 py-3 text-sm text-gray-600 dark:text-gray-400">Sensor</th>
+                <th className="text-left px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{t('admin.sensor.colType')}</th>
+                <th className="text-left px-4 py-3 text-sm text-gray-600 dark:text-gray-400">Data Key</th>
+                <th className="text-left px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{t('admin.sensor.colUnit')}</th>
+                <th className="text-left px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{t('admin.sensor.colAlert')}</th>
+                <th className="text-right px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{t('common.actions')}</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y dark:divide-gray-700">
               {filteredSensors.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">ไม่มี Sensor - กด Template เพื่อสร้างชุดมาตรฐาน</td></tr>
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">{t('admin.sensor.noSensor')}</td></tr>
               ) : filteredSensors.map((s) => (
-                <tr key={s.id} className={cn(!s.is_active && 'opacity-50')}>
-                  <td className="px-4 py-3"><div className="font-medium">{s.name_th}</div><div className="text-xs text-gray-500">{s.sensor_key}</div></td>
-                  <td className="px-4 py-3"><Badge variant="secondary">{SENSOR_TYPES.find(t => t.value === s.sensor_type)?.label}</Badge></td>
-                  <td className="px-4 py-3 font-mono text-sm">{s.data_key}</td>
-                  <td className="px-4 py-3">{s.unit}</td>
-                  <td className="px-4 py-3 text-sm">{s.alert_min ?? '-'} ~ {s.alert_max ?? '-'}</td>
+                <tr key={s.id} className={cn('hover:bg-gray-50 dark:hover:bg-gray-800/50', !s.is_active && 'opacity-50')}>
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-gray-900 dark:text-gray-100">{s.name_th}</div>
+                    <div className="text-xs text-gray-500">{s.sensor_key}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant="secondary">{SENSOR_TYPES.find(tp => tp.value === s.sensor_type)?.label}</Badge>
+                  </td>
+                  <td className="px-4 py-3 font-mono text-sm text-gray-600 dark:text-gray-400">{s.data_key}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{s.unit}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{s.alert_min ?? '-'} ~ {s.alert_max ?? '-'}</td>
                   <td className="px-4 py-3 text-right">
                     <Button variant="ghost" size="sm" onClick={() => { setEditingSensor(s); setShowModal(true); }}><Pencil className="w-4 h-4" /></Button>
                     <Button variant="ghost" size="sm" onClick={() => handleDelete(s)} className="text-red-600"><Trash2 className="w-4 h-4" /></Button>
@@ -148,14 +167,35 @@ export function SensorsPage() {
         </Card>
       )}
 
-      {showModal && <SensorModal projectKey={selectedProject} ghKey={selectedGh} sensor={editingSensor} onClose={() => setShowModal(false)} onSuccess={() => { setShowModal(false); fetchSensors(); }} />}
-      {showTemplateModal && <TemplateModal onApply={handleApplyTemplate} onClose={() => setShowTemplateModal(false)} />}
+      {showModal && (
+        <SensorModal
+          projectKey={selectedProject}
+          ghKey={selectedGh}
+          sensor={editingSensor}
+          onClose={() => setShowModal(false)}
+          onSuccess={() => { setShowModal(false); fetchSensors(); }}
+        />
+      )}
+      {showTemplateModal && (
+        <TemplateModal onApply={handleApplyTemplate} onClose={() => setShowTemplateModal(false)} />
+      )}
     </AdminLayout>
   );
 }
 
+// ─── SensorModal ──────────────────────────────────────────────────────────────
 function SensorModal({ projectKey, ghKey, sensor, onClose, onSuccess }: { projectKey: string; ghKey: string; sensor: SensorConfig | null; onClose: () => void; onSuccess: () => void }) {
   const { addToast } = useToast();
+  const { t } = useT();
+
+  const SENSOR_TYPES = [
+    { value: 'air',    label: t('admin.sensor.typeAir') },
+    { value: 'soil',   label: t('admin.sensor.typeSoil') },
+    { value: 'water',  label: t('admin.sensor.typeWater') },
+    { value: 'light',  label: t('admin.sensor.typeLight') },
+    { value: 'custom', label: t('admin.sensor.typeCustom') },
+  ];
+
   const [isLoading, setIsLoading] = useState(false);
   const [form, setForm] = useState({
     sensor_key: sensor?.sensor_key || '',
@@ -175,8 +215,8 @@ function SensorModal({ projectKey, ghKey, sensor, onClose, onSuccess }: { projec
       const data = { ...form, alert_min: form.alert_min === '' ? null : Number(form.alert_min), alert_max: form.alert_max === '' ? null : Number(form.alert_max) };
       if (sensor) await api.put(`/admin/sensors/${projectKey}/${ghKey}/${sensor.sensor_key}`, data);
       else await api.post(`/admin/sensors/${projectKey}/${ghKey}`, data);
-      addToast({ type: 'success', message: 'บันทึกสำเร็จ' }); onSuccess();
-    } catch { addToast({ type: 'error', message: 'เกิดข้อผิดพลาด' }); }
+      addToast({ type: 'success', message: t('admin.sensor.saveSuccess') }); onSuccess();
+    } catch { addToast({ type: 'error', message: t('common.error') }); }
     finally { setIsLoading(false); }
   };
 
@@ -184,25 +224,59 @@ function SensorModal({ projectKey, ghKey, sensor, onClose, onSuccess }: { projec
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="p-6">
-          <h2 className="text-xl font-bold mb-4">{sensor ? 'แก้ไข Sensor' : 'เพิ่ม Sensor'}</h2>
+          <h2 className="text-xl font-bold mb-4">{sensor ? t('admin.sensor.editTitle') : t('admin.sensor.createTitle')}</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div><Input label="Sensor Key (ภาษาอังกฤษ)" value={form.sensor_key} onChange={(e) => setForm({ ...form, sensor_key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })} required disabled={!!sensor} /><p className="text-xs text-gray-500 mt-1">รหัสเฉพาะ เช่น air_temp, soil1_moisture ใช้ตัวพิมพ์เล็ก ขีดล่าง และตัวเลข</p></div>
-            <div><Input label="ชื่อ Sensor (ภาษาไทย)" value={form.name_th} onChange={(e) => setForm({ ...form, name_th: e.target.value })} required /><p className="text-xs text-gray-500 mt-1">ชื่อที่แสดงบนหน้าจอ เช่น อุณหภูมิอากาศ</p></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div><label className="block text-sm font-medium mb-1">ประเภท</label><select value={form.sensor_type} onChange={(e) => setForm({ ...form, sensor_type: e.target.value })} className="w-full px-3 py-2 border rounded-lg">{SENSOR_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select><p className="text-xs text-gray-500 mt-1">จัดกลุ่มการแสดงผล</p></div>
-              <div><Input label="หน่วย" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="°C, %, ppm" /><p className="text-xs text-gray-500 mt-1">หน่วยวัด</p></div>
+            <div>
+              <Input label={t('admin.sensor.fieldKey')} value={form.sensor_key} onChange={(e) => setForm({ ...form, sensor_key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })} required disabled={!!sensor} />
+              <p className="text-xs text-gray-500 mt-1">{t('admin.sensor.fieldKeyHint')}</p>
             </div>
-            <div><Input label="Data Key (ThingsBoard)" value={form.data_key} onChange={(e) => setForm({ ...form, data_key: e.target.value })} required /><p className="text-xs text-gray-500 mt-1">ชื่อ Telemetry Key จาก ThingsBoard ต้องตรงกับที่ Device ส่งมา</p></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div><Input label="แจ้งเตือนต่ำกว่า" type="number" step="any" value={form.alert_min} onChange={(e) => setForm({ ...form, alert_min: e.target.value })} /><p className="text-xs text-gray-500 mt-1">ว่างไว้ = ไม่แจ้งเตือน</p></div>
-              <div><Input label="แจ้งเตือนสูงกว่า" type="number" step="any" value={form.alert_max} onChange={(e) => setForm({ ...form, alert_max: e.target.value })} /><p className="text-xs text-gray-500 mt-1">ว่างไว้ = ไม่แจ้งเตือน</p></div>
+            <div>
+              <Input label={t('admin.sensor.fieldName')} value={form.name_th} onChange={(e) => setForm({ ...form, name_th: e.target.value })} required />
+              <p className="text-xs text-gray-500 mt-1">{t('admin.sensor.fieldNameHint')}</p>
             </div>
-            <hr /><p className="text-sm font-medium">Calibration</p>
             <div className="grid grid-cols-2 gap-4">
-              <div><Input label="Offset (+/-)" type="number" step="any" value={form.calibration_offset} onChange={(e) => setForm({ ...form, calibration_offset: parseFloat(e.target.value) || 0 })} /><p className="text-xs text-gray-500 mt-1">ค่าที่บวก/ลบจากค่าจริง</p></div>
-              <div><Input label="Scale (x)" type="number" step="any" value={form.calibration_scale} onChange={(e) => setForm({ ...form, calibration_scale: parseFloat(e.target.value) || 1 })} /><p className="text-xs text-gray-500 mt-1">ตัวคูณ (1 = ไม่เปลี่ยน)</p></div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t('admin.sensor.fieldType')}</label>
+                <select value={form.sensor_type} onChange={(e) => setForm({ ...form, sensor_type: e.target.value })} className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100">
+                  {SENSOR_TYPES.map(tp => <option key={tp.value} value={tp.value}>{tp.label}</option>)}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">{t('admin.sensor.fieldTypeHint')}</p>
+              </div>
+              <div>
+                <Input label={t('admin.sensor.fieldUnit')} value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder={t('admin.sensor.fieldUnitPlaceholder')} />
+                <p className="text-xs text-gray-500 mt-1">{t('admin.sensor.fieldUnitHint')}</p>
+              </div>
             </div>
-            <div className="flex gap-2 pt-4"><Button type="button" variant="outline" onClick={onClose} className="flex-1">ยกเลิก</Button><Button type="submit" isLoading={isLoading} className="flex-1">บันทึก</Button></div>
+            <div>
+              <Input label={t('admin.sensor.fieldDataKey')} value={form.data_key} onChange={(e) => setForm({ ...form, data_key: e.target.value })} required />
+              <p className="text-xs text-gray-500 mt-1">{t('admin.sensor.fieldDataKeyHint')}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Input label={t('admin.sensor.alertMin')} type="number" step="any" value={form.alert_min} onChange={(e) => setForm({ ...form, alert_min: e.target.value })} />
+                <p className="text-xs text-gray-500 mt-1">{t('admin.sensor.alertMinHint')}</p>
+              </div>
+              <div>
+                <Input label={t('admin.sensor.alertMax')} type="number" step="any" value={form.alert_max} onChange={(e) => setForm({ ...form, alert_max: e.target.value })} />
+                <p className="text-xs text-gray-500 mt-1">{t('admin.sensor.alertMaxHint')}</p>
+              </div>
+            </div>
+            <hr className="dark:border-gray-700" />
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('admin.sensor.calibration')}</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Input label={t('admin.sensor.calibOffset')} type="number" step="any" value={form.calibration_offset} onChange={(e) => setForm({ ...form, calibration_offset: parseFloat(e.target.value) || 0 })} />
+                <p className="text-xs text-gray-500 mt-1">{t('admin.sensor.calibOffsetHint')}</p>
+              </div>
+              <div>
+                <Input label={t('admin.sensor.calibScale')} type="number" step="any" value={form.calibration_scale} onChange={(e) => setForm({ ...form, calibration_scale: parseFloat(e.target.value) || 1 })} />
+                <p className="text-xs text-gray-500 mt-1">{t('admin.sensor.calibScaleHint')}</p>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-4">
+              <Button type="button" variant="outline" onClick={onClose} className="flex-1">{t('common.cancel')}</Button>
+              <Button type="submit" isLoading={isLoading} className="flex-1">{t('common.save')}</Button>
+            </div>
           </form>
         </div>
       </Card>
@@ -210,19 +284,28 @@ function SensorModal({ projectKey, ghKey, sensor, onClose, onSuccess }: { projec
   );
 }
 
+// ─── TemplateModal ────────────────────────────────────────────────────────────
 function TemplateModal({ onApply, onClose }: { onApply: (t: string) => void; onClose: () => void }) {
+  const { t } = useT();
   const templates = [
     { key: 'standard_10_soil', name: 'มาตรฐาน 10 จุดดิน', desc: 'อากาศ 4 ค่า + ดิน 10 จุด (moisture + temp)' },
-    { key: 'simple_air_only', name: 'อากาศอย่างเดียว', desc: 'อุณหภูมิ + ความชื้นอากาศ' },
+    { key: 'simple_air_only',  name: 'อากาศอย่างเดียว',   desc: 'อุณหภูมิ + ความชื้นอากาศ' },
   ];
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-md">
         <div className="p-6">
-          <h2 className="text-xl font-bold mb-2">เลือก Template</h2>
-          <p className="text-sm text-gray-500 mb-4">สร้างชุด Sensor อัตโนมัติ (ข้ามรายการที่มีอยู่แล้ว)</p>
-          <div className="space-y-3">{templates.map(t => (<button key={t.key} onClick={() => onApply(t.key)} className="w-full text-left p-4 border rounded-lg hover:border-primary transition-colors"><p className="font-medium">{t.name}</p><p className="text-sm text-gray-500">{t.desc}</p></button>))}</div>
-          <Button variant="outline" onClick={onClose} className="w-full mt-4">ยกเลิก</Button>
+          <h2 className="text-xl font-bold mb-2">{t('admin.sensor.templateTitle')}</h2>
+          <p className="text-sm text-gray-500 mb-4">{t('admin.sensor.templateDesc')}</p>
+          <div className="space-y-3">
+            {templates.map(tp => (
+              <button key={tp.key} onClick={() => onApply(tp.key)} className="w-full text-left p-4 border rounded-lg hover:border-primary transition-colors dark:border-gray-700 dark:hover:border-primary">
+                <p className="font-medium text-gray-900 dark:text-gray-100">{tp.name}</p>
+                <p className="text-sm text-gray-500">{tp.desc}</p>
+              </button>
+            ))}
+          </div>
+          <Button variant="outline" onClick={onClose} className="w-full mt-4">{t('common.cancel')}</Button>
         </div>
       </Card>
     </div>

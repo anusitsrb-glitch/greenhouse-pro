@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout';
 import { Card, Button, Input, Badge } from '@/components/ui';
 import { useToast } from '@/hooks/useToast';
+import { useT } from '@/i18n';
 import { api } from '@/lib/api';
 import { adminApi, AdminProject, AdminGreenhouse } from '@/lib/adminApi';
 import { Plus, Pencil, Trash2, Zap, Clock, Activity, Play, Pause } from 'lucide-react';
@@ -18,11 +19,7 @@ interface AutomationRule {
     time?: string;
     days?: number[];
   };
-  conditions: Array<{
-    sensor_key: string;
-    condition: string;
-    value: number;
-  }>;
+  conditions: Array<{ sensor_key: string; condition: string; value: number; }>;
   actions: Array<{
     type: 'control' | 'notification';
     control_key?: string;
@@ -36,21 +33,9 @@ interface AutomationRule {
   trigger_count: number;
 }
 
-const TRIGGER_TYPES = [
-  { value: 'sensor', label: 'เมื่อค่า Sensor', icon: Activity },
-  { value: 'time', label: 'ตามเวลา', icon: Clock },
-  { value: 'manual', label: 'กดเอง', icon: Zap },
-];
-
-const CONDITIONS = [
-  { value: 'above', label: 'มากกว่า' },
-  { value: 'below', label: 'น้อยกว่า' },
-  { value: 'equal', label: 'เท่ากับ' },
-  { value: 'between', label: 'อยู่ระหว่าง' },
-];
-
 export function AutomationPage() {
   const { addToast } = useToast();
+  const { t } = useT();
   const [projects, setProjects] = useState<AdminProject[]>([]);
   const [greenhouses, setGreenhouses] = useState<AdminGreenhouse[]>([]);
   const [rules, setRules] = useState<AutomationRule[]>([]);
@@ -59,6 +44,19 @@ export function AutomationPage() {
   const [selectedGh, setSelectedGh] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingRule, setEditingRule] = useState<AutomationRule | null>(null);
+
+  const TRIGGER_TYPES = [
+    { value: 'sensor', label: t('admin.auto.triggerSensor'), icon: Activity },
+    { value: 'time', label: t('admin.auto.triggerTime'), icon: Clock },
+    { value: 'manual', label: t('admin.auto.triggerManual'), icon: Zap },
+  ];
+
+  const CONDITIONS = [
+    { value: 'above', label: t('admin.auto.condAbove') },
+    { value: 'below', label: t('admin.auto.condBelow') },
+    { value: 'equal', label: t('admin.auto.condEqual') },
+    { value: 'between', label: t('admin.auto.condBetween') },
+  ];
 
   useEffect(() => { adminApi.getAdminProjects().then(setProjects).catch(() => {}); }, []);
 
@@ -76,68 +74,87 @@ export function AutomationPage() {
     try {
       const response = await api.get<{ rules: AutomationRule[] }>(`/admin/automation/${selectedProject}/${selectedGh}`);
       if (response.success && response.data) setRules(response.data.rules);
-    } catch { addToast({ type: 'error', message: 'ไม่สามารถโหลดข้อมูลได้' }); }
+    } catch { addToast({ type: 'error', message: t('admin.auto.loadError') }); }
     finally { setIsLoading(false); }
   };
 
   const handleToggle = async (rule: AutomationRule) => {
     try {
       await api.put(`/admin/automation/${selectedProject}/${selectedGh}/${rule.id}/toggle`, {});
-      addToast({ type: 'success', message: rule.is_active ? 'ปิดกฎแล้ว' : 'เปิดกฎแล้ว' });
+      addToast({ type: 'success', message: rule.is_active ? t('admin.auto.toggleOffSuccess') : t('admin.auto.toggleSuccess') });
       fetchRules();
-    } catch { addToast({ type: 'error', message: 'เกิดข้อผิดพลาด' }); }
+    } catch { addToast({ type: 'error', message: t('admin.auto.error') }); }
   };
 
   const handleDelete = async (rule: AutomationRule) => {
-    if (!confirm(`ลบกฎ "${rule.name}"?`)) return;
+    if (!confirm(t('admin.auto.deleteConfirm').replace('{name}', rule.name))) return;
     try {
       await api.delete(`/admin/automation/${selectedProject}/${selectedGh}/${rule.id}`);
-      addToast({ type: 'success', message: 'ลบสำเร็จ' }); fetchRules();
-    } catch { addToast({ type: 'error', message: 'เกิดข้อผิดพลาด' }); }
+      addToast({ type: 'success', message: t('admin.auto.deleteSuccess') });
+      fetchRules();
+    } catch { addToast({ type: 'error', message: t('admin.auto.error') }); }
   };
 
   const getTriggerIcon = (type: string) => {
-    const found = TRIGGER_TYPES.find(t => t.value === type);
+    const found = TRIGGER_TYPES.find(tt => tt.value === type);
     return found ? found.icon : Zap;
   };
 
   const getTriggerLabel = (type: string) => {
-    const found = TRIGGER_TYPES.find(t => t.value === type);
+    const found = TRIGGER_TYPES.find(tt => tt.value === type);
     return found ? found.label : type;
   };
 
+  const getConditionLabel = (cond: string) => {
+    const found = CONDITIONS.find(c => c.value === cond);
+    return found ? found.label : cond;
+  };
+
   return (
-    <AdminLayout title="Automation Rules" subtitle="กฎอัตโนมัติ - ถ้า X แล้ว Y">
+    <AdminLayout title="Automation Rules" subtitle={t('admin.auto.subtitle')}>
       {/* Filters */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">โปรเจกต์</label>
-          <select value={selectedProject} onChange={(e) => setSelectedProject(e.target.value)} className="w-full px-3 py-2 border rounded-lg">
-            <option value="">เลือกโปรเจกต์...</option>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            {t('admin.auto.selectProject')}
+          </label>
+          <select
+            value={selectedProject}
+            onChange={(e) => setSelectedProject(e.target.value)}
+            className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+          >
+            <option value="">{t('admin.auto.selectProjectPlaceholder')}</option>
             {projects.map(p => <option key={p.key} value={p.key}>{p.nameTh}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">โรงเรือน</label>
-          <select value={selectedGh} onChange={(e) => setSelectedGh(e.target.value)} className="w-full px-3 py-2 border rounded-lg" disabled={!selectedProject}>
-            <option value="">เลือกโรงเรือน...</option>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            {t('admin.auto.selectGh')}
+          </label>
+          <select
+            value={selectedGh}
+            onChange={(e) => setSelectedGh(e.target.value)}
+            className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            disabled={!selectedProject}
+          >
+            <option value="">{t('admin.auto.selectGhPlaceholder')}</option>
             {greenhouses.map(g => <option key={g.ghKey} value={g.ghKey}>{g.nameTh}</option>)}
           </select>
         </div>
         <div className="flex items-end">
           <Button onClick={() => { setEditingRule(null); setShowModal(true); }} disabled={!selectedGh}>
-            <Plus className="w-4 h-4" /> เพิ่มกฎ
+            <Plus className="w-4 h-4" /> {t('admin.auto.addRule')}
           </Button>
         </div>
       </div>
 
       {/* Rules List */}
       {!selectedGh ? (
-        <Card><div className="p-8 text-center text-gray-500">กรุณาเลือกโปรเจกต์และโรงเรือน</div></Card>
+        <Card><div className="p-8 text-center text-gray-500 dark:text-gray-400">{t('admin.auto.pleaseSelect')}</div></Card>
       ) : isLoading ? (
-        <Card><div className="p-8 text-center">กำลังโหลด...</div></Card>
+        <Card><div className="p-8 text-center dark:text-gray-400">{t('common.loading')}</div></Card>
       ) : rules.length === 0 ? (
-        <Card><div className="p-8 text-center text-gray-500">ยังไม่มีกฎอัตโนมัติ</div></Card>
+        <Card><div className="p-8 text-center text-gray-500 dark:text-gray-400">{t('admin.auto.noRule')}</div></Card>
       ) : (
         <div className="grid gap-4">
           {rules.map((rule) => {
@@ -146,32 +163,32 @@ export function AutomationPage() {
               <Card key={rule.id} className={`p-4 ${!rule.is_active && 'opacity-50'}`}>
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-4">
-                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${rule.is_active ? 'bg-green-100' : 'bg-gray-100'}`}>
+                    <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${rule.is_active ? 'bg-green-100 dark:bg-green-900/30' : 'bg-gray-100 dark:bg-gray-700'}`}>
                       <TriggerIcon className={`w-6 h-6 ${rule.is_active ? 'text-green-600' : 'text-gray-400'}`} />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-lg">{rule.name}</h3>
-                      {rule.description && <p className="text-sm text-gray-500">{rule.description}</p>}
-                      
+                      <h3 className="font-semibold text-lg dark:text-gray-100">{rule.name}</h3>
+                      {rule.description && <p className="text-sm text-gray-500 dark:text-gray-400">{rule.description}</p>}
+
                       <div className="flex flex-wrap gap-2 mt-2">
                         <Badge variant="secondary">{getTriggerLabel(rule.trigger_type)}</Badge>
-                        
+
                         {rule.trigger_type === 'sensor' && rule.trigger_config.sensor_key && (
                           <Badge variant="primary">
-                            {rule.trigger_config.sensor_key} {CONDITIONS.find(c => c.value === rule.trigger_config.condition)?.label} {rule.trigger_config.value}
+                            {rule.trigger_config.sensor_key} {getConditionLabel(rule.trigger_config.condition || '')} {rule.trigger_config.value}
                           </Badge>
                         )}
-                        
+
                         {rule.trigger_type === 'time' && rule.trigger_config.time && (
-                          <Badge variant="primary">เวลา {rule.trigger_config.time}</Badge>
+                          <Badge variant="primary">{t('admin.auto.timeAt')} {rule.trigger_config.time}</Badge>
                         )}
 
-                        <Badge variant="success">{rule.actions.length} Actions</Badge>
+                        <Badge variant="success">{t('admin.auto.actionsCount').replace('{n}', String(rule.actions.length))}</Badge>
                       </div>
 
                       {rule.last_triggered_at && (
-                        <p className="text-xs text-gray-400 mt-2">
-                          ทำงานล่าสุด: {new Date(rule.last_triggered_at).toLocaleString('th-TH')} ({rule.trigger_count} ครั้ง)
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+                          {t('admin.auto.lastTriggered')} {new Date(rule.last_triggered_at).toLocaleString('th-TH')} ({t('admin.auto.triggerCount').replace('{n}', String(rule.trigger_count))})
                         </p>
                       )}
                     </div>
@@ -218,6 +235,7 @@ function AutomationModal({ projectKey, ghKey, rule, onClose, onSuccess }: {
   onSuccess: () => void;
 }) {
   const { addToast } = useToast();
+  const { t } = useT();
   const [isLoading, setIsLoading] = useState(false);
   const [form, setForm] = useState({
     name: rule?.name || '',
@@ -227,18 +245,25 @@ function AutomationModal({ projectKey, ghKey, rule, onClose, onSuccess }: {
     actions: rule?.actions || [{ type: 'control', control_key: '', action: 'on' }],
   });
 
+  const TRIGGER_TYPES = [
+    { value: 'sensor', label: t('admin.auto.triggerSensor'), icon: Activity },
+    { value: 'time', label: t('admin.auto.triggerTime'), icon: Clock },
+    { value: 'manual', label: t('admin.auto.triggerManual'), icon: Zap },
+  ];
+
+  const CONDITIONS = [
+    { value: 'above', label: t('admin.auto.condAbove') },
+    { value: 'below', label: t('admin.auto.condBelow') },
+    { value: 'equal', label: t('admin.auto.condEqual') },
+    { value: 'between', label: t('admin.auto.condBetween') },
+  ];
+
   const handleAddAction = () => {
-    setForm({
-      ...form,
-      actions: [...form.actions, { type: 'control', control_key: '', action: 'on' }],
-    });
+    setForm({ ...form, actions: [...form.actions, { type: 'control', control_key: '', action: 'on' }] });
   };
 
   const handleRemoveAction = (index: number) => {
-    setForm({
-      ...form,
-      actions: form.actions.filter((_, i) => i !== index),
-    });
+    setForm({ ...form, actions: form.actions.filter((_, i) => i !== index) });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -250,10 +275,10 @@ function AutomationModal({ projectKey, ghKey, rule, onClose, onSuccess }: {
       } else {
         await api.post(`/admin/automation/${projectKey}/${ghKey}`, form);
       }
-      addToast({ type: 'success', message: 'บันทึกสำเร็จ' });
+      addToast({ type: 'success', message: t('admin.auto.saveSuccess') });
       onSuccess();
     } catch (error: any) {
-      addToast({ type: 'error', message: error.message || 'เกิดข้อผิดพลาด' });
+      addToast({ type: 'error', message: error.message || t('admin.auto.error') });
     } finally {
       setIsLoading(false);
     }
@@ -263,27 +288,31 @@ function AutomationModal({ projectKey, ghKey, rule, onClose, onSuccess }: {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="p-6">
-          <h2 className="text-xl font-bold mb-4">{rule ? 'แก้ไขกฎ' : 'สร้างกฎใหม่'}</h2>
-          
+          <h2 className="text-xl font-bold mb-4 dark:text-gray-100">
+            {rule ? t('admin.auto.editTitle') : t('admin.auto.createTitle')}
+          </h2>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              label="ชื่อกฎ"
+              label={t('admin.auto.fieldName')}
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               required
-              placeholder="เช่น เปิดพัดลมเมื่อร้อน"
+              placeholder={t('admin.auto.fieldNamePlaceholder')}
             />
 
             <Input
-              label="คำอธิบาย (optional)"
+              label={t('admin.auto.fieldDesc')}
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="รายละเอียดเพิ่มเติม"
+              placeholder={t('admin.auto.fieldDescPlaceholder')}
             />
 
             {/* Trigger Type */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">ประเภท Trigger</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                {t('admin.auto.triggerType')}
+              </label>
               <div className="flex gap-2">
                 {TRIGGER_TYPES.map(type => (
                   <button
@@ -293,7 +322,7 @@ function AutomationModal({ projectKey, ghKey, rule, onClose, onSuccess }: {
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
                       form.trigger_type === type.value
                         ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-gray-200 hover:border-gray-300'
+                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:text-gray-300'
                     }`}
                   >
                     <type.icon className="w-4 h-4" />
@@ -303,67 +332,59 @@ function AutomationModal({ projectKey, ghKey, rule, onClose, onSuccess }: {
               </div>
             </div>
 
-            {/* Trigger Config based on type */}
+            {/* Trigger Config */}
             {form.trigger_type === 'sensor' && (
               <div className="grid grid-cols-3 gap-4">
                 <Input
-                  label="Sensor Key"
+                  label={t('admin.auto.sensorKey')}
                   value={form.trigger_config.sensor_key || ''}
-                  onChange={(e) => setForm({
-                    ...form,
-                    trigger_config: { ...form.trigger_config, sensor_key: e.target.value }
-                  })}
-                  placeholder="เช่น air_temp"
+                  onChange={(e) => setForm({ ...form, trigger_config: { ...form.trigger_config, sensor_key: e.target.value } })}
+                  placeholder={t('admin.auto.sensorKeyPlaceholder')}
                 />
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">เงื่อนไข</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    {t('admin.auto.condition')}
+                  </label>
                   <select
                     value={form.trigger_config.condition || 'above'}
-                    onChange={(e) => setForm({
-                      ...form,
-                      trigger_config: { ...form.trigger_config, condition: e.target.value as any }
-                    })}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    onChange={(e) => setForm({ ...form, trigger_config: { ...form.trigger_config, condition: e.target.value as any } })}
+                    className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
                   >
                     {CONDITIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                   </select>
                 </div>
                 <Input
-                  label="ค่า"
+                  label={t('admin.auto.value')}
                   type="number"
                   value={form.trigger_config.value || 0}
-                  onChange={(e) => setForm({
-                    ...form,
-                    trigger_config: { ...form.trigger_config, value: parseFloat(e.target.value) }
-                  })}
+                  onChange={(e) => setForm({ ...form, trigger_config: { ...form.trigger_config, value: parseFloat(e.target.value) } })}
                 />
               </div>
             )}
 
             {form.trigger_type === 'time' && (
               <Input
-                label="เวลา"
+                label={t('admin.auto.time')}
                 type="time"
                 value={form.trigger_config.time || ''}
-                onChange={(e) => setForm({
-                  ...form,
-                  trigger_config: { ...form.trigger_config, time: e.target.value }
-                })}
+                onChange={(e) => setForm({ ...form, trigger_config: { ...form.trigger_config, time: e.target.value } })}
               />
             )}
 
             {/* Actions */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-gray-700">Actions (สิ่งที่จะทำ)</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {t('admin.auto.actions')}
+                </label>
                 <Button type="button" variant="outline" size="sm" onClick={handleAddAction}>
-                  <Plus className="w-4 h-4" /> เพิ่ม Action
+                  <Plus className="w-4 h-4" /> {t('admin.auto.addAction')}
                 </Button>
               </div>
-              
+
               <div className="space-y-2">
                 {form.actions.map((action, index) => (
-                  <div key={index} className="flex gap-2 items-center p-3 bg-gray-50 rounded-lg">
+                  <div key={index} className="flex gap-2 items-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                     <select
                       value={action.type}
                       onChange={(e) => {
@@ -371,16 +392,16 @@ function AutomationModal({ projectKey, ghKey, rule, onClose, onSuccess }: {
                         newActions[index] = { ...action, type: e.target.value as any };
                         setForm({ ...form, actions: newActions });
                       }}
-                      className="px-3 py-2 border rounded-lg"
+                      className="px-3 py-2 border rounded-lg dark:bg-gray-600 dark:border-gray-500 dark:text-gray-100"
                     >
-                      <option value="control">ควบคุมอุปกรณ์</option>
-                      <option value="notification">ส่งแจ้งเตือน</option>
+                      <option value="control">{t('admin.auto.actionControl')}</option>
+                      <option value="notification">{t('admin.auto.actionNotif')}</option>
                     </select>
 
                     {action.type === 'control' && (
                       <>
                         <Input
-                          placeholder="Control Key (เช่น fan_1)"
+                          placeholder={t('admin.auto.controlKeyPlaceholder')}
                           value={action.control_key || ''}
                           onChange={(e) => {
                             const newActions = [...form.actions];
@@ -396,11 +417,11 @@ function AutomationModal({ projectKey, ghKey, rule, onClose, onSuccess }: {
                             newActions[index] = { ...action, action: e.target.value };
                             setForm({ ...form, actions: newActions });
                           }}
-                          className="px-3 py-2 border rounded-lg"
+                          className="px-3 py-2 border rounded-lg dark:bg-gray-600 dark:border-gray-500 dark:text-gray-100"
                         >
-                          <option value="on">เปิด</option>
-                          <option value="off">ปิด</option>
-                          <option value="toggle">สลับ</option>
+                          <option value="on">{t('admin.auto.actionOn')}</option>
+                          <option value="off">{t('admin.auto.actionOff')}</option>
+                          <option value="toggle">{t('admin.auto.actionToggle')}</option>
                         </select>
                       </>
                     )}
@@ -414,13 +435,13 @@ function AutomationModal({ projectKey, ghKey, rule, onClose, onSuccess }: {
                             newActions[index] = { ...action, channel: e.target.value };
                             setForm({ ...form, actions: newActions });
                           }}
-                          className="px-3 py-2 border rounded-lg"
+                          className="px-3 py-2 border rounded-lg dark:bg-gray-600 dark:border-gray-500 dark:text-gray-100"
                         >
                           <option value="line">Line</option>
                           <option value="sms">SMS</option>
                         </select>
                         <Input
-                          placeholder="ข้อความ"
+                          placeholder={t('admin.auto.messagePlaceholder')}
                           value={action.message || ''}
                           onChange={(e) => {
                             const newActions = [...form.actions];
@@ -432,13 +453,7 @@ function AutomationModal({ projectKey, ghKey, rule, onClose, onSuccess }: {
                       </>
                     )}
 
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveAction(index)}
-                      className="text-red-600"
-                    >
+                    <Button type="button" variant="ghost" size="sm" onClick={() => handleRemoveAction(index)} className="text-red-600">
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -447,8 +462,8 @@ function AutomationModal({ projectKey, ghKey, rule, onClose, onSuccess }: {
             </div>
 
             <div className="flex gap-2 pt-4">
-              <Button type="button" variant="outline" onClick={onClose} className="flex-1">ยกเลิก</Button>
-              <Button type="submit" isLoading={isLoading} className="flex-1">บันทึก</Button>
+              <Button type="button" variant="outline" onClick={onClose} className="flex-1">{t('common.cancel')}</Button>
+              <Button type="submit" isLoading={isLoading} className="flex-1">{t('common.save')}</Button>
             </div>
           </form>
         </div>
