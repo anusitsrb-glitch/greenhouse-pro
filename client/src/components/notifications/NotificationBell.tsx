@@ -8,12 +8,13 @@ import { createPortal } from 'react-dom';
 import { Bell } from 'lucide-react';
 import { NotificationPanel } from './NotificationPanel';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useT } from '@/i18n';
 import { cn } from '@/lib/utils';
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false;
-    return window.matchMedia('(max-width: 639px)').matches; // < sm
+    return window.matchMedia('(max-width: 639px)').matches;
   });
 
   useEffect(() => {
@@ -33,6 +34,7 @@ function useIsMobile() {
 }
 
 export function NotificationBell() {
+  const { t } = useT();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
@@ -48,18 +50,12 @@ export function NotificationBell() {
     refresh,
   } = useNotifications();
 
-  // click-outside: รองรับทั้ง desktop และ mobile(portal)
   useEffect(() => {
     function handleClickOutside(event: MouseEvent | TouchEvent) {
       const target = event.target as HTMLElement | null;
       if (!target) return;
-
-      // ถ้าคลิกอยู่ใน panel (mobile portal) ไม่ปิด
       if (target.closest('[data-notification-panel]')) return;
-
-      // ถ้าคลิกอยู่ใน bell area ไม่ปิด (ให้ toggle จัดการ)
       if (dropdownRef.current && dropdownRef.current.contains(target)) return;
-
       setIsOpen(false);
     }
 
@@ -104,11 +100,11 @@ export function NotificationBell() {
             ? 'bg-primary/10 text-primary'
             : 'text-gray-600 hover:text-primary hover:bg-primary/5'
         )}
-        aria-label="การแจ้งเตือน"
+        aria-label={t('nav.notifications')}
         type="button"
       >
         <Bell className="w-4 h-4" />
-        <span className="hidden sm:inline">แจ้งเตือน</span>
+        <span className="hidden sm:inline">{t('nav.notifications')}</span>
 
         {unreadCount > 0 && (
           <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-5 h-5 px-1 text-xs font-bold text-white bg-red-500 rounded-full">
