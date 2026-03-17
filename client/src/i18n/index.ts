@@ -13,6 +13,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'app.title': 'GreenHouse Pro',
     'app.subtitle': 'ระบบจัดการโรงเรือนอัจฉริยะ',
 
+    'project.locked': 'ล็อก',
+    'project.viewGreenhouses': 'เข้าดูโรงเรือน',
+    'project.noAccess': 'คุณไม่มีสิทธิ์เข้าถึงโปรเจกต์นี้',
+
     'nav.home': 'หน้าแรก',
     'nav.agriculture': 'การเกษตร',
     'nav.dashboard': 'แดชบอร์ด',
@@ -22,6 +26,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'nav.profile': 'โปรไฟล์',
     'nav.settings': 'ตั้งค่า',
     'nav.logout': 'ออกจากระบบ',
+    'nav.notifications': 'แจ้งเตือน',
 
     'auth.login': 'เข้าสู่ระบบ',
     'auth.logout': 'ออกจากระบบ',
@@ -166,6 +171,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'app.title': 'GreenHouse Pro',
     'app.subtitle': 'Smart Greenhouse Management System',
 
+
+    'project.locked': 'Locked',
+    'project.viewGreenhouses': 'View Greenhouses',
+    'project.noAccess': 'You do not have access to this project',
+
     'nav.home': 'Home',
     'nav.agriculture': 'Agriculture',
     'nav.dashboard': 'Dashboard',
@@ -175,6 +185,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'nav.profile': 'Profile',
     'nav.settings': 'Settings',
     'nav.logout': 'Logout',
+    'nav.notifications': 'Notifications',
 
     'auth.login': 'Login',
     'auth.logout': 'Logout',
@@ -319,6 +330,10 @@ export const translations: Record<Language, Record<string, string>> = {
     'app.title': 'GreenHouse Pro',
     'app.subtitle': 'စမတ်ဖန်လုံအိမ်စီမံခန့်ခွဲမှုစနစ်',
 
+    'project.locked': 'သော့ခတ်ထား',
+    'project.viewGreenhouses': 'ဖန်လုံအိမ်များကြည့်ရန်',
+    'project.noAccess': 'သင့်တွင်ဤပရောဂျက်အတွက် ခွင့်ပြုချက်မရှိပါ',
+
     'nav.home': 'ပင်မစာမျက်နှာ',
     'nav.agriculture': 'စိုက်ပျိုးရေး',
     'nav.dashboard': 'ဒက်ရှ်ဘုတ်',
@@ -328,6 +343,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'nav.profile': 'ပရိုဖိုင်',
     'nav.settings': 'ဆက်တင်များ',
     'nav.logout': 'ထွက်ရန်',
+    'nav.notifications': 'အကြောင်းကြားချက်',
 
     'auth.login': 'ဝင်ရောက်ရန်',
     'auth.logout': 'ထွက်ရန်',

@@ -11,12 +11,12 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Project } from '@/lib/projectsApi';
+import { useT } from '@/i18n';
 
 interface ProjectCardProps {
   project: Project;
 }
 
-// Project-specific icons and gradients
 const PROJECT_STYLES: Record<string, { 
   icon: typeof Leaf; 
   gradient: string;
@@ -45,6 +45,7 @@ const PROJECT_STYLES: Record<string, {
 };
 
 export function ProjectCard({ project }: ProjectCardProps) {
+  const { t } = useT();
   const style = PROJECT_STYLES[project.key] || {
     icon: Building2,
     gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -63,7 +64,6 @@ export function ProjectCard({ project }: ProjectCardProps) {
         isLocked && 'opacity-60 cursor-not-allowed'
       )}
     >
-      {/* Background gradient accent */}
       <div 
         className="absolute top-0 left-0 right-0 h-1.5"
         style={{ background: style.gradient }}
@@ -84,7 +84,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
           {isLocked ? (
             <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-gray-100 text-gray-500 text-xs">
               <Lock className="w-3 h-3" />
-              <span>ล็อก</span>
+              <span>{t('project.locked')}</span>
             </div>
           ) : (
             <span
@@ -95,25 +95,25 @@ export function ProjectCard({ project }: ProjectCardProps) {
                   : 'bg-yellow-100 text-yellow-800'
               )}
             >
-              {project.statusText}
+              {isReady ? t('greenhouse.ready') : t('greenhouse.developing')}
             </span>
           )}
         </div>
 
         {/* Title */}
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
           {project.nameTh}
         </h3>
 
         {/* Stats */}
-        <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
+        <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400 mb-4">
           <div className="flex items-center gap-1">
             <Building2 className="w-4 h-4" />
-            <span>{project.greenhouseCount} โรงเรือน</span>
+            <span>{project.greenhouseCount} {t('page.greenhouse')}</span>
           </div>
           {project.readyGreenhouseCount > 0 && (
             <div className="text-green-600">
-              {project.readyGreenhouseCount} พร้อมใช้งาน
+              {project.readyGreenhouseCount} {t('greenhouse.ready')}
             </div>
           )}
         </div>
@@ -121,7 +121,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
         {/* Action hint */}
         {isReady && !isLocked && (
           <div className="flex items-center justify-end text-primary text-sm font-medium">
-            <span>เข้าดูโรงเรือน</span>
+            <span>{t('project.viewGreenhouses')}</span>
             <ChevronRight className="w-4 h-4" />
           </div>
         )}
@@ -129,14 +129,13 @@ export function ProjectCard({ project }: ProjectCardProps) {
         {/* Locked tooltip */}
         {isLocked && (
           <div className="text-xs text-gray-400">
-            คุณไม่มีสิทธิ์เข้าถึงโปรเจกต์นี้
+            {t('project.noAccess')}
           </div>
         )}
       </div>
     </Card>
   );
 
-  // Wrap with Link if accessible and ready
   if (isReady && !isLocked) {
     return (
       <Link to={`/project/${project.key}`}>
