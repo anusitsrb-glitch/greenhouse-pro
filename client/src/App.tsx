@@ -14,24 +14,21 @@ import {
   AutomationPage, ScenesPage, ControlHistoryPage as AdminControlHistoryPage,
   AdminLayout
 } from '@/pages/admin';
-
+import { AppSettingsProvider, type ThemeMode } from '@/hooks/useAppSettings';
+import type { Language } from '@/i18n';
 import {
   ControlHistoryPage,
   NotificationSettingsPage,
   NotificationsListPage,
 } from '@/pages';
-
 import { ReactNode, useEffect } from 'react';
 import { useOfflineBanner } from '@/hooks/useNetworkStatus';
 import { ENV } from '@/config/env';
-
-// ✅ Patch M2: Android back button
 import { App as CapacitorApp } from '@capacitor/app';
-
 import { 
   CropsPage, GrowthRecordsPage, FertilizerPage, 
   PestDiseasePage, YieldPage, WaterUsagePage,
-  AgriculturePage  // ← เพิ่มตรงนี้
+  AgriculturePage
 } from '@/pages/agriculture';
 
 function hasRole(userRole: string | undefined, allowedRoles: string[]): boolean {
@@ -75,49 +72,23 @@ function PublicRoute({ children }: { children: ReactNode }) {
 
 function AppRoutes() {
   const { toasts, removeToast } = useToast();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
   const { showBanner } = useOfflineBanner();
   const navigate = useNavigate();
 
-  // ✅ Patch M2: Android back button — ย้อน route แทนการออกแอป
   useEffect(() => {
     if (!ENV.IS_CAPACITOR) return;
-
     const handler = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
       if (canGoBack) {
         navigate(-1);
       } else {
-        // อยู่หน้าแรกสุดแล้ว → ออกแอป
         CapacitorApp.exitApp();
       }
     });
-
     return () => {
       handler.then((h) => h.remove());
     };
   }, [navigate]);
-
-  useEffect(() => {
-    if (!user?.theme) return;
-
-    if (user.theme === 'dark') {
-      document.documentElement.classList.add('dark');
-      return;
-    }
-
-    if (user.theme === 'light') {
-      document.documentElement.classList.remove('dark');
-      return;
-    }
-
-    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [user]);
 
   return (
     <>
@@ -131,7 +102,6 @@ function AppRoutes() {
       
       <Routes>
         <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-        
         <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         <Route path="/project/:projectKey" element={<ProtectedRoute><ProjectPage /></ProtectedRoute>} />
@@ -143,13 +113,10 @@ function AppRoutes() {
         <Route path="/agriculture/pest-disease" element={<ProtectedRoute><PestDiseasePage /></ProtectedRoute>} />
         <Route path="/agriculture/yield" element={<ProtectedRoute><YieldPage /></ProtectedRoute>} />
         <Route path="/agriculture/water" element={<ProtectedRoute><WaterUsagePage /></ProtectedRoute>} />
-        
         <Route path="/alerts" element={<ProtectedRoute><AlertsPage /></ProtectedRoute>} />
-        
         <Route path="/control-history" element={<ProtectedRoute><ControlHistoryPage /></ProtectedRoute>} />
         <Route path="/notifications" element={<ProtectedRoute><NotificationsListPage /></ProtectedRoute>} />
         <Route path="/notifications/settings" element={<ProtectedRoute><NotificationSettingsPage /></ProtectedRoute>} />
-        
         <Route path="/admin/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
         <Route path="/admin/projects" element={<AdminRoute><ProjectsPage /></AdminRoute>} />
         <Route path="/admin/greenhouses" element={<AdminRoute><GreenhousesPage /></AdminRoute>} />
@@ -161,7 +128,6 @@ function AppRoutes() {
         <Route path="/admin/automation" element={<AdminRoute><AutomationPage /></AdminRoute>} />
         <Route path="/admin/scenes" element={<AdminRoute><ScenesPage /></AdminRoute>} />
         <Route path="/admin/control-history" element={<AdminRoute><AdminControlHistoryPage /></AdminRoute>} />
-        
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       
@@ -170,11 +136,29 @@ function AppRoutes() {
   );
 }
 
+// ✅ แก้: รอ user โหลดเสร็จก่อน render AppSettingsProvider
+// เพื่อให้ initialLanguage / initialTheme ได้ค่าจริงจาก user
+function AppInner() {
+  const { user, isLoading } = useAuth();
+
+  // รอ checkAuth เสร็จก่อน — ถ้า render ก่อนจะได้ 'th'/'light' เป็น initial เสมอ
+  if (isLoading) return <PageLoading />;
+
+  return (
+    <AppSettingsProvider
+      initialLanguage={(user?.language as Language) || 'th'}
+      initialTheme={(user?.theme as ThemeMode) || 'light'}
+    >
+      <AppRoutes />
+    </AppSettingsProvider>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <AppInner />
       </AuthProvider>
     </BrowserRouter>
   );
