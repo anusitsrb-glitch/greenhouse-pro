@@ -5,8 +5,10 @@ import { GreenhouseCard, GreenhouseCardSkeleton } from '@/components/projects';
 import { Button } from '@/components/ui';
 import { projectsApi, ProjectDetail, Greenhouse } from '@/lib/projectsApi';
 import { AlertCircle, RefreshCw, ArrowLeft, Building2 } from 'lucide-react';
+import { useT } from '@/i18n';
 
 export function ProjectPage() {
+  const { t } = useT();
   const { projectKey } = useParams<{ projectKey: string }>();
   const navigate = useNavigate();
   
@@ -17,16 +19,14 @@ export function ProjectPage() {
 
   const fetchData = async () => {
     if (!projectKey) return;
-    
     setIsLoading(true);
     setError(null);
-    
     try {
       const data = await projectsApi.getGreenhouses(projectKey);
       setProject(data.project);
       setGreenhouses(data.greenhouses);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูลได้');
+      setError(err instanceof Error ? err.message : t('msg.error'));
     } finally {
       setIsLoading(false);
     }
@@ -36,11 +36,7 @@ export function ProjectPage() {
     fetchData();
   }, [projectKey]);
 
-  const breadcrumbs = project ? [
-    { label: project.nameTh }
-  ] : [];
-
-  // Count ready vs developing
+  const breadcrumbs = project ? [{ label: project.nameTh }] : [];
   const readyCount = greenhouses.filter(g => g.status === 'ready').length;
   const developingCount = greenhouses.length - readyCount;
 
@@ -54,7 +50,7 @@ export function ProjectPage() {
         className="mb-4 -ml-2 md:hidden"
       >
         <ArrowLeft className="w-4 h-4" />
-        กลับ
+        {t('common.back')}
       </Button>
 
       {/* Page Header */}
@@ -64,14 +60,14 @@ export function ProjectPage() {
             <Building2 className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              {project?.nameTh || 'กำลังโหลด...'}
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              {project?.nameTh || t('page.loading')}
             </h1>
             {!isLoading && (
-              <p className="text-sm text-gray-500">
-                {greenhouses.length} โรงเรือน
-                {readyCount > 0 && ` • ${readyCount} พร้อมใช้งาน`}
-                {developingCount > 0 && ` • ${developingCount} กำลังพัฒนา`}
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {greenhouses.length} {t('page.greenhouse')}
+                {readyCount > 0 && ` • ${readyCount} ${t('page.ready')}`}
+                {developingCount > 0 && ` • ${developingCount} ${t('page.developing')}`}
               </p>
             )}
           </div>
@@ -80,18 +76,18 @@ export function ProjectPage() {
 
       {/* Error State */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-6">
           <div className="flex items-center gap-3">
             <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
             <div className="flex-1">
-              <p className="text-red-800">{error}</p>
+              <p className="text-red-800 dark:text-red-400">{error}</p>
             </div>
             <button
               onClick={fetchData}
               className="flex items-center gap-1 text-sm text-red-600 hover:text-red-800"
             >
               <RefreshCw className="w-4 h-4" />
-              ลองใหม่
+              {t('common.retry')}
             </button>
           </div>
         </div>
@@ -122,14 +118,14 @@ export function ProjectPage() {
       {/* Empty State */}
       {!isLoading && !error && greenhouses.length === 0 && (
         <div className="text-center py-12">
-          <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+          <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-4">
             <Building2 className="w-8 h-8 text-gray-400" />
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
-            ไม่พบโรงเรือน
+          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+            {t('page.noGreenhouse')}
           </h3>
-          <p className="text-gray-500">
-            โปรเจกต์นี้ยังไม่มีโรงเรือน
+          <p className="text-gray-500 dark:text-gray-400">
+            {t('page.noGreenhouseDesc')}
           </p>
         </div>
       )}

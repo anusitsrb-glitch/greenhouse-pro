@@ -10,7 +10,7 @@ import {
   DashboardTab,
   ChartsTab,
   TimersTab,
-  AutomationTab, // ← ชื่อเดิม ไม่ต้องเปลี่ยน
+  AutomationTab,
   TabKey 
 } from '@/components/greenhouse';
 import { Button, Loading } from '@/components/ui';
@@ -18,8 +18,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { projectsApi, GreenhouseDetail, ProjectDetail } from '@/lib/projectsApi';
 import { tbApi } from '@/lib/tbApi';
 import { AlertCircle, RefreshCw, ArrowLeft, Wifi, WifiOff } from 'lucide-react';
+import { useT } from '@/i18n';
 
 export function GreenhousePage() {
+  const { t } = useT();
   const { projectKey, ghKey } = useParams<{ projectKey: string; ghKey: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -30,13 +32,10 @@ export function GreenhousePage() {
   const [error, setError] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState<boolean | null>(null);
   const [lastStatusCheck, setLastStatusCheck] = useState<number>(Date.now());
-  
-  // Default tab is Soil (ค่าดิน)
   const [activeTab, setActiveTab] = useState<TabKey>('soil');
 
   const checkDeviceStatus = useCallback(async () => {
     if (!projectKey || !ghKey) return;
-    
     try {
       const status = await tbApi.getDeviceStatus(projectKey, ghKey);
       setIsOnline(status.online);
@@ -49,21 +48,17 @@ export function GreenhousePage() {
 
   const fetchData = async () => {
     if (!projectKey || !ghKey) return;
-    
     setIsLoading(true);
     setError(null);
-    
     try {
       const data = await projectsApi.getGreenhouse(projectKey, ghKey);
       setGreenhouse(data.greenhouse);
       setProject(data.project);
-      
-      // Check device status if device is linked
       if (data.greenhouse.hasDevice) {
         await checkDeviceStatus();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูลได้');
+      setError(err instanceof Error ? err.message : t('msg.error'));
     } finally {
       setIsLoading(false);
     }
@@ -73,31 +68,24 @@ export function GreenhousePage() {
     fetchData();
   }, [projectKey, ghKey]);
 
-  // หมายเลข 1: Polling สถานะออนไลน์/ออฟไลน์ทุก 30 วินาที
   useEffect(() => {
     if (!greenhouse?.hasDevice) return;
-
     const interval = setInterval(() => {
       checkDeviceStatus();
-    }, 30000); // 30 seconds
-
+    }, 30000);
     return () => clearInterval(interval);
   }, [greenhouse?.hasDevice, checkDeviceStatus]);
 
-  // Determine if controls should be disabled
   const isDeveloping = greenhouse?.status === 'developing' || !greenhouse?.hasDevice;
   const isDeviceOffline = isOnline === false;
-  const controlsDisabled = isDeveloping || isDeviceOffline;
 
   const breadcrumbs = project && greenhouse ? [
     { label: project.nameTh, href: `/project/${projectKey}` },
     { label: greenhouse.nameTh }
   ] : [];
 
-  // Render tab content
   const renderTabContent = () => {
     if (!projectKey || !ghKey) return null;
-
     const isReady = greenhouse?.status === 'ready' && greenhouse?.hasDevice;
     const deviceOnline = isOnline === true;
     const userRole = user?.role || 'viewer';
@@ -108,35 +96,11 @@ export function GreenhousePage() {
       case 'charts':
         return <ChartsTab project={projectKey} gh={ghKey} isReady={isReady} />;
       case 'dashboard':
-        return (
-          <DashboardTab 
-            project={projectKey} 
-            gh={ghKey} 
-            isReady={isReady}
-            isOnline={deviceOnline}
-            userRole={userRole}
-          />
-        );
+        return <DashboardTab project={projectKey} gh={ghKey} isReady={isReady} isOnline={deviceOnline} userRole={userRole} />;
       case 'timers':
-        return (
-          <TimersTab 
-            project={projectKey} 
-            gh={ghKey} 
-            isReady={isReady}
-            isOnline={deviceOnline}
-            userRole={userRole}
-          />
-        );
-      case 'automation': // NEW!
-        return (
-          <AutomationTab 
-            project={projectKey} 
-            gh={ghKey} 
-            isReady={isReady}
-            isOnline={deviceOnline}
-            userRole={userRole}
-          />
-        );
+        return <TimersTab project={projectKey} gh={ghKey} isReady={isReady} isOnline={deviceOnline} userRole={userRole} />;
+      case 'automation':
+        return <AutomationTab project={projectKey} gh={ghKey} isReady={isReady} isOnline={deviceOnline} userRole={userRole} />;
       default:
         return null;
     }
@@ -145,7 +109,7 @@ export function GreenhousePage() {
   if (isLoading) {
     return (
       <PageContainer>
-        <Loading message="กำลังโหลดข้อมูลโรงเรือน..." />
+        <Loading message={t('page.loadingGreenhouse')} />
       </PageContainer>
     );
   }
@@ -153,18 +117,20 @@ export function GreenhousePage() {
   if (error) {
     return (
       <PageContainer>
-        <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-center">
           <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-red-800 mb-2">เกิดข้อผิดพลาด</h3>
-          <p className="text-red-600 mb-4">{error}</p>
+          <h3 className="text-lg font-medium text-red-800 dark:text-red-400 mb-2">
+            {t('common.error')}
+          </h3>
+          <p className="text-red-600 dark:text-red-400 mb-4">{error}</p>
           <div className="flex gap-2 justify-center">
             <Button variant="outline" onClick={() => navigate(-1)}>
               <ArrowLeft className="w-4 h-4" />
-              กลับ
+              {t('common.back')}
             </Button>
             <Button onClick={fetchData}>
               <RefreshCw className="w-4 h-4" />
-              ลองใหม่
+              {t('common.retry')}
             </Button>
           </div>
         </div>
@@ -182,7 +148,7 @@ export function GreenhousePage() {
         className="mb-4 -ml-2 md:hidden"
       >
         <ArrowLeft className="w-4 h-4" />
-        กลับ
+        {t('common.back')}
       </Button>
 
       {/* Page Header */}
@@ -192,10 +158,10 @@ export function GreenhousePage() {
             {greenhouse?.ghKey.match(/\d+/)?.[0] || '?'}
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">
+            <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">
               {greenhouse?.nameTh}
             </h1>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               {project?.nameTh}
             </p>
           </div>
@@ -204,19 +170,19 @@ export function GreenhousePage() {
         {/* Online/Offline Status */}
         {greenhouse?.hasDevice && (
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
-            isOnline 
-              ? 'bg-green-100 text-green-800' 
+            isOnline
+              ? 'bg-green-100 text-green-800'
               : 'bg-red-100 text-red-800'
           }`}>
             {isOnline ? (
               <>
                 <Wifi className="w-4 h-4" />
-                <span>ออนไลน์</span>
+                <span>{t('page.online')}</span>
               </>
             ) : (
               <>
                 <WifiOff className="w-4 h-4" />
-                <span>ออฟไลน์</span>
+                <span>{t('page.offline')}</span>
               </>
             )}
           </div>
