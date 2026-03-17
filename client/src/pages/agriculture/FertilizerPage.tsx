@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/useToast';
 import { api } from '@/lib/api';
 import { adminApi, AdminProject, AdminGreenhouse } from '@/lib/adminApi';
 import { Plus, Check, Calendar, Droplets, AlertCircle, Pencil, Trash2 } from 'lucide-react';
+import { useT } from '@/i18n';
 
 interface FertilizerSchedule {
   id: number;
@@ -21,6 +22,7 @@ interface FertilizerSchedule {
 }
 
 export function FertilizerPage() {
+  const { t } = useT();
   const { addToast } = useToast();
   const [projects, setProjects] = useState<AdminProject[]>([]);
   const [greenhouses, setGreenhouses] = useState<AdminGreenhouse[]>([]);
@@ -47,28 +49,25 @@ export function FertilizerPage() {
       params.append('completed', showCompleted ? 'true' : 'false');
       const response = await api.get<{ schedules: FertilizerSchedule[] }>(`/agriculture/fertilizer?${params}`);
       if (response.success && response.data) setSchedules(response.data.schedules);
-    } catch { addToast({ type: 'error', message: 'ไม่สามารถโหลดข้อมูลได้' }); }
+    } catch { addToast({ type: 'error', message: t('common.error') }); }
     finally { setIsLoading(false); }
   };
 
   const handleComplete = async (schedule: FertilizerSchedule) => {
     try {
       await api.put(`/agriculture/fertilizer/${schedule.id}/complete`, {});
-      addToast({ 
-        type: 'success', 
-        message: 'บันทึกสำเร็จ ดูประวัติได้ที่ ✓ แสดงที่เสร็จแล้ว' 
-      });
+      addToast({ type: 'success', message: t('agri.fertilizer.completeSuccess') });
       fetchSchedules();
-    } catch { addToast({ type: 'error', message: 'เกิดข้อผิดพลาด' }); }
+    } catch { addToast({ type: 'error', message: t('common.error') }); }
   };
 
   const handleDelete = async (schedule: FertilizerSchedule) => {
-    if (!confirm(`ลบ "${schedule.fertilizer_name}"?`)) return;
+    if (!confirm(`${t('agri.fertilizer.confirmDelete')} "${schedule.fertilizer_name}"?`)) return;
     try {
       await api.delete(`/agriculture/fertilizer/${schedule.id}`);
-      addToast({ type: 'success', message: 'ลบสำเร็จ' });
+      addToast({ type: 'success', message: t('msg.deleted') });
       fetchSchedules();
-    } catch { addToast({ type: 'error', message: 'เกิดข้อผิดพลาด' }); }
+    } catch { addToast({ type: 'error', message: t('common.error') }); }
   };
 
   const today = new Date().toISOString().split('T')[0];
@@ -78,31 +77,31 @@ export function FertilizerPage() {
   const completed = schedules.filter(s => s.is_completed);
 
   return (
-    <PageContainer title="ตารางใส่ปุ๋ย" subtitle="วางแผนและติดตามการใส่ปุ๋ย">
+    <PageContainer title={t('agri.menu.fertilizer')} subtitle={t('agri.menu.fertilizerDesc')}>
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <Card className="p-4 border-l-4 border-red-500">
           <div className="flex items-center gap-3">
             <AlertCircle className="w-8 h-8 text-red-500" />
-            <div><p className="text-2xl font-bold text-red-600">{overdue.length}</p><p className="text-sm text-gray-500">เกินกำหนด</p></div>
+            <div><p className="text-2xl font-bold text-red-600">{overdue.length}</p><p className="text-sm text-gray-500">{t('agri.fertilizer.overdue')}</p></div>
           </div>
         </Card>
         <Card className="p-4 border-l-4 border-yellow-500">
           <div className="flex items-center gap-3">
             <Calendar className="w-8 h-8 text-yellow-500" />
-            <div><p className="text-2xl font-bold text-yellow-600">{todayTasks.length}</p><p className="text-sm text-gray-500">วันนี้</p></div>
+            <div><p className="text-2xl font-bold text-yellow-600">{todayTasks.length}</p><p className="text-sm text-gray-500">{t('agri.fertilizer.today')}</p></div>
           </div>
         </Card>
         <Card className="p-4 border-l-4 border-blue-500">
           <div className="flex items-center gap-3">
             <Droplets className="w-8 h-8 text-blue-500" />
-            <div><p className="text-2xl font-bold text-blue-600">{upcoming.length}</p><p className="text-sm text-gray-500">กำลังจะมา</p></div>
+            <div><p className="text-2xl font-bold text-blue-600">{upcoming.length}</p><p className="text-sm text-gray-500">{t('agri.fertilizer.upcoming')}</p></div>
           </div>
         </Card>
         <Card className="p-4 border-l-4 border-green-500">
           <div className="flex items-center gap-3">
             <Check className="w-8 h-8 text-green-500" />
-            <div><p className="text-2xl font-bold text-green-600">{completed.length}</p><p className="text-sm text-gray-500">เสร็จแล้ว</p></div>
+            <div><p className="text-2xl font-bold text-green-600">{completed.length}</p><p className="text-sm text-gray-500">{t('agri.fertilizer.completed')}</p></div>
           </div>
         </Card>
       </div>
@@ -110,57 +109,53 @@ export function FertilizerPage() {
       {/* Filters */}
       <div className="flex flex-wrap gap-4 mb-6">
         <select value={selectedProject} onChange={(e) => setSelectedProject(e.target.value)} className="px-3 py-2 border rounded-lg">
-          <option value="">ทุกโปรเจกต์</option>
+          <option value="">{t('agri.filter.allProjects')}</option>
           {projects.map(p => <option key={p.key} value={p.key}>{p.nameTh}</option>)}
         </select>
         <select value={selectedGh} onChange={(e) => setSelectedGh(e.target.value)} className="px-3 py-2 border rounded-lg" disabled={!selectedProject}>
-          <option value="">ทุกโรงเรือน</option>
+          <option value="">{t('agri.filter.allGreenhouses')}</option>
           {greenhouses.map(g => <option key={g.ghKey} value={g.ghKey}>{g.nameTh}</option>)}
         </select>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={showCompleted} onChange={(e) => setShowCompleted(e.target.checked)} className="rounded" />
-          <span className="text-sm">แสดงที่เสร็จแล้ว</span>
+          <span className="text-sm">{t('agri.fertilizer.showCompleted')}</span>
         </label>
         <div className="flex-1" />
         <Button onClick={() => { setEditingSchedule(null); setShowModal(true); }}>
-          <Plus className="w-4 h-4" /> เพิ่มตาราง
+          <Plus className="w-4 h-4" /> {t('agri.fertilizer.addSchedule')}
         </Button>
       </div>
 
-      {/* Overdue */}
       {overdue.length > 0 && (
         <div className="mb-6">
-          <h3 className="text-lg font-semibold text-red-600 mb-3">⚠️ เกินกำหนด ({overdue.length})</h3>
+          <h3 className="text-lg font-semibold text-red-600 mb-3">⚠️ {t('agri.fertilizer.overdue')} ({overdue.length})</h3>
           <div className="grid gap-3">
             {overdue.map(s => <ScheduleCard key={s.id} schedule={s} onComplete={handleComplete} onEdit={(s) => { setEditingSchedule(s); setShowModal(true); }} onDelete={handleDelete} isOverdue />)}
           </div>
         </div>
       )}
 
-      {/* Today */}
       {todayTasks.length > 0 && (
         <div className="mb-6">
-          <h3 className="text-lg font-semibold text-yellow-600 mb-3">📅 วันนี้ ({todayTasks.length})</h3>
+          <h3 className="text-lg font-semibold text-yellow-600 mb-3">📅 {t('agri.fertilizer.today')} ({todayTasks.length})</h3>
           <div className="grid gap-3">
             {todayTasks.map(s => <ScheduleCard key={s.id} schedule={s} onComplete={handleComplete} onEdit={(s) => { setEditingSchedule(s); setShowModal(true); }} onDelete={handleDelete} isToday />)}
           </div>
         </div>
       )}
 
-      {/* Upcoming */}
       {upcoming.length > 0 && (
         <div className="mb-6">
-          <h3 className="text-lg font-semibold text-blue-600 mb-3">📆 กำลังจะมา ({upcoming.length})</h3>
+          <h3 className="text-lg font-semibold text-blue-600 mb-3">📆 {t('agri.fertilizer.upcoming')} ({upcoming.length})</h3>
           <div className="grid gap-3">
             {upcoming.map(s => <ScheduleCard key={s.id} schedule={s} onComplete={handleComplete} onEdit={(s) => { setEditingSchedule(s); setShowModal(true); }} onDelete={handleDelete} />)}
           </div>
         </div>
       )}
 
-      {/* Completed */}
       {showCompleted && completed.length > 0 && (
         <div className="mb-6">
-          <h3 className="text-lg font-semibold text-green-600 mb-3">✅ เสร็จแล้ว ({completed.length})</h3>
+          <h3 className="text-lg font-semibold text-green-600 mb-3">✅ {t('agri.fertilizer.completed')} ({completed.length})</h3>
           <div className="grid gap-3">
             {completed.map(s => <ScheduleCard key={s.id} schedule={s} onComplete={handleComplete} onEdit={(s) => { setEditingSchedule(s); setShowModal(true); }} onDelete={handleDelete} isCompleted />)}
           </div>
@@ -168,7 +163,7 @@ export function FertilizerPage() {
       )}
 
       {schedules.length === 0 && !isLoading && (
-        <Card><div className="p-8 text-center text-gray-500">ยังไม่มีตารางใส่ปุ๋ย</div></Card>
+        <Card><div className="p-8 text-center text-gray-500">{t('agri.fertilizer.noData')}</div></Card>
       )}
 
       {showModal && (
@@ -192,6 +187,7 @@ function ScheduleCard({ schedule, onComplete, onEdit, onDelete, isOverdue, isTod
   isToday?: boolean;
   isCompleted?: boolean;
 }) {
+  const { t } = useT();
   const borderColor = isOverdue ? 'border-l-red-500' : isToday ? 'border-l-yellow-500' : isCompleted ? 'border-l-green-500' : 'border-l-blue-500';
 
   return (
@@ -217,29 +213,19 @@ function ScheduleCard({ schedule, onComplete, onEdit, onDelete, isOverdue, isTod
           <p className="text-sm font-medium">{new Date(schedule.schedule_date).toLocaleDateString('th-TH')}</p>
           {!isCompleted && (
             <div className="flex gap-1 mt-2 justify-end">
-              <Button size="sm" onClick={() => onComplete(schedule)}>
-                <Check className="w-4 h-4" />
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => onEdit(schedule)}>
-                <Pencil className="w-4 h-4" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => onDelete(schedule)} className="text-red-600">
-                <Trash2 className="w-4 h-4" />
-              </Button>
+              <Button size="sm" onClick={() => onComplete(schedule)}><Check className="w-4 h-4" /></Button>
+              <Button size="sm" variant="outline" onClick={() => onEdit(schedule)}><Pencil className="w-4 h-4" /></Button>
+              <Button size="sm" variant="ghost" onClick={() => onDelete(schedule)} className="text-red-600"><Trash2 className="w-4 h-4" /></Button>
             </div>
           )}
           {isCompleted && (
             <div className="text-right">
               {schedule.completed_at && (
-                <p className="text-xs text-gray-400 mt-1">เสร็จ: {new Date(schedule.completed_at).toLocaleString('th-TH')}</p>
+                <p className="text-xs text-gray-400 mt-1">{t('agri.fertilizer.completedAt')}: {new Date(schedule.completed_at).toLocaleString('th-TH')}</p>
               )}
               <div className="flex gap-1 mt-2 justify-end">
-                <Button size="sm" variant="outline" onClick={() => onEdit(schedule)}>
-                  <Pencil className="w-4 h-4" />
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => onDelete(schedule)} className="text-red-600">
-                  <Trash2 className="w-4 h-4" />
-                </Button>
+                <Button size="sm" variant="outline" onClick={() => onEdit(schedule)}><Pencil className="w-4 h-4" /></Button>
+                <Button size="sm" variant="ghost" onClick={() => onDelete(schedule)} className="text-red-600"><Trash2 className="w-4 h-4" /></Button>
               </div>
             </div>
           )}
@@ -256,6 +242,7 @@ function FertilizerModal({ schedule, projects, onClose, onSuccess }: {
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { t } = useT();
   const { addToast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [greenhouses, setGreenhouses] = useState<AdminGreenhouse[]>([]);
@@ -280,14 +267,14 @@ function FertilizerModal({ schedule, projects, onClose, onSuccess }: {
     try {
       if (schedule) {
         await api.put(`/agriculture/fertilizer/${schedule.id}`, form);
-        addToast({ type: 'success', message: 'อัปเดตสำเร็จ' });
+        addToast({ type: 'success', message: t('msg.saved') });
       } else {
         await api.post('/agriculture/fertilizer', form);
-        addToast({ type: 'success', message: 'เพิ่มตารางสำเร็จ' });
+        addToast({ type: 'success', message: t('agri.fertilizer.addSuccess') });
       }
       onSuccess();
     } catch (error: any) {
-      addToast({ type: 'error', message: error.message || 'เกิดข้อผิดพลาด' });
+      addToast({ type: 'error', message: error.message || t('common.error') });
     } finally {
       setIsLoading(false);
     }
@@ -297,59 +284,59 @@ function FertilizerModal({ schedule, projects, onClose, onSuccess }: {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-md">
         <div className="p-6">
-          <h2 className="text-xl font-bold mb-4">{schedule ? 'แก้ไขตารางใส่ปุ๋ย' : 'เพิ่มตารางใส่ปุ๋ย'}</h2>
+          <h2 className="text-xl font-bold mb-4">{schedule ? t('agri.fertilizer.editTitle') : t('agri.fertilizer.addTitle')}</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             {!schedule && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">โปรเจกต์</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('agri.label.project')}</label>
                   <select value={form.project_key} onChange={(e) => setForm({ ...form, project_key: e.target.value, gh_key: '' })} className="w-full px-3 py-2 border rounded-lg" required>
-                    <option value="">เลือก...</option>
+                    <option value="">{t('agri.label.select')}</option>
                     {projects.map(p => <option key={p.key} value={p.key}>{p.nameTh}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">โรงเรือน</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('agri.label.greenhouse')}</label>
                   <select value={form.gh_key} onChange={(e) => setForm({ ...form, gh_key: e.target.value })} className="w-full px-3 py-2 border rounded-lg" required disabled={!form.project_key}>
-                    <option value="">เลือก...</option>
+                    <option value="">{t('agri.label.select')}</option>
                     {greenhouses.map(g => <option key={g.ghKey} value={g.ghKey}>{g.nameTh}</option>)}
                   </select>
                 </div>
               </div>
             )}
-            <Input label="ชื่อปุ๋ย" value={form.fertilizer_name} onChange={(e) => setForm({ ...form, fertilizer_name: e.target.value })} required placeholder="เช่น ปุ๋ยเคมี 16-16-16" />
+            <Input label={t('agri.fertilizer.fieldName')} value={form.fertilizer_name} onChange={(e) => setForm({ ...form, fertilizer_name: e.target.value })} required placeholder={t('agri.fertilizer.fieldNamePlaceholder')} />
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">ประเภท</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('agri.fertilizer.fieldType')}</label>
                 <select value={form.fertilizer_type} onChange={(e) => setForm({ ...form, fertilizer_type: e.target.value })} className="w-full px-3 py-2 border rounded-lg">
-                  <option value="">เลือก...</option>
-                  <option value="chemical">ปุ๋ยเคมี</option>
-                  <option value="organic">ปุ๋ยอินทรีย์</option>
-                  <option value="bio">ปุ๋ยชีวภาพ</option>
-                  <option value="foliar">ปุ๋ยทางใบ</option>
+                  <option value="">{t('agri.label.select')}</option>
+                  <option value="chemical">{t('agri.fertilizer.typeChemical')}</option>
+                  <option value="organic">{t('agri.fertilizer.typeOrganic')}</option>
+                  <option value="bio">{t('agri.fertilizer.typeBio')}</option>
+                  <option value="foliar">{t('agri.fertilizer.typeFoliar')}</option>
                 </select>
               </div>
-              <Input label="วันที่" type="date" value={form.schedule_date} onChange={(e) => setForm({ ...form, schedule_date: e.target.value })} required />
+              <Input label={t('agri.fertilizer.fieldDate')} type="date" value={form.schedule_date} onChange={(e) => setForm({ ...form, schedule_date: e.target.value })} required />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <Input label="ปริมาณ" type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="เช่น 500" />
+              <Input label={t('agri.fertilizer.fieldAmount')} type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="500" />
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">หน่วย</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('agri.col.unit')}</label>
                 <select value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} className="w-full px-3 py-2 border rounded-lg">
-                  <option value="g">กรัม (g)</option>
-                  <option value="kg">กิโลกรัม (kg)</option>
-                  <option value="ml">มิลลิลิตร (ml)</option>
-                  <option value="l">ลิตร (l)</option>
+                  <option value="g">g</option>
+                  <option value="kg">kg</option>
+                  <option value="ml">ml</option>
+                  <option value="l">l</option>
                 </select>
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">บันทึก</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('agri.label.notes')}</label>
               <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="w-full px-3 py-2 border rounded-lg" rows={2} />
             </div>
             <div className="flex gap-2 pt-4">
-              <Button type="button" variant="outline" onClick={onClose} className="flex-1">ยกเลิก</Button>
-              <Button type="submit" isLoading={isLoading} className="flex-1">บันทึก</Button>
+              <Button type="button" variant="outline" onClick={onClose} className="flex-1">{t('common.cancel')}</Button>
+              <Button type="submit" isLoading={isLoading} className="flex-1">{t('common.save')}</Button>
             </div>
           </form>
         </div>
