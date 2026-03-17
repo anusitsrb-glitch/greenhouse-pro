@@ -10,12 +10,11 @@ export type Language = 'th' | 'en' | 'mm';
 
 export const translations: Record<Language, Record<string, string>> = {
   th: {
-    // App
     'app.title': 'GreenHouse Pro',
     'app.subtitle': 'ระบบจัดการโรงเรือนอัจฉริยะ',
 
-    // Navigation
     'nav.home': 'หน้าแรก',
+    'nav.agriculture': 'การเกษตร',
     'nav.dashboard': 'แดชบอร์ด',
     'nav.projects': 'โปรเจกต์',
     'nav.greenhouses': 'โรงเรือน',
@@ -24,7 +23,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'nav.settings': 'ตั้งค่า',
     'nav.logout': 'ออกจากระบบ',
 
-    // Auth
     'auth.login': 'เข้าสู่ระบบ',
     'auth.logout': 'ออกจากระบบ',
     'auth.username': 'ชื่อผู้ใช้',
@@ -32,7 +30,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'auth.remember': 'จดจำฉัน',
     'auth.forgot': 'ลืมรหัสผ่าน?',
 
-    // Common
     'common.save': 'บันทึก',
     'common.cancel': 'ยกเลิก',
     'common.delete': 'ลบ',
@@ -62,8 +59,23 @@ export const translations: Record<Language, Record<string, string>> = {
     'common.time': 'เวลา',
     'common.yes': 'ใช่',
     'common.no': 'ไม่',
+    'common.retry': 'ลองใหม่',
+    'common.error': 'เกิดข้อผิดพลาด',
 
-    // Dashboard
+    'page.selectProject': 'เลือกโปรเจกต์',
+    'page.selectProjectDesc': 'เลือกโปรเจกต์ที่ต้องการจัดการโรงเรือน',
+    'page.noProject': 'ไม่พบโปรเจกต์',
+    'page.noProjectDesc': 'คุณยังไม่มีสิทธิ์เข้าถึงโปรเจกต์ใดๆ',
+    'page.noGreenhouse': 'ไม่พบโรงเรือน',
+    'page.noGreenhouseDesc': 'โปรเจกต์นี้ยังไม่มีโรงเรือน',
+    'page.loadingGreenhouse': 'กำลังโหลดข้อมูลโรงเรือน...',
+    'page.online': 'ออนไลน์',
+    'page.offline': 'ออฟไลน์',
+    'page.ready': 'พร้อมใช้งาน',
+    'page.developing': 'กำลังพัฒนา',
+    'page.greenhouse': 'โรงเรือน',
+    'page.loading': 'กำลังโหลด...',
+
     'dashboard.soilTab': 'ค่าดิน',
     'dashboard.chartsTab': 'กราฟ',
     'dashboard.controlTab': 'ควบคุม',
@@ -77,7 +89,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'dashboard.offline': 'ออฟไลน์',
     'dashboard.lastUpdate': 'อัพเดทล่าสุด',
 
-    // Sensors
     'sensor.air': 'อากาศ',
     'sensor.soil': 'ดิน',
     'sensor.water': 'น้ำ',
@@ -86,7 +97,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'sensor.ec': 'ค่า EC',
     'sensor.ph': 'ค่า pH',
 
-    // Controls
     'control.on': 'เปิด',
     'control.off': 'ปิด',
     'control.auto': 'อัตโนมัติ',
@@ -100,7 +110,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'control.reverse': 'ถอยหลัง',
     'control.stop': 'หยุด',
 
-    // Admin
     'admin.users': 'จัดการผู้ใช้',
     'admin.projects': 'จัดการโปรเจกต์',
     'admin.greenhouses': 'จัดการโรงเรือน',
@@ -111,13 +120,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'admin.settings': 'ตั้งค่าระบบ',
     'admin.security': 'ความปลอดภัย',
 
-    // Roles
     'role.superadmin': 'Super Admin',
     'role.admin': 'Admin',
     'role.operator': 'Operator',
     'role.viewer': 'Viewer',
 
-    // Messages
     'msg.success': 'สำเร็จ',
     'msg.error': 'เกิดข้อผิดพลาด',
     'msg.saved': 'บันทึกสำเร็จ',
@@ -125,7 +132,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'msg.confirmDelete': 'ยืนยันการลบ?',
     'msg.noPermission': 'คุณไม่มีสิทธิ์ดำเนินการนี้',
 
-    // ✅ Profile (เพิ่มให้ครบ)
     'profile.title': 'โปรไฟล์',
     'profile.subtitle': 'จัดการข้อมูลส่วนตัวและการตั้งค่า',
     'profile.lastLogin': 'เข้าสู่ระบบล่าสุด:',
@@ -148,16 +154,14 @@ export const translations: Record<Language, Record<string, string>> = {
     'profile.strengthWeak': 'อ่อน',
     'profile.strengthMedium': 'ปานกลาง',
     'profile.strengthStrong': 'แข็งแรง',
-
   },
 
   en: {
-    // App
     'app.title': 'GreenHouse Pro',
     'app.subtitle': 'Smart Greenhouse Management System',
 
-    // Navigation
     'nav.home': 'Home',
+    'nav.agriculture': 'Agriculture',
     'nav.dashboard': 'Dashboard',
     'nav.projects': 'Projects',
     'nav.greenhouses': 'Greenhouses',
@@ -166,7 +170,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'nav.settings': 'Settings',
     'nav.logout': 'Logout',
 
-    // Auth
     'auth.login': 'Login',
     'auth.logout': 'Logout',
     'auth.username': 'Username',
@@ -174,7 +177,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'auth.remember': 'Remember me',
     'auth.forgot': 'Forgot password?',
 
-    // Common
     'common.save': 'Save',
     'common.cancel': 'Cancel',
     'common.delete': 'Delete',
@@ -204,8 +206,23 @@ export const translations: Record<Language, Record<string, string>> = {
     'common.time': 'Time',
     'common.yes': 'Yes',
     'common.no': 'No',
+    'common.retry': 'Retry',
+    'common.error': 'Error occurred',
 
-    // Dashboard
+    'page.selectProject': 'Select Project',
+    'page.selectProjectDesc': 'Select a project to manage greenhouses',
+    'page.noProject': 'No projects found',
+    'page.noProjectDesc': 'You do not have access to any projects',
+    'page.noGreenhouse': 'No greenhouses found',
+    'page.noGreenhouseDesc': 'This project has no greenhouses',
+    'page.loadingGreenhouse': 'Loading greenhouse data...',
+    'page.online': 'Online',
+    'page.offline': 'Offline',
+    'page.ready': 'Ready',
+    'page.developing': 'Developing',
+    'page.greenhouse': 'Greenhouse',
+    'page.loading': 'Loading...',
+
     'dashboard.soilTab': 'Soil',
     'dashboard.chartsTab': 'Charts',
     'dashboard.controlTab': 'Control',
@@ -219,7 +236,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'dashboard.offline': 'Offline',
     'dashboard.lastUpdate': 'Last update',
 
-    // Sensors
     'sensor.air': 'Air',
     'sensor.soil': 'Soil',
     'sensor.water': 'Water',
@@ -228,7 +244,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'sensor.ec': 'EC Value',
     'sensor.ph': 'pH Value',
 
-    // Controls
     'control.on': 'On',
     'control.off': 'Off',
     'control.auto': 'Auto',
@@ -242,7 +257,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'control.reverse': 'Reverse',
     'control.stop': 'Stop',
 
-    // Admin
     'admin.users': 'Manage Users',
     'admin.projects': 'Manage Projects',
     'admin.greenhouses': 'Manage Greenhouses',
@@ -253,13 +267,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'admin.settings': 'System Settings',
     'admin.security': 'Security',
 
-    // Roles
     'role.superadmin': 'Super Admin',
     'role.admin': 'Admin',
     'role.operator': 'Operator',
     'role.viewer': 'Viewer',
 
-    // Messages
     'msg.success': 'Success',
     'msg.error': 'Error occurred',
     'msg.saved': 'Saved successfully',
@@ -267,7 +279,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'msg.confirmDelete': 'Confirm delete?',
     'msg.noPermission': 'You do not have permission',
 
-    // ✅ Profile
     'profile.title': 'Profile',
     'profile.subtitle': 'Manage your profile and preferences',
     'profile.lastLogin': 'Last login:',
@@ -290,16 +301,14 @@ export const translations: Record<Language, Record<string, string>> = {
     'profile.strengthWeak': 'Weak',
     'profile.strengthMedium': 'Medium',
     'profile.strengthStrong': 'Strong',
-
   },
 
   mm: {
-    // App
     'app.title': 'GreenHouse Pro',
     'app.subtitle': 'စမတ်ဖန်လုံအိမ်စီမံခန့်ခွဲမှုစနစ်',
 
-    // Navigation
     'nav.home': 'ပင်မစာမျက်နှာ',
+    'nav.agriculture': 'စိုက်ပျိုးရေး',
     'nav.dashboard': 'ဒက်ရှ်ဘုတ်',
     'nav.projects': 'ပရောဂျက်များ',
     'nav.greenhouses': 'ဖန်လုံအိမ်များ',
@@ -308,7 +317,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'nav.settings': 'ဆက်တင်များ',
     'nav.logout': 'ထွက်ရန်',
 
-    // Auth
     'auth.login': 'ဝင်ရောက်ရန်',
     'auth.logout': 'ထွက်ရန်',
     'auth.username': 'အသုံးပြုသူအမည်',
@@ -316,7 +324,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'auth.remember': 'မှတ်ထားပါ',
     'auth.forgot': 'စကားဝှက်မေ့နေပါသလား?',
 
-    // Common
     'common.save': 'သိမ်းဆည်းရန်',
     'common.cancel': 'ပယ်ဖျက်ရန်',
     'common.delete': 'ဖျက်ရန်',
@@ -346,8 +353,23 @@ export const translations: Record<Language, Record<string, string>> = {
     'common.time': 'အချိန်',
     'common.yes': 'ဟုတ်ကဲ့',
     'common.no': 'မဟုတ်ပါ',
+    'common.retry': 'ထပ်စမ်းကြည့်ပါ',
+    'common.error': 'အမှားဖြစ်သည်',
 
-    // Dashboard
+    'page.selectProject': 'ပရောဂျက်ရွေးပါ',
+    'page.selectProjectDesc': 'ဖန်လုံအိမ်စီမံရန် ပရောဂျက်ရွေးပါ',
+    'page.noProject': 'ပရောဂျက်မတွေ့ပါ',
+    'page.noProjectDesc': 'သင့်တွင် ပရောဂျက်ခွင့်ပြုချက်မရှိပါ',
+    'page.noGreenhouse': 'ဖန်လုံအိမ်မတွေ့ပါ',
+    'page.noGreenhouseDesc': 'ဤပရောဂျက်တွင် ဖန်လုံအိမ်မရှိပါ',
+    'page.loadingGreenhouse': 'ဖန်လုံအိမ်ဒေတာ ဖွင့်နေသည်...',
+    'page.online': 'အွန်လိုင်း',
+    'page.offline': 'အော့ဖ်လိုင်း',
+    'page.ready': 'အသုံးပြုရန်အဆင်သင့်',
+    'page.developing': 'တည်ဆောက်နေဆဲ',
+    'page.greenhouse': 'ဖန်လုံအိမ်',
+    'page.loading': 'ဖွင့်နေသည်...',
+
     'dashboard.soilTab': 'မြေဆီ',
     'dashboard.chartsTab': 'ဇယားများ',
     'dashboard.controlTab': 'ထိန်းချုပ်',
@@ -361,7 +383,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'dashboard.offline': 'အော့ဖ်လိုင်း',
     'dashboard.lastUpdate': 'နောက်ဆုံးအပ်ဒိတ်',
 
-    // Sensors
     'sensor.air': 'လေ',
     'sensor.soil': 'မြေ',
     'sensor.water': 'ရေ',
@@ -370,7 +391,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'sensor.ec': 'EC တန်ဖိုး',
     'sensor.ph': 'pH တန်ဖိုး',
 
-    // Controls
     'control.on': 'ဖွင့်',
     'control.off': 'ပိတ်',
     'control.auto': 'အလိုအလျောက်',
@@ -384,13 +404,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'control.reverse': 'နောက်ဆုတ်',
     'control.stop': 'ရပ်',
 
-    // Roles
     'role.superadmin': 'အထူးအက်ဒမင်',
     'role.admin': 'အက်ဒမင်',
     'role.operator': 'အော်ပရေတာ',
     'role.viewer': 'ကြည့်ရှုသူ',
 
-    // Messages
     'msg.success': 'အောင်မြင်သည်',
     'msg.error': 'အမှားဖြစ်သည်',
     'msg.saved': 'သိမ်းဆည်းပြီးပါပြီ',
@@ -398,7 +416,16 @@ export const translations: Record<Language, Record<string, string>> = {
     'msg.confirmDelete': 'ဖျက်ရန်အတည်ပြုပါသလား?',
     'msg.noPermission': 'သင့်တွင်ခွင့်ပြုချက်မရှိပါ',
 
-    // ✅ Profile
+    'admin.users': 'အသုံးပြုသူများ စီမံပါ',
+    'admin.projects': 'ပရောဂျက်များ စီမံပါ',
+    'admin.greenhouses': 'ဖန်လုံအိမ်များ စီမံပါ',
+    'admin.sensors': 'Sensor များ စီမံပါ',
+    'admin.notifications': 'အကြောင်းကြားချက်များ',
+    'admin.alerts': 'သတိပေးချက် မှတ်တမ်း',
+    'admin.audit': 'Audit Log',
+    'admin.settings': 'စနစ်ဆက်တင်',
+    'admin.security': 'လုံခြုံရေး',
+
     'profile.title': 'ပရိုဖိုင်',
     'profile.subtitle': 'ကိုယ်ရေးနှင့် ဆက်တင်များကို စီမံပါ',
     'profile.lastLogin': 'နောက်ဆုံးဝင်ရောက်မှု:',
@@ -421,26 +448,17 @@ export const translations: Record<Language, Record<string, string>> = {
     'profile.strengthWeak': 'အားနည်း',
     'profile.strengthMedium': 'အလယ်အလတ်',
     'profile.strengthStrong': 'အားကောင်း',
-
   },
 };
 
-/**
- * Get translation for a key
- */
 export function t(key: string, lang: Language = 'th'): string {
   return translations[lang]?.[key] || translations['th']?.[key] || key;
 }
 
-/**
- * Hook for translations
- */
 export function useTranslation(lang: Language = 'th') {
   const translate = useCallback((key: string) => t(key, lang), [lang]);
   return { t: translate, lang };
 }
-
-
 
 export function useT() {
   const { language } = useAppSettings();
