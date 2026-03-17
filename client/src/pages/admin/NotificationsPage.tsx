@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { AdminLayout } from './AdminLayout';
-import { Card, Button, Input, Badge } from '@/components/ui';
+import { Card, Button, Input } from '@/components/ui';
 import { adminApi, LineNotifyConfig } from '@/lib/adminApi';
 import { useToast } from '@/hooks/useToast';
+import { useT } from '@/i18n';
 import { Bell, Send, Save, Eye, EyeOff, AlertTriangle, Thermometer, Droplets, Sprout } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function NotificationsPage() {
   const { addToast } = useToast();
+  const { t } = useT();
   const [config, setConfig] = useState<LineNotifyConfig | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -20,8 +22,8 @@ export function NotificationsPage() {
     try {
       const data = await adminApi.getLineNotifyConfig();
       setConfig(data);
-    } catch (error) {
-      addToast({ type: 'error', message: 'ไม่สามารถโหลดข้อมูลได้' });
+    } catch {
+      addToast({ type: 'error', message: t('common.error') });
     } finally {
       setIsLoading(false);
     }
@@ -33,15 +35,12 @@ export function NotificationsPage() {
     if (!config) return;
     setIsSaving(true);
     try {
-      await adminApi.updateLineNotifyConfig({
-        ...config,
-        token: newToken || undefined,
-      });
-      addToast({ type: 'success', message: 'บันทึกการตั้งค่าสำเร็จ' });
+      await adminApi.updateLineNotifyConfig({ ...config, token: newToken || undefined });
+      addToast({ type: 'success', message: t('admin.notif.saveSuccess') });
       setNewToken('');
       fetchConfig();
     } catch (error) {
-      addToast({ type: 'error', message: error instanceof Error ? error.message : 'เกิดข้อผิดพลาด' });
+      addToast({ type: 'error', message: error instanceof Error ? error.message : t('common.error') });
     } finally {
       setIsSaving(false);
     }
@@ -51,21 +50,26 @@ export function NotificationsPage() {
     setIsTesting(true);
     try {
       await adminApi.testLineNotify();
-      addToast({ type: 'success', message: 'ส่งข้อความทดสอบสำเร็จ' });
+      addToast({ type: 'success', message: t('admin.notif.testSuccess') });
     } catch (error) {
-      addToast({ type: 'error', message: error instanceof Error ? error.message : 'เกิดข้อผิดพลาด' });
+      addToast({ type: 'error', message: error instanceof Error ? error.message : t('common.error') });
     } finally {
       setIsTesting(false);
     }
   };
 
   if (isLoading || !config) {
-    return <AdminLayout title="การแจ้งเตือน"><div className="text-center py-12 text-gray-500">กำลังโหลด...</div></AdminLayout>;
+    return (
+      <AdminLayout title={t('admin.notifications')}>
+        <div className="text-center py-12 text-gray-500">{t('common.loading')}</div>
+      </AdminLayout>
+    );
   }
 
   return (
-    <AdminLayout title="การแจ้งเตือน" subtitle="ตั้งค่า Line Notify และเงื่อนไขการแจ้งเตือน">
+    <AdminLayout title={t('admin.notifications')} subtitle={t('admin.notif.subtitle')}>
       <div className="max-w-3xl space-y-6">
+
         {/* Main Toggle */}
         <Card>
           <div className="p-6">
@@ -75,21 +79,15 @@ export function NotificationsPage() {
                   <Bell className={cn('w-6 h-6', config.enabled ? 'text-green-600' : 'text-gray-400')} />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-900">Line Notify</h3>
-                  <p className="text-sm text-gray-500">รับการแจ้งเตือนผ่าน Line เมื่อมีเหตุการณ์สำคัญ</p>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">{t('admin.notif.lineNotify')}</h3>
+                  <p className="text-sm text-gray-500">{t('admin.notif.lineNotifyDesc')}</p>
                 </div>
               </div>
               <button
                 onClick={() => setConfig({ ...config, enabled: !config.enabled })}
-                className={cn(
-                  'relative w-14 h-8 rounded-full transition-colors',
-                  config.enabled ? 'bg-green-500' : 'bg-gray-300'
-                )}
+                className={cn('relative w-14 h-8 rounded-full transition-colors', config.enabled ? 'bg-green-500' : 'bg-gray-300')}
               >
-                <span className={cn(
-                  'absolute top-1 w-6 h-6 bg-white rounded-full transition-transform shadow',
-                  config.enabled ? 'left-7' : 'left-1'
-                )} />
+                <span className={cn('absolute top-1 w-6 h-6 bg-white rounded-full transition-transform shadow', config.enabled ? 'left-7' : 'left-1')} />
               </button>
             </div>
           </div>
@@ -98,21 +96,23 @@ export function NotificationsPage() {
         {/* Token Settings */}
         <Card>
           <div className="p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">Token การเชื่อมต่อ</h3>
-            
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">{t('admin.notif.tokenSection')}</h3>
+
             {config.tokenMasked && (
-              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-600">Token ปัจจุบัน: <span className="font-mono">{config.tokenMasked}</span></p>
+              <div className="mb-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {t('admin.notif.currentToken')} <span className="font-mono">{config.tokenMasked}</span>
+                </p>
               </div>
             )}
 
             <div className="relative">
               <Input
-                label="Line Notify Token ใหม่"
+                label={t('admin.notif.newToken')}
                 type={showToken ? 'text' : 'password'}
                 value={newToken}
                 onChange={(e) => setNewToken(e.target.value)}
-                placeholder={config.tokenMasked ? '(ไม่เปลี่ยนแปลง)' : 'วาง Token ที่นี่'}
+                placeholder={config.tokenMasked ? t('admin.notif.tokenUnchanged') : t('admin.notif.tokenPlaceholder')}
               />
               <button
                 type="button"
@@ -123,14 +123,14 @@ export function NotificationsPage() {
               </button>
             </div>
 
-            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-              <p className="text-sm text-blue-800">
-                <strong>วิธีรับ Token:</strong><br />
-                1. ไปที่ <a href="https://notify-bot.line.me/" target="_blank" className="underline">notify-bot.line.me</a><br />
-                2. Login ด้วย Line Account<br />
-                3. คลิก "Generate Token"<br />
-                4. เลือกกลุ่มหรือ 1-on-1 ที่ต้องการรับแจ้งเตือน<br />
-                5. คัดลอก Token มาวางที่นี่
+            <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <p className="text-sm text-blue-800 dark:text-blue-300">
+                <strong>{t('admin.notif.tokenHowTo')}</strong><br />
+                {t('admin.notif.tokenStep1')}<br />
+                {t('admin.notif.tokenStep2')}<br />
+                {t('admin.notif.tokenStep3')}<br />
+                {t('admin.notif.tokenStep4')}<br />
+                {t('admin.notif.tokenStep5')}
               </p>
             </div>
           </div>
@@ -139,9 +139,9 @@ export function NotificationsPage() {
         {/* Alert Types */}
         <Card>
           <div className="p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">ประเภทการแจ้งเตือน</h3>
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">{t('admin.notif.alertTypes')}</h3>
             <div className="space-y-4">
-              <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+              <label className="flex items-center gap-3 p-3 border dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50">
                 <input
                   type="checkbox"
                   checked={config.alertOnOffline}
@@ -150,12 +150,12 @@ export function NotificationsPage() {
                 />
                 <AlertTriangle className="w-5 h-5 text-red-500" />
                 <div>
-                  <p className="font-medium">แจ้งเตือนเมื่ออุปกรณ์ออฟไลน์</p>
-                  <p className="text-sm text-gray-500">ส่งข้อความเมื่ออุปกรณ์ขาดการเชื่อมต่อ</p>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">{t('admin.notif.alertOffline')}</p>
+                  <p className="text-sm text-gray-500">{t('admin.notif.alertOfflineDesc')}</p>
                 </div>
               </label>
 
-              <label className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+              <label className="flex items-center gap-3 p-3 border dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50">
                 <input
                   type="checkbox"
                   checked={config.alertOnThreshold}
@@ -164,8 +164,8 @@ export function NotificationsPage() {
                 />
                 <Thermometer className="w-5 h-5 text-orange-500" />
                 <div>
-                  <p className="font-medium">แจ้งเตือนเมื่อค่าเกินเกณฑ์</p>
-                  <p className="text-sm text-gray-500">ส่งข้อความเมื่อค่า sensor ผิดปกติ</p>
+                  <p className="font-medium text-gray-900 dark:text-gray-100">{t('admin.notif.alertThreshold')}</p>
+                  <p className="text-sm text-gray-500">{t('admin.notif.alertThresholdDesc')}</p>
                 </div>
               </label>
             </div>
@@ -176,89 +176,44 @@ export function NotificationsPage() {
         {config.alertOnThreshold && (
           <Card>
             <div className="p-6">
-              <h3 className="font-semibold text-gray-900 mb-4">เกณฑ์การแจ้งเตือน</h3>
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">{t('admin.notif.thresholds')}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Temperature */}
                 <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-gray-700">
+                  <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
                     <Thermometer className="w-4 h-4" />
-                    <span className="font-medium">อุณหภูมิอากาศ (°C)</span>
+                    <span className="font-medium">{t('admin.notif.tempLabel')}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <Input
-                      label="ต่ำสุด"
-                      type="number"
-                      value={config.thresholds.temp_min}
-                      onChange={(e) => setConfig({
-                        ...config,
-                        thresholds: { ...config.thresholds, temp_min: parseFloat(e.target.value) }
-                      })}
-                    />
-                    <Input
-                      label="สูงสุด"
-                      type="number"
-                      value={config.thresholds.temp_max}
-                      onChange={(e) => setConfig({
-                        ...config,
-                        thresholds: { ...config.thresholds, temp_max: parseFloat(e.target.value) }
-                      })}
-                    />
+                    <Input label={t('admin.notif.min')} type="number" value={config.thresholds.temp_min}
+                      onChange={(e) => setConfig({ ...config, thresholds: { ...config.thresholds, temp_min: parseFloat(e.target.value) } })} />
+                    <Input label={t('admin.notif.max')} type="number" value={config.thresholds.temp_max}
+                      onChange={(e) => setConfig({ ...config, thresholds: { ...config.thresholds, temp_max: parseFloat(e.target.value) } })} />
                   </div>
                 </div>
 
-                {/* Humidity */}
                 <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-gray-700">
+                  <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
                     <Droplets className="w-4 h-4" />
-                    <span className="font-medium">ความชื้นอากาศ (%)</span>
+                    <span className="font-medium">{t('admin.notif.humidityLabel')}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <Input
-                      label="ต่ำสุด"
-                      type="number"
-                      value={config.thresholds.humidity_min}
-                      onChange={(e) => setConfig({
-                        ...config,
-                        thresholds: { ...config.thresholds, humidity_min: parseFloat(e.target.value) }
-                      })}
-                    />
-                    <Input
-                      label="สูงสุด"
-                      type="number"
-                      value={config.thresholds.humidity_max}
-                      onChange={(e) => setConfig({
-                        ...config,
-                        thresholds: { ...config.thresholds, humidity_max: parseFloat(e.target.value) }
-                      })}
-                    />
+                    <Input label={t('admin.notif.min')} type="number" value={config.thresholds.humidity_min}
+                      onChange={(e) => setConfig({ ...config, thresholds: { ...config.thresholds, humidity_min: parseFloat(e.target.value) } })} />
+                    <Input label={t('admin.notif.max')} type="number" value={config.thresholds.humidity_max}
+                      onChange={(e) => setConfig({ ...config, thresholds: { ...config.thresholds, humidity_max: parseFloat(e.target.value) } })} />
                   </div>
                 </div>
 
-                {/* Soil Moisture */}
                 <div className="space-y-3 md:col-span-2">
-                  <div className="flex items-center gap-2 text-gray-700">
+                  <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
                     <Sprout className="w-4 h-4" />
-                    <span className="font-medium">ความชื้นดิน (%)</span>
+                    <span className="font-medium">{t('admin.notif.soilLabel')}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <Input
-                      label="ต่ำสุด"
-                      type="number"
-                      value={config.thresholds.soil_moisture_min}
-                      onChange={(e) => setConfig({
-                        ...config,
-                        thresholds: { ...config.thresholds, soil_moisture_min: parseFloat(e.target.value) }
-                      })}
-                    />
-                    <Input
-                      label="สูงสุด"
-                      type="number"
-                      value={config.thresholds.soil_moisture_max}
-                      onChange={(e) => setConfig({
-                        ...config,
-                        thresholds: { ...config.thresholds, soil_moisture_max: parseFloat(e.target.value) }
-                      })}
-                    />
+                    <Input label={t('admin.notif.min')} type="number" value={config.thresholds.soil_moisture_min}
+                      onChange={(e) => setConfig({ ...config, thresholds: { ...config.thresholds, soil_moisture_min: parseFloat(e.target.value) } })} />
+                    <Input label={t('admin.notif.max')} type="number" value={config.thresholds.soil_moisture_max}
+                      onChange={(e) => setConfig({ ...config, thresholds: { ...config.thresholds, soil_moisture_max: parseFloat(e.target.value) } })} />
                   </div>
                 </div>
               </div>
@@ -270,11 +225,11 @@ export function NotificationsPage() {
         <div className="flex gap-3">
           <Button onClick={handleTest} variant="outline" isLoading={isTesting} disabled={!config.tokenMasked && !newToken}>
             <Send className="w-4 h-4" />
-            ทดสอบส่งข้อความ
+            {t('admin.notif.testBtn')}
           </Button>
           <Button onClick={handleSave} isLoading={isSaving} className="flex-1">
             <Save className="w-4 h-4" />
-            บันทึกการตั้งค่า
+            {t('admin.notif.saveBtn')}
           </Button>
         </div>
       </div>

@@ -3,6 +3,7 @@ import { AdminLayout } from './AdminLayout';
 import { Card, Button, Input, Badge } from '@/components/ui';
 import { adminApi, AdminProject } from '@/lib/adminApi';
 import { useToast } from '@/hooks/useToast';
+import { useT } from '@/i18n';
 import { Pencil, Trash2, Search, FolderPlus, Home, Server, Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -19,6 +20,7 @@ type ProjectFormData = {
 
 export function ProjectsPage() {
   const { addToast } = useToast();
+  const { t } = useT();
   const [projects, setProjects] = useState<AdminProject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -30,8 +32,8 @@ export function ProjectsPage() {
     try {
       const data = await adminApi.getAdminProjects();
       setProjects(data);
-    } catch (error) {
-      addToast({ type: 'error', message: 'ไม่สามารถโหลดข้อมูลได้' });
+    } catch {
+      addToast({ type: 'error', message: t('common.error') });
     } finally {
       setIsLoading(false);
     }
@@ -45,24 +47,24 @@ export function ProjectsPage() {
   );
 
   const handleDelete = async (project: AdminProject) => {
-    if (!confirm(`ต้องการลบโปรเจกต์ "${project.nameTh}" หรือไม่?`)) return;
+    if (!confirm(t('admin.project.deleteConfirm').replace('{name}', project.nameTh))) return;
     try {
       await adminApi.deleteProject(project.key);
-      addToast({ type: 'success', message: 'ลบโปรเจกต์สำเร็จ' });
+      addToast({ type: 'success', message: t('admin.project.deleteSuccess') });
       fetchData();
     } catch (error) {
-      addToast({ type: 'error', message: error instanceof Error ? error.message : 'เกิดข้อผิดพลาด' });
+      addToast({ type: 'error', message: error instanceof Error ? error.message : t('common.error') });
     }
   };
 
   return (
-    <AdminLayout title="จัดการโปรเจกต์" subtitle="เพิ่ม แก้ไข และตั้งค่าโปรเจกต์">
+    <AdminLayout title={t('admin.projects')} subtitle={t('admin.project.subtitle')}>
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <Input
             type="text"
-            placeholder="ค้นหาโปรเจกต์..."
+            placeholder={t('admin.project.searchPlaceholder')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -70,14 +72,14 @@ export function ProjectsPage() {
         </div>
         <Button onClick={() => setShowCreateModal(true)}>
           <FolderPlus className="w-4 h-4" />
-          เพิ่มโปรเจกต์
+          {t('admin.project.addProject')}
         </Button>
       </div>
 
       {isLoading ? (
-        <div className="text-center py-12 text-gray-500">กำลังโหลด...</div>
+        <div className="text-center py-12 text-gray-500">{t('common.loading')}</div>
       ) : filteredProjects.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">ไม่พบโปรเจกต์</div>
+        <div className="text-center py-12 text-gray-500">{t('admin.project.noProject')}</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredProjects.map((project) => (
@@ -86,17 +88,17 @@ export function ProjectsPage() {
               <div className="p-4">
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <h3 className="font-semibold text-gray-900">{project.nameTh}</h3>
+                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">{project.nameTh}</h3>
                     <p className="text-sm text-gray-500">{project.key}</p>
                   </div>
                   <Badge variant={project.status === 'ready' ? 'success' : 'warning'}>
-                    {project.status === 'ready' ? 'พร้อม' : 'กำลังพัฒนา'}
+                    {project.status === 'ready' ? t('admin.project.statusReady') : t('admin.project.statusDeveloping')}
                   </Badge>
                 </div>
-                <div className="space-y-2 text-sm text-gray-600 mb-4">
+                <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400 mb-4">
                   <div className="flex items-center gap-2">
                     <Home className="w-4 h-4 text-gray-400" />
-                    <span>{project.greenhouseCount} โรงเรือน</span>
+                    <span>{project.greenhouseCount} {t('admin.project.greenhouse')}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Server className="w-4 h-4 text-gray-400" />
@@ -104,21 +106,11 @@ export function ProjectsPage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setEditingProject(project)}
-                    className="flex-1"
-                  >
+                  <Button variant="outline" size="sm" onClick={() => setEditingProject(project)} className="flex-1">
                     <Pencil className="w-4 h-4" />
-                    แก้ไข
+                    {t('common.edit')}
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDelete(project)}
-                    className="text-red-600 hover:bg-red-50"
-                  >
+                  <Button variant="outline" size="sm" onClick={() => handleDelete(project)} className="text-red-600 hover:bg-red-50">
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
@@ -129,35 +121,20 @@ export function ProjectsPage() {
       )}
 
       {showCreateModal && (
-        <ProjectModal
-          onClose={() => setShowCreateModal(false)}
-          onSuccess={() => { setShowCreateModal(false); fetchData(); }}
-        />
+        <ProjectModal onClose={() => setShowCreateModal(false)} onSuccess={() => { setShowCreateModal(false); fetchData(); }} />
       )}
       {editingProject && (
-        <ProjectModal
-          project={editingProject}
-          onClose={() => setEditingProject(null)}
-          onSuccess={() => { setEditingProject(null); fetchData(); }}
-        />
+        <ProjectModal project={editingProject} onClose={() => setEditingProject(null)} onSuccess={() => { setEditingProject(null); fetchData(); }} />
       )}
     </AdminLayout>
   );
 }
 
-function ProjectModal({
-  project,
-  onClose,
-  onSuccess
-}: {
-  project?: AdminProject;
-  onClose: () => void;
-  onSuccess: () => void;
-}) {
+function ProjectModal({ project, onClose, onSuccess }: { project?: AdminProject; onClose: () => void; onSuccess: () => void }) {
   const { addToast } = useToast();
+  const { t } = useT();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-
   const [formData, setFormData] = useState<ProjectFormData>({
     key: project?.key || '',
     name_th: project?.nameTh || '',
@@ -173,14 +150,14 @@ function ProjectModal({
     try {
       if (project) {
         await adminApi.updateProject(project.key, formData);
-        addToast({ type: 'success', message: 'บันทึกโปรเจกต์สำเร็จ' });
+        addToast({ type: 'success', message: t('admin.project.saveSuccess') });
       } else {
         await adminApi.createProject(formData);
-        addToast({ type: 'success', message: 'สร้างโปรเจกต์สำเร็จ' });
+        addToast({ type: 'success', message: t('admin.project.createSuccess') });
       }
       onSuccess();
     } catch (error) {
-      addToast({ type: 'error', message: error instanceof Error ? error.message : 'เกิดข้อผิดพลาด' });
+      addToast({ type: 'error', message: error instanceof Error ? error.message : t('common.error') });
     } finally {
       setIsLoading(false);
     }
@@ -190,51 +167,50 @@ function ProjectModal({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="p-6">
-          <h2 className="text-xl font-bold mb-4">{project ? 'แก้ไขโปรเจกต์' : 'เพิ่มโปรเจกต์ใหม่'}</h2>
+          <h2 className="text-xl font-bold mb-4">
+            {project ? t('admin.project.editTitle') : t('admin.project.createTitle')}
+          </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              label="Key"
+              label={t('admin.project.fieldKey')}
               value={formData.key}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '')
-                })
-              }
+              onChange={(e) => setFormData({ ...formData, key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
               required
               disabled={!!project}
             />
             <Input
-              label="ชื่อโปรเจกต์"
+              label={t('admin.project.fieldName')}
               value={formData.name_th}
               onChange={(e) => setFormData({ ...formData, name_th: e.target.value })}
               required
             />
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">สถานะ</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                {t('admin.project.fieldStatus')}
+              </label>
               <select
                 value={formData.status}
                 onChange={(e) => setFormData({ ...formData, status: e.target.value as ProjectStatus })}
-                className="w-full px-3 py-2 border rounded-lg"
+                className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100"
               >
-                <option value="developing">กำลังพัฒนา</option>
-                <option value="ready">พร้อมใช้งาน</option>
+                <option value="developing">{t('admin.project.statusDeveloping')}</option>
+                <option value="ready">{t('admin.project.statusReady')}</option>
               </select>
             </div>
 
-            <hr />
-            <p className="text-sm text-gray-500">ThingsBoard</p>
+            <hr className="dark:border-gray-700" />
+            <p className="text-sm text-gray-500">{t('admin.project.tbSection')}</p>
 
             <Input
-              label="URL"
+              label={t('admin.project.tbUrl')}
               value={formData.tb_base_url}
               onChange={(e) => setFormData({ ...formData, tb_base_url: e.target.value })}
-              placeholder="http://thingsboard:8080"
+              placeholder={t('admin.project.tbUrlPlaceholder')}
               required={!project}
             />
             <Input
-              label="Username"
+              label={t('admin.project.tbUsername')}
               value={formData.tb_username}
               onChange={(e) => setFormData({ ...formData, tb_username: e.target.value })}
               required={!project}
@@ -242,11 +218,11 @@ function ProjectModal({
 
             <div className="relative">
               <Input
-                label="Password"
+                label={t('admin.project.tbPassword')}
                 type={showPassword ? 'text' : 'password'}
                 value={formData.tb_password}
                 onChange={(e) => setFormData({ ...formData, tb_password: e.target.value })}
-                placeholder={project ? '(ไม่เปลี่ยน)' : ''}
+                placeholder={project ? t('admin.project.tbPasswordPlaceholder') : ''}
                 required={!project}
               />
               <button
@@ -260,10 +236,10 @@ function ProjectModal({
 
             <div className="flex gap-2 pt-4">
               <Button type="button" variant="outline" onClick={onClose} className="flex-1">
-                ยกเลิก
+                {t('common.cancel')}
               </Button>
               <Button type="submit" isLoading={isLoading} className="flex-1">
-                {project ? 'บันทึก' : 'สร้าง'}
+                {project ? t('common.save') : t('admin.project.createBtn')}
               </Button>
             </div>
           </form>
