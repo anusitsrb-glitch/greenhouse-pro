@@ -1,13 +1,14 @@
 import { Card } from '@/components/ui';
 import { Fan, Droplets, Waves, Lightbulb, Power, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useT } from '@/i18n';
 
 const ICONS: Record<string, typeof Fan> = { Fan, Droplets, Waves, Lightbulb };
 
 interface RelayControlCardProps {
   name: string;
   icon: string;
-  isOn: boolean;       // ✅ รับ effectiveIsOn จาก parent โดยตรง ไม่มี internal state
+  isOn: boolean;
   isAuto: boolean;
   isLoading: boolean;
   isReady: boolean;
@@ -25,12 +26,12 @@ export function RelayControlCard({
   disabled,
   onToggle,
 }: RelayControlCardProps) {
+  const { t } = useT();
   const Icon = ICONS[icon] || Power;
 
   const showOn   = isReady && !isLoading && isOn;
   const showAuto = isReady && !isLoading && isAuto;
 
-  // ✅ Animation ตามประเภทอุปกรณ์
   const getIconAnimation = () => {
     if (!showOn) return '';
     if (icon === 'Fan')                          return 'animate-spin-slow';
@@ -42,14 +43,15 @@ export function RelayControlCard({
   const btnDisabled = disabled || !isReady || isLoading;
 
   return (
-    <Card
-      className={cn(
-        'overflow-hidden transition-all duration-300 hover:shadow-lg',
-        showOn && 'ring-2 ring-green-400 ring-offset-2 shadow-green-100'
-      )}
-    >
+    <Card className={cn(
+      'overflow-hidden transition-all duration-300 hover:shadow-lg dark:bg-gray-800',
+      showOn && 'ring-2 ring-green-400 ring-offset-2 shadow-green-100'
+    )}>
       {/* Status bar */}
-      <div className={cn('h-2 transition-all duration-500', showOn ? 'bg-gradient-to-r from-green-400 via-green-500 to-green-600' : 'bg-gray-200')}>
+      <div className={cn(
+        'h-2 transition-all duration-500',
+        showOn ? 'bg-gradient-to-r from-green-400 via-green-500 to-green-600' : 'bg-gray-200 dark:bg-gray-700'
+      )}>
         {showOn && <div className="h-full w-1/3 bg-white/30 animate-shimmer" />}
       </div>
 
@@ -58,7 +60,9 @@ export function RelayControlCard({
         <div className="flex items-center justify-between mb-4">
           <div className={cn(
             'w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 shadow-md',
-            showOn ? 'bg-gradient-to-br from-green-400 to-green-600 text-white scale-110' : 'bg-gray-100 text-gray-400'
+            showOn
+              ? 'bg-gradient-to-br from-green-400 to-green-600 text-white scale-110'
+              : 'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-400'
           )}>
             <Icon className={cn('w-7 h-7 transition-all duration-300', getIconAnimation())} />
           </div>
@@ -72,7 +76,10 @@ export function RelayControlCard({
         </div>
 
         {/* Name */}
-        <h3 className={cn('font-bold text-gray-900 mb-4 text-base transition-colors', showOn && 'text-green-700')}>
+        <h3 className={cn(
+          'font-bold mb-4 text-base transition-colors dark:text-gray-100',
+          showOn ? 'text-green-700' : 'text-gray-900'
+        )}>
           {name}
         </h3>
 
@@ -90,21 +97,32 @@ export function RelayControlCard({
           )}
         >
           <Power className="w-5 h-5" />
-          {showOn ? 'ปิด' : 'เปิด'}
+          {showOn ? t('control.off') : t('control.on')}
         </button>
 
         {/* Status indicator */}
         <div className="mt-4 text-center">
           <div className={cn(
             'inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-all',
-            !isReady || isLoading ? 'bg-gray-100 text-gray-500' : showOn ? 'bg-green-50 text-green-700 shadow-sm' : 'bg-gray-50 text-gray-600'
+            !isReady || isLoading
+              ? 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+              : showOn
+              ? 'bg-green-50 text-green-700 shadow-sm'
+              : 'bg-gray-50 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
           )}>
             <div className={cn(
               'w-2.5 h-2.5 rounded-full transition-all',
-              !isReady || isLoading ? 'bg-gray-400' : showOn ? 'bg-green-500 animate-pulse shadow-lg shadow-green-500/50' : 'bg-gray-400'
+              !isReady || isLoading ? 'bg-gray-400' :
+              showOn ? 'bg-green-500 animate-pulse shadow-lg shadow-green-500/50' : 'bg-gray-400'
             )} />
             <span>
-              {!isReady ? 'ไม่พร้อม' : isLoading ? 'กำลังโหลด...' : showOn ? 'กำลังทำงาน' : 'หยุด'}
+              {!isReady
+                ? t('motor.notReady')
+                : isLoading
+                ? t('common.loading')
+                : showOn
+                ? t('relay.working')
+                : t('relay.idle')}
             </span>
           </div>
         </div>
