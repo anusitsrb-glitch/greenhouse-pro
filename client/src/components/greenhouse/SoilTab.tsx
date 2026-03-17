@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useT } from '@/i18n';
 import { AirSensorCard } from './AirSensorCard';
 import { SoilNodeCard } from './SoilNodeCard';
 import { SystemInfoCard } from './SystemInfoCard';
@@ -17,35 +17,19 @@ interface SoilTabProps {
   isReady: boolean;
 }
 
-// Generate all soil keys for nodes 1-10
 const ALL_SOIL_KEYS = Array.from({ length: 10 }, (_, i) => getSoilKeysArray(i + 1)).flat();
 
 export function SoilTab({ project, gh, isReady }: SoilTabProps) {
-  // Fetch air telemetry
+  const { t } = useT();
+
   const airData = useTelemetry({
-    project,
-    gh,
-    keys: AIR_TELEMETRY_KEYS,
-    enabled: isReady,
-    pollInterval: 60000, // 60 seconds
+    project, gh, keys: AIR_TELEMETRY_KEYS, enabled: isReady, pollInterval: 60000,
   });
-
-  // Fetch soil telemetry
   const soilData = useTelemetry({
-    project,
-    gh,
-    keys: ALL_SOIL_KEYS,
-    enabled: isReady,
-    pollInterval: 60000,
+    project, gh, keys: ALL_SOIL_KEYS, enabled: isReady, pollInterval: 60000,
   });
-
-  // Fetch system info
   const systemData = useTelemetry({
-    project,
-    gh,
-    keys: SYSTEM_TELEMETRY_KEYS,
-    enabled: isReady,
-    pollInterval: 60000,
+    project, gh, keys: SYSTEM_TELEMETRY_KEYS, enabled: isReady, pollInterval: 60000,
   });
 
   const handleRefresh = () => {
@@ -59,29 +43,27 @@ export function SoilTab({ project, gh, isReady }: SoilTabProps) {
 
   return (
     <div className="space-y-6">
-      {/* Header with refresh */}
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm text-gray-500">
+        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
           <Clock className="w-4 h-4" />
-          <span>
-            อัปเดตล่าสุด: {lastUpdated ? formatDateTime(new Date(lastUpdated)) : '--'}
-          </span>
+          <span>{t('dashboard.lastUpdate')}: {lastUpdated ? formatDateTime(new Date(lastUpdated)) : '--'}</span>
         </div>
         <button
           onClick={handleRefresh}
           disabled={isLoading}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          รีเฟรช
+          {t('common.refresh')}
         </button>
       </div>
 
-      {/* Air Sensors Section */}
+      {/* Air Sensors */}
       <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
           <span className="w-1.5 h-5 bg-accent rounded-full"></span>
-          ค่าอากาศ
+          {t('soil.airSection')}
         </h2>
         <AirSensorCard
           data={airData.data}
@@ -91,11 +73,11 @@ export function SoilTab({ project, gh, isReady }: SoilTabProps) {
         />
       </section>
 
-      {/* Soil Sensors Section */}
+      {/* Soil Sensors */}
       <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
           <span className="w-1.5 h-5 bg-soil-600 rounded-full"></span>
-          ค่าดิน (10 จุด)
+          {t('soil.soilSection')}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           {Array.from({ length: 10 }, (_, i) => (
@@ -111,11 +93,11 @@ export function SoilTab({ project, gh, isReady }: SoilTabProps) {
         </div>
       </section>
 
-      {/* System Info Section */}
+      {/* System Info */}
       <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
           <span className="w-1.5 h-5 bg-gray-400 rounded-full"></span>
-          ข้อมูลระบบ
+          {t('soil.systemSection')}
         </h2>
         <SystemInfoCard
           data={systemData.data}

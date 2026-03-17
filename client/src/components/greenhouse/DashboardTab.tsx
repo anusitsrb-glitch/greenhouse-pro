@@ -13,6 +13,7 @@ import {
 } from '@/config/dataKeys';
 import { RefreshCw, Clock, AlertTriangle, Moon, Sun } from 'lucide-react';
 import { formatDateTime, normalizeBoolean, cn } from '@/lib/utils';
+import { useT } from '@/i18n';
 
 interface DashboardTabProps {
   project: string;
@@ -30,6 +31,7 @@ const OPTIMISTIC_RELAY_TTL_MS = 8000;
 const OPTIMISTIC_MOTOR_TTL_MS = 12000;
 
 export function DashboardTab({ project, gh, isReady, isOnline, userRole }: DashboardTabProps) {
+  const { t } = useT();
   const { addToast } = useToast();
 
   const { data, isLoading, refetch, lastUpdated } = useAttributes({
@@ -40,9 +42,6 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
     pollInterval: 5000,
   });
 
-  // -------------------------
-  // Refetch — ใช้เฉพาะปุ่ม "รีเฟรช" เท่านั้น
-  // -------------------------
   const refetchTimerRef = useRef<number | null>(null);
   const scheduleRefetch = (delayMs = 0) => {
     if (refetchTimerRef.current) window.clearTimeout(refetchTimerRef.current);
@@ -55,9 +54,6 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
     return () => { if (refetchTimerRef.current) window.clearTimeout(refetchTimerRef.current); };
   }, []);
 
-  // -------------------------
-  // Optimistic UI — Relays
-  // -------------------------
   const [optimisticRelays, setOptimisticRelays] = useState<OptimisticRelayState>({});
   const relayTtlRef = useRef<Record<string, number>>({});
 
@@ -83,14 +79,12 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
     );
   };
 
-  // เคลียร์ optimistic เมื่อ polling ดึงค่าจริงมาตรงกันแล้ว
   useEffect(() => {
     for (const relay of RELAY_CONFIG) {
       const opt = optimisticRelays[relay.key];
       if (opt === null || opt === undefined) continue;
-      if (data[relay.cmdKey] === undefined) continue; // ← guard เพิ่ม
+      if (data[relay.cmdKey] === undefined) continue;
       const real = normalizeBoolean(data[relay.cmdKey]);
-      console.log(`[relay] ${relay.key} | opt=${opt} | real=${real} | raw=${data[relay.cmdKey]}`);
       if (real === opt) clearRelayOptimistic(relay.key);
     }
   }, [data]);
@@ -109,9 +103,6 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
     };
   }, []);
 
-  // -------------------------
-  // Optimistic UI — Motors
-  // -------------------------
   const [optimisticMotors, setOptimisticMotors] = useState<OptimisticMotorState>({});
   const motorTtlRef = useRef<Record<string, number>>({});
 
@@ -141,7 +132,7 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
     for (const motor of MOTOR_CONFIG) {
       const opt = optimisticMotors[motor.key];
       if (opt === null || opt === undefined) continue;
-      if (data[motor.fwKey] === undefined || data[motor.reKey] === undefined) continue; // ← guard เพิ่ม
+      if (data[motor.fwKey] === undefined || data[motor.reKey] === undefined) continue;
       const realFw = normalizeBoolean(data[motor.fwKey]);
       const realRe = normalizeBoolean(data[motor.reKey]);
       let realCmd = MOTOR_COMMANDS.STOP;
@@ -166,22 +157,17 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
     };
   }, []);
 
-  // -------------------------
-  // RPC hooks
-  // ✅ onSuccess แค่ toast ไม่ refetch
-  // ✅ polling 5 วินาที sync สถานะจริงเอง
-  // -------------------------
   const rpc = useRpc({
     project,
     gh,
-    onSuccess: () => addToast({ type: 'success', message: 'ส่งคำสั่งแล้ว' }),
+    onSuccess: () => addToast({ type: 'success', message: t('dashboard.cmdSent') }),
     onError: (_method, error) => addToast({ type: 'error', message: error }),
   });
 
   const motorRpc = useMotorRpc({
     project,
     gh,
-    onSuccess: () => addToast({ type: 'success', message: 'ส่งคำสั่งมอเตอร์แล้ว' }),
+    onSuccess: () => addToast({ type: 'success', message: t('dashboard.motorCmdSent') }),
     onError: (_method, error) => addToast({ type: 'error', message: error }),
   });
 
@@ -189,32 +175,22 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
   const controlsDisabled = !isReady || !isOnline || !canControl;
   const globalAuto = normalizeBoolean(data['global_motor_auto']);
 
-  // -------------------------
-  // Relay toggle handler
-  // ✅ set optimistic ทันที → ส่ง RPC fire-and-forget
-  // ✅ ถ้า error → rollback optimistic + toast
-  // -------------------------
   const handleRelayToggle = (relayKey: string, rpcMethod: string, relayName: string, next: boolean) => {
     setRelayOptimistic(relayKey, next);
     rpc.sendCommand(rpcMethod, next ? 1 : 0, next).then((ok) => {
       if (!ok) {
         clearRelayOptimistic(relayKey);
-        addToast({ type: 'error', message: `ส่งคำสั่ง ${relayName} ไม่สำเร็จ กรุณาลองใหม่` });
+        addToast({ type: 'error', message: t('dashboard.relayCmdFailed').replace('{name}', relayName) });
       }
     });
   };
 
-  // -------------------------
-  // Motor command handler
-  // ✅ set optimistic ทันที → ส่ง RPC fire-and-forget
-  // ✅ ถ้า error → rollback optimistic + toast
-  // -------------------------
   const handleMotorCommand = (motorKey: string, rpcMethod: string, motorName: string, cmd: number) => {
     setMotorOptimistic(motorKey, cmd);
     motorRpc.sendMotorCommand(motorKey, rpcMethod, cmd).then((ok) => {
       if (!ok) {
         clearMotorOptimistic(motorKey);
-        addToast({ type: 'error', message: `ส่งคำสั่ง ${motorName} ไม่สำเร็จ กรุณาลองใหม่` });
+        addToast({ type: 'error', message: t('dashboard.motorCmdFailed').replace('{name}', motorName) });
       }
     });
   };
@@ -222,35 +198,35 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
   return (
     <div className="space-y-6">
       {!canControl && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center gap-3">
-          <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0" />
-          <p className="text-sm text-yellow-800">
-            คุณไม่มีสิทธิ์ควบคุมอุปกรณ์ (ต้องเป็น superadmin / operator / admin)
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-xl p-4 flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
+          <p className="text-sm text-yellow-800 dark:text-yellow-300">
+            {t('dashboard.noControlPermission')}
           </p>
         </div>
       )}
 
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm text-gray-500">
+        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
           <Clock className="w-4 h-4" />
-          <span>อัปเดตล่าสุด: {lastUpdated ? formatDateTime(new Date(lastUpdated)) : '--'}</span>
+          <span>{t('dashboard.lastUpdate')}: {lastUpdated ? formatDateTime(new Date(lastUpdated)) : '--'}</span>
         </div>
         <button
           onClick={() => scheduleRefetch(0)}
           disabled={isLoading}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          รีเฟรช
+          {t('common.refresh')}
         </button>
       </div>
 
       {/* Auto Mode */}
       <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
           <span className="w-1.5 h-5 bg-purple-500 rounded-full"></span>
-          เปิดใช้งานโหมดทำงานตามเวลาอัตโนมัติ
+          {t('dashboard.autoModeTitle')}
         </h2>
         <AutoModeCard
           data={data}
@@ -264,9 +240,9 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
 
       {/* Relays */}
       <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
           <span className="w-1.5 h-5 bg-accent rounded-full"></span>
-          ควบคุมรีเลย์
+          {t('dashboard.relayTitle')}
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           {RELAY_CONFIG.map((relay) => {
@@ -298,12 +274,11 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
 
       {/* Motors */}
       <section>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
           <span className="w-1.5 h-5 bg-orange-500 rounded-full"></span>
-          ระบบพรางแสง
+          {t('dashboard.motorTitle')}
         </h2>
 
-        {/* Control All */}
         <div className="mb-4 flex gap-3">
           <button
             onClick={() => MOTOR_CONFIG.forEach((motor) =>
@@ -318,7 +293,7 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
             )}
           >
             <Moon className="w-6 h-6" />
-            <span>พรางแสงทั้ง 4 โซน</span>
+            <span>{t('dashboard.shadeAll')}</span>
           </button>
 
           <button
@@ -334,11 +309,10 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
             )}
           >
             <Sun className="w-6 h-6" />
-            <span>ไม่พรางแสงทั้ง 4 โซน</span>
+            <span>{t('dashboard.unshadeAll')}</span>
           </button>
         </div>
 
-        {/* Per motor */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {MOTOR_CONFIG.map((motor) => {
             const isFw = normalizeBoolean(data[motor.fwKey]);
