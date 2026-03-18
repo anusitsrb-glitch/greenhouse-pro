@@ -25,9 +25,9 @@ interface WeatherConfig {
 
 interface Greenhouse {
   id: number;
-  gh_key: string;
-  name: string;
-  project_key: string;
+  ghKey: string;
+  nameTh: string;
+  projectKey: string;
 }
 
 export function WeatherPage() {
@@ -46,9 +46,7 @@ export function WeatherPage() {
       .then((r) => r.ok ? r.json() : null)
       .then((json) => {
         // รองรับทั้ง array และ { data: [...] }
-        const list = Array.isArray(json?.data) ? json.data
-          : Array.isArray(json) ? json
-          : [];
+        const list = Array.isArray(json?.data?.greenhouses) ? json.data.greenhouses : [];
         setGreenhouses(list);
       })
       .catch(() => {});
@@ -58,18 +56,18 @@ export function WeatherPage() {
   useEffect(() => {
     if (!greenhouses.length) return;
     greenhouses.forEach((gh) => {
-      fetch(`/api/admin/weather/${gh.project_key}/${gh.gh_key}`)
+      fetch(`/api/admin/weather/${gh.projectKey}/${gh.ghKey}`)
         .then((r) => r.ok ? r.json() : null)
         .then((json) => {
           if (json?.data) {
-            setConfigs((prev) => ({ ...prev, [`${gh.project_key}/${gh.gh_key}`]: json.data }));
+            setConfigs((prev) => ({ ...prev, [`${gh.projectKey}/${gh.ghKey}`]: json.data }));
           }
         })
         .catch(() => {});
     });
   }, [greenhouses]);
 
-  const getKey = (gh: Greenhouse) => `${gh.project_key}/${gh.gh_key}`;
+  const getKey = (gh: Greenhouse) => `${gh.projectKey}/${gh.ghKey}`;
 
   const getConfig = (gh: Greenhouse): WeatherConfig => configs[getKey(gh)] ?? {
     location_name: 'กรุงเทพมหานคร',
@@ -122,7 +120,7 @@ export function WeatherPage() {
     const cfg = getConfig(gh);
     setSaving((prev) => ({ ...prev, [getKey(gh)]: true }));
     try {
-      await fetch(`/api/admin/weather/${gh.project_key}/${gh.gh_key}`, {
+      await fetch(`/api/admin/weather/${gh.projectKey}/${gh.ghKey}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cfg),
@@ -165,8 +163,8 @@ export function WeatherPage() {
                   <CloudSun className="w-5 h-5 text-sky-600 dark:text-sky-400" />
                 </div>
                 <div>
-                  <p className="font-semibold text-gray-900 dark:text-gray-100">{gh.name}</p>
-                  <p className="text-xs text-gray-400">{gh.project_key} / {gh.gh_key}</p>
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">{gh.nameTh}</p>
+                  <p className="text-xs text-gray-400">{gh.projectKey} / {gh.ghKey}</p>
                 </div>
               </div>
 
