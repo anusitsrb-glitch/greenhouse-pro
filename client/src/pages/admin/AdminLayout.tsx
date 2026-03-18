@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { 
   Leaf, Users, FolderKanban, Home as HomeIcon, Bell, Settings, ArrowLeft, LogOut,
   Gauge, Zap, PlaySquare, Shield, History, Sprout, Droplets, Bug, Package, Activity,
-  SlidersHorizontal // ← เพิ่ม
+  SlidersHorizontal, CloudSun // ← เพิ่ม
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -32,6 +32,7 @@ export function AdminLayout({ children, title, subtitle }: AdminLayoutProps) {
         { href: '/admin/greenhouses', label: t('admin.greenhouses'), icon: HomeIcon },
         { href: '/admin/sensors', label: t('admin.sensors'), icon: Gauge },
         { href: '/admin/controls', label: t('admin.controls'), icon: SlidersHorizontal },
+        { href: '/admin/weather', label: t('admin.weather'), icon: CloudSun },
       ]
     },
     {
