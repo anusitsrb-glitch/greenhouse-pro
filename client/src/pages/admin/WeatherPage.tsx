@@ -30,6 +30,18 @@ interface Greenhouse {
   projectKey: string;
 }
 
+const DEFAULT_CONFIG: WeatherConfig = {
+  location_name: 'กรุงเทพมหานคร',
+  latitude: 13.7563,
+  longitude: 100.5018,
+  show_temperature: 1,
+  show_humidity: 1,
+  show_condition: 1,
+  show_wind_speed: 1,
+  show_uv_index: 0,
+  show_rain_chance: 1,
+};
+
 export function WeatherPage() {
   const { t } = useT();
   const [greenhouses, setGreenhouses] = useState<Greenhouse[]>([]);
@@ -45,7 +57,6 @@ export function WeatherPage() {
     fetch('/api/admin/greenhouses')
       .then((r) => r.ok ? r.json() : null)
       .then((json) => {
-        // รองรับทั้ง array และ { data: [...] }
         const list = Array.isArray(json?.data?.greenhouses) ? json.data.greenhouses : [];
         setGreenhouses(list);
       })
@@ -53,14 +64,23 @@ export function WeatherPage() {
   }, []);
 
   // Load config for each greenhouse
+  // Server returns: { success: true, data: { config: {...} } }
   useEffect(() => {
     if (!greenhouses.length) return;
     greenhouses.forEach((gh) => {
       fetch(`/api/admin/weather/${gh.projectKey}/${gh.ghKey}`)
         .then((r) => r.ok ? r.json() : null)
         .then((json) => {
-          if (json?.data) {
-            setConfigs((prev) => ({ ...prev, [`${gh.projectKey}/${gh.ghKey}`]: json.data }));
+          const cfg = json?.data?.config;
+          if (cfg) {
+            // Normalize: ensure latitude/longitude are numbers (DB อาจ return string)
+            const normalized: WeatherConfig = {
+              ...DEFAULT_CONFIG,
+              ...cfg,
+              latitude: cfg.latitude != null ? Number(cfg.latitude) : DEFAULT_CONFIG.latitude,
+              longitude: cfg.longitude != null ? Number(cfg.longitude) : DEFAULT_CONFIG.longitude,
+            };
+            setConfigs((prev) => ({ ...prev, [`${gh.projectKey}/${gh.ghKey}`]: normalized }));
           }
         })
         .catch(() => {});
@@ -69,17 +89,7 @@ export function WeatherPage() {
 
   const getKey = (gh: Greenhouse) => `${gh.projectKey}/${gh.ghKey}`;
 
-  const getConfig = (gh: Greenhouse): WeatherConfig => configs[getKey(gh)] ?? {
-    location_name: 'กรุงเทพมหานคร',
-    latitude: 13.7563,
-    longitude: 100.5018,
-    show_temperature: 1,
-    show_humidity: 1,
-    show_condition: 1,
-    show_wind_speed: 1,
-    show_uv_index: 0,
-    show_rain_chance: 1,
-  };
+  const getConfig = (gh: Greenhouse): WeatherConfig => configs[getKey(gh)] ?? { ...DEFAULT_CONFIG };
 
   const updateConfig = (gh: Greenhouse, patch: Partial<WeatherConfig>) => {
     setConfigs((prev) => ({
@@ -203,7 +213,9 @@ export function WeatherPage() {
                       >
                         <MapPin className="w-3.5 h-3.5 text-sky-500 flex-shrink-0" />
                         <span>{[r.name, r.admin1, r.country].filter(Boolean).join(', ')}</span>
-                        <span className="ml-auto text-xs text-gray-400">{r.latitude.toFixed(2)}, {r.longitude.toFixed(2)}</span>
+                        <span className="ml-auto text-xs text-gray-400">
+                          {Number(r.latitude).toFixed(2)}, {Number(r.longitude).toFixed(2)}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -215,7 +227,9 @@ export function WeatherPage() {
                 <MapPin className="w-4 h-4 text-sky-500 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-sky-800 dark:text-sky-200 truncate">{cfg.location_name}</p>
-                  <p className="text-xs text-sky-500">{cfg.latitude.toFixed(4)}, {cfg.longitude.toFixed(4)}</p>
+                  <p className="text-xs text-sky-500">
+                    {Number(cfg.latitude).toFixed(4)}, {Number(cfg.longitude).toFixed(4)}
+                  </p>
                 </div>
               </div>
 
