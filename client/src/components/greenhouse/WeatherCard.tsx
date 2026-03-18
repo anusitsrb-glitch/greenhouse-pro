@@ -80,7 +80,7 @@ export function WeatherCard({ project, gh }: WeatherCardProps) {
   }
 
   const { weather, config } = data;
-  const emoji = CONDITION_EMOJI[weather.condition.icon] ?? '🌡️';
+  const emoji = CONDITION_EMOJI[weather.condition?.icon ?? ''] ?? '🌡️';
 
   const fields = [
     { key: 'show_temperature', icon: <Thermometer className="w-3.5 h-3.5" />, label: `${weather.temperature}°C` },
@@ -113,9 +113,9 @@ export function WeatherCard({ project, gh }: WeatherCardProps) {
       <div className="flex items-center gap-3 mb-3">
         <span className="text-4xl">{emoji}</span>
         <div>
-          {config.show_condition && (
+          {config.show_condition && weather.condition && (
             <p className="text-sm font-semibold text-sky-800 dark:text-sky-200">{weather.condition.label_th}</p>
-          )}
+        )}
           {config.show_temperature && (
             <p className="text-2xl font-bold text-sky-900 dark:text-white">{weather.temperature}°C</p>
           )}
