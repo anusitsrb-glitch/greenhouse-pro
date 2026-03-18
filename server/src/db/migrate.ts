@@ -502,6 +502,25 @@ export async function runMigrations() {
     )
   `);
 
+    // Weather configs
+  await query(`
+    CREATE TABLE IF NOT EXISTS weather_configs (
+      id SERIAL PRIMARY KEY,
+      greenhouse_id INTEGER NOT NULL UNIQUE REFERENCES greenhouses(id) ON DELETE CASCADE,
+      location_name TEXT NOT NULL DEFAULT 'กรุงเทพมหานคร',
+      latitude REAL NOT NULL DEFAULT 13.7563,
+      longitude REAL NOT NULL DEFAULT 100.5018,
+      show_temperature INTEGER NOT NULL DEFAULT 1,
+      show_humidity INTEGER NOT NULL DEFAULT 1,
+      show_condition INTEGER NOT NULL DEFAULT 1,
+      show_wind_speed INTEGER NOT NULL DEFAULT 1,
+      show_uv_index INTEGER NOT NULL DEFAULT 0,
+      show_rain_chance INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT now()::text,
+      updated_at TEXT NOT NULL DEFAULT now()::text
+    )
+  `);
+
   // Yield records
   await query(`
     CREATE TABLE IF NOT EXISTS yield_records (
