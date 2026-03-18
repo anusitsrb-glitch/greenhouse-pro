@@ -11,6 +11,7 @@ import {
 } from '@/config/dataKeys';
 import { RefreshCw, Clock } from 'lucide-react';
 import { formatDateTime } from '@/lib/utils';
+import { WeatherCard } from './WeatherCard';
 
 interface SoilTabProps {
   project: string;
@@ -91,6 +92,9 @@ export function SoilTab({ project, gh, isReady }: SoilTabProps) {
           {t('common.refresh')}
         </button>
       </div>
+
+      {/* Weather */}
+      <WeatherCard project={project} gh={gh} />
 
       {/* Air Sensors */}
       <section>

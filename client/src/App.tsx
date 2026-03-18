@@ -12,7 +12,7 @@ import {
   UsersPage, ProjectsPage, GreenhousesPage, NotificationsPage, 
   SettingsPage, SensorsPage, ControlsPage, AlertsPage, AuditLogPage,
   AutomationPage, ScenesPage, ControlHistoryPage as AdminControlHistoryPage,
-  AdminLayout
+  AdminLayout, WeatherPage
 } from '@/pages/admin';
 import { AppSettingsProvider, type ThemeMode } from '@/hooks/useAppSettings';
 import type { Language } from '@/i18n';
@@ -129,6 +129,7 @@ function AppRoutes() {
         <Route path="/admin/automation" element={<AdminRoute><AutomationPage /></AdminRoute>} />
         <Route path="/admin/scenes" element={<AdminRoute><ScenesPage /></AdminRoute>} />
         <Route path="/admin/control-history" element={<AdminRoute><AdminControlHistoryPage /></AdminRoute>} />
+        <Route path="/admin/weather" element={<AdminRoute><WeatherPage /></AdminRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       
