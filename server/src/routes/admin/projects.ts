@@ -13,7 +13,7 @@ const createProjectSchema = z.object({
   key: z.string().min(1).max(50).regex(/^[a-z0-9_]+$/, 'Key must be lowercase alphanumeric with underscores'),
   name_th: z.string().min(1).max(100),
   status: z.enum(['ready', 'developing']).optional().default('developing'),
-  tb_base_url: z.string().url(),
+  tb_base_url: z.string().min(1),
   tb_username: z.string().min(1),
   tb_password: z.string().min(1),
 });
@@ -21,9 +21,9 @@ const createProjectSchema = z.object({
 const updateProjectSchema = z.object({
   name_th: z.string().min(1).max(100).optional(),
   status: z.enum(['ready', 'developing']).optional(),
-  tb_base_url: z.string().url().optional(),
+  tb_base_url: z.string().min(1).optional(),
   tb_username: z.string().min(1).optional(),
-  tb_password: z.string().min(1).optional(),
+  tb_password: z.string().optional(),
 });
 
 // GET /api/admin/projects
