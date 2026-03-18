@@ -30,9 +30,74 @@ type OptimisticRelayState = Record<string, boolean | null>;
 const OPTIMISTIC_RELAY_TTL_MS = 8000;
 const OPTIMISTIC_MOTOR_TTL_MS = 12000;
 
+// ---- Types สำหรับ dynamic config ----
+interface RelayConfigItem {
+  key: string;
+  name: string;
+  icon: string;
+  cmdKey: string;
+  autoKey: string;
+  rpcMethod: string;
+}
+
+interface MotorConfigItem {
+  key: string;
+  name: string;
+  fwKey: string;
+  reKey: string;
+  rpcMethod: string;
+}
+
 export function DashboardTab({ project, gh, isReady, isOnline, userRole }: DashboardTabProps) {
   const { t } = useT();
   const { addToast } = useToast();
+
+  // ---- Dynamic config state (fallback = hardcode) ----
+  const [relayConfig, setRelayConfig] = useState<RelayConfigItem[]>([...RELAY_CONFIG]);
+  const [motorConfig, setMotorConfig] = useState<MotorConfigItem[]>([...MOTOR_CONFIG]);
+
+  useEffect(() => {
+    if (!project || !gh) return;
+    fetch(`/api/admin/controls/${project}/${gh}`)
+      .then((res) => res.ok ? res.json() : null)
+      .then((json) => {
+        if (!json?.data?.controls?.length) return; // fallback หาก DB ว่าง
+
+        const relays: RelayConfigItem[] = [];
+        const motors: MotorConfigItem[] = [];
+
+        for (const c of json.data.controls) {
+          if (!c.is_active) continue;
+
+          if (c.control_type === 'relay') {
+            relays.push({
+              key: c.control_key,
+              name: c.name_th,
+              icon: c.icon ?? 'Power',
+              cmdKey: c.attribute_key,
+              autoKey: c.auto_mode_key ?? '',
+              rpcMethod: c.rpc_method,
+            });
+          } else if (c.control_type === 'motor') {
+            const [fwKey, reKey] = (c.attribute_key ?? '').split(',');
+            if (!fwKey || !reKey) continue; // skip ถ้า format ผิด
+            motors.push({
+              key: c.control_key,
+              name: c.name_th,
+              fwKey: fwKey.trim(),
+              reKey: reKey.trim(),
+              rpcMethod: c.rpc_method,
+            });
+          }
+        }
+
+        if (relays.length > 0) setRelayConfig(relays);
+        if (motors.length > 0) setMotorConfig(motors);
+      })
+      .catch(() => {
+        // เงียบ — ใช้ fallback hardcode ต่อไป
+      });
+  }, [project, gh]);
 
   const { data, isLoading, refetch, lastUpdated } = useAttributes({
     project,
@@ -80,13 +145,14 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
   };
 
   useEffect(() => {
-    for (const relay of RELAY_CONFIG) {
+    for (const relay of relayConfig) {
       const opt = optimisticRelays[relay.key];
       if (opt === null || opt === undefined) continue;
       if (data[relay.cmdKey] === undefined) continue;
       const real = normalizeBoolean(data[relay.cmdKey]);
       if (real === opt) clearRelayOptimistic(relay.key);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
   useEffect(() => {
@@ -129,7 +195,7 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
   };
 
   useEffect(() => {
-    for (const motor of MOTOR_CONFIG) {
+    for (const motor of motorConfig) {
       const opt = optimisticMotors[motor.key];
       if (opt === null || opt === undefined) continue;
       if (data[motor.fwKey] === undefined || data[motor.reKey] === undefined) continue;
@@ -140,7 +206,7 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
       else if (!realFw && realRe) realCmd = MOTOR_COMMANDS.REVERSE as 0;
       if (realCmd === opt) clearMotorOptimistic(motor.key);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
   useEffect(() => {
@@ -245,7 +311,7 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
           {t('dashboard.relayTitle')}
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-          {RELAY_CONFIG.map((relay) => {
+          {relayConfig.map((relay) => {
             const realIsOn = normalizeBoolean(data[relay.cmdKey]);
             const isAuto = normalizeBoolean(data[relay.autoKey]);
             const effectiveIsOn = optimisticRelays[relay.key] ?? realIsOn;
@@ -281,7 +347,7 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
 
         <div className="mb-4 flex gap-3">
           <button
-            onClick={() => MOTOR_CONFIG.forEach((motor) =>
+            onClick={() => motorConfig.forEach((motor) =>
               handleMotorCommand(motor.key, motor.rpcMethod, motor.name, MOTOR_COMMANDS.FORWARD)
             )}
             disabled={controlsDisabled || globalAuto}
@@ -297,7 +363,7 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
           </button>
 
           <button
-            onClick={() => MOTOR_CONFIG.forEach((motor) =>
+            onClick={() => motorConfig.forEach((motor) =>
               handleMotorCommand(motor.key, motor.rpcMethod, motor.name, MOTOR_COMMANDS.REVERSE)
             )}
             disabled={controlsDisabled || globalAuto}
@@ -314,7 +380,7 @@ export function DashboardTab({ project, gh, isReady, isOnline, userRole }: Dashb
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {MOTOR_CONFIG.map((motor) => {
+          {motorConfig.map((motor) => {
             const isFw = normalizeBoolean(data[motor.fwKey]);
             const isRe = normalizeBoolean(data[motor.reKey]);
 
