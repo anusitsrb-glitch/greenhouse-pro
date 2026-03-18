@@ -7,6 +7,7 @@ import sensorsRouter from './sensors.js';
 import controlsRouter from './controls.js';
 import auditRouter from './audit.js';
 import logsRouter from './logs.js';  // ✅ เพิ่มบรรทัดนี้
+import weatherAdminRouter from './weather.js';
 
 const router = Router();
 
@@ -18,5 +19,6 @@ router.use('/sensors', sensorsRouter);
 router.use('/controls', controlsRouter);
 router.use('/audit', auditRouter);
 router.use('/logs', logsRouter);  // ✅ เพิ่มบรรทัดนี้
+router.use('/weather', weatherAdminRouter);
 
 export default router;

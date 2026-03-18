@@ -32,6 +32,8 @@ import agricultureRoutes from './routes/agriculture.js';
 import { initDB, pool } from './db/connection.js';
 import connectPgSimple from 'connect-pg-simple';
 
+import weatherRoutes from './routes/weather.js';
+
 const app = express();
 
 // Global error handlers to prevent crash
@@ -192,6 +194,7 @@ app.use('/api/export', exportRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/control-history', controlHistoryRoutes);
 app.use('/api/agriculture', agricultureRoutes);
+app.use('/api/weather', weatherRoutes);
 app.use('/api', notFoundHandler);
 
 // ============================================================
