@@ -56,7 +56,15 @@ export function WeatherCard({ project, gh }: WeatherCardProps) {
     setLoading(true);
     fetch(`/api/weather/${project}/${gh}`)
       .then((r) => r.ok ? r.json() : Promise.reject())
-      .then((json) => { setData(json); setError(false); })
+      .then((json) => {
+        // guard: ต้องมี weather และ config ครบ
+        if (!json?.weather || !json?.config) {
+          setError(true);
+        } else {
+          setData(json);
+          setError(false);
+        }
+      })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
   };
@@ -80,6 +88,15 @@ export function WeatherCard({ project, gh }: WeatherCardProps) {
   }
 
   const { weather, config } = data;
+
+  // เพิ่มบรรทัดนี้
+  if (!weather || !config) {
+    return (
+      <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-4 flex items-center justify-center text-gray-400 text-sm h-20">
+        {t('weather.unavailable')}
+      </div>
+    );
+  }
   const emoji = CONDITION_EMOJI[weather.condition?.icon ?? ''] ?? '🌡️';
 
   const fields = [
