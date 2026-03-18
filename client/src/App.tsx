@@ -10,7 +10,7 @@ import { ProfilePage } from '@/pages/ProfilePage';
 import { NotificationPermissionBanner } from '@/components/notifications';
 import { 
   UsersPage, ProjectsPage, GreenhousesPage, NotificationsPage, 
-  SettingsPage, SensorsPage, AlertsPage, AuditLogPage,
+  SettingsPage, SensorsPage, ControlsPage, AlertsPage, AuditLogPage,
   AutomationPage, ScenesPage, ControlHistoryPage as AdminControlHistoryPage,
   AdminLayout
 } from '@/pages/admin';
@@ -121,6 +121,7 @@ function AppRoutes() {
         <Route path="/admin/projects" element={<AdminRoute><ProjectsPage /></AdminRoute>} />
         <Route path="/admin/greenhouses" element={<AdminRoute><GreenhousesPage /></AdminRoute>} />
         <Route path="/admin/sensors" element={<AdminRoute><SensorsPage /></AdminRoute>} />
+        <Route path="/admin/controls" element={<AdminRoute><ControlsPage /></AdminRoute>} />
         <Route path="/admin/notifications" element={<AdminRoute><NotificationsPage /></AdminRoute>} />
         <Route path="/admin/alerts" element={<AdminRoute><AlertsPage /></AdminRoute>} />
         <Route path="/admin/audit" element={<AdminRoute><AuditLogPage /></AdminRoute>} />

@@ -5,6 +5,7 @@ export { GreenhousesPage } from './GreenhousesPage';
 export { NotificationsPage } from './NotificationsPage';
 export { SettingsPage } from './SettingsPage';
 export { SensorsPage } from './SensorsPage';
+export { ControlsPage } from './ControlsPage';
 export { AlertsPage } from './AlertsPage';
 export { AuditLogPage } from './AuditLogPage';
 export { AutomationPage } from './AutomationPage';

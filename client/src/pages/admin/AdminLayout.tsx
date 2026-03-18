@@ -2,11 +2,14 @@ import { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useT } from '@/i18n';
+import { cn } from '@/lib/utils';
+
+
 import { 
   Leaf, Users, FolderKanban, Home as HomeIcon, Bell, Settings, ArrowLeft, LogOut,
-  Gauge, Zap, PlaySquare, Shield, History, Sprout, Droplets, Bug, Package, Activity
+  Gauge, Zap, PlaySquare, Shield, History, Sprout, Droplets, Bug, Package, Activity,
+  SlidersHorizontal // ← เพิ่ม
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -28,6 +31,7 @@ export function AdminLayout({ children, title, subtitle }: AdminLayoutProps) {
         { href: '/admin/projects', label: t('admin.projects'), icon: FolderKanban },
         { href: '/admin/greenhouses', label: t('admin.greenhouses'), icon: HomeIcon },
         { href: '/admin/sensors', label: t('admin.sensors'), icon: Gauge },
+        { href: '/admin/controls', label: t('admin.controls'), icon: SlidersHorizontal },
       ]
     },
     {
