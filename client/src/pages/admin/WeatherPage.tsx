@@ -45,7 +45,11 @@ export function WeatherPage() {
     fetch('/api/admin/greenhouses')
       .then((r) => r.ok ? r.json() : null)
       .then((json) => {
-        if (json?.data) setGreenhouses(json.data);
+        // รองรับทั้ง array และ { data: [...] }
+        const list = Array.isArray(json?.data) ? json.data
+          : Array.isArray(json) ? json
+          : [];
+        setGreenhouses(list);
       })
       .catch(() => {});
   }, []);
