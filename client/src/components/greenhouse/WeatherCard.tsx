@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useT } from '@/i18n';
-import { MapPin, RefreshCw, Thermometer, Droplets, Wind, Eye, Umbrella, Sun } from 'lucide-react';
+import { MapPin, RefreshCw, Thermometer, Droplets, Wind, Umbrella, Sun } from 'lucide-react';
 
 interface WeatherData {
   temperature: number;
@@ -23,12 +23,6 @@ interface WeatherConfig {
   show_rain_chance: number;
 }
 
-interface WeatherResponse {
-  weather: WeatherData;
-  config: WeatherConfig;
-  cached: boolean;
-}
-
 interface WeatherCardProps {
   project: string;
   gh: string;
@@ -48,7 +42,9 @@ const CONDITION_EMOJI: Record<string, string> = {
 
 export function WeatherCard({ project, gh }: WeatherCardProps) {
   const { t } = useT();
-  const [data, setData] = useState<WeatherResponse | null>(null);
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [config, setConfig] = useState<WeatherConfig | null>(null);
+  const [cached, setCached] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -57,11 +53,15 @@ export function WeatherCard({ project, gh }: WeatherCardProps) {
     fetch(`/api/weather/${project}/${gh}`)
       .then((r) => r.ok ? r.json() : Promise.reject())
       .then((json) => {
-        // guard: ต้องมี weather และ config ครบ
-        if (!json?.weather || !json?.config) {
+        // API returns { success, data: { weather, config, cached } }
+        const w = json?.data?.weather;
+        const c = json?.data?.config;
+        if (!w || !c) {
           setError(true);
         } else {
-          setData(json);
+          setWeather(w);
+          setConfig(c);
+          setCached(json.data.cached ?? false);
           setError(false);
         }
       })
@@ -79,7 +79,7 @@ export function WeatherCard({ project, gh }: WeatherCardProps) {
     );
   }
 
-  if (error || !data) {
+  if (error || !weather || !config) {
     return (
       <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-4 flex items-center justify-center text-gray-400 text-sm h-20">
         {t('weather.unavailable')}
@@ -87,16 +87,6 @@ export function WeatherCard({ project, gh }: WeatherCardProps) {
     );
   }
 
-  const { weather, config } = data;
-
-  // เพิ่มบรรทัดนี้
-  if (!weather || !config) {
-    return (
-      <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-4 flex items-center justify-center text-gray-400 text-sm h-20">
-        {t('weather.unavailable')}
-      </div>
-    );
-  }
   const emoji = CONDITION_EMOJI[weather.condition?.icon ?? ''] ?? '🌡️';
 
   const fields = [
@@ -130,10 +120,10 @@ export function WeatherCard({ project, gh }: WeatherCardProps) {
       <div className="flex items-center gap-3 mb-3">
         <span className="text-4xl">{emoji}</span>
         <div>
-          {config.show_condition && weather.condition && (
+          {config.show_condition === 1 && weather.condition && (
             <p className="text-sm font-semibold text-sky-800 dark:text-sky-200">{weather.condition.label_th}</p>
-        )}
-          {config.show_temperature && (
+          )}
+          {config.show_temperature === 1 && (
             <p className="text-2xl font-bold text-sky-900 dark:text-white">{weather.temperature}°C</p>
           )}
         </div>
@@ -159,7 +149,7 @@ export function WeatherCard({ project, gh }: WeatherCardProps) {
       {/* Updated at */}
       <p className="text-[10px] text-sky-500 dark:text-sky-400 mt-2">
         {t('weather.updated')}: {new Date(weather.updated_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
-        {data.cached && <span className="ml-1 opacity-60">({t('weather.cached')})</span>}
+        {cached && <span className="ml-1 opacity-60">({t('weather.cached')})</span>}
       </p>
     </div>
   );
