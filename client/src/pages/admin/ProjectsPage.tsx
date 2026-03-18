@@ -149,7 +149,9 @@ function ProjectModal({ project, onClose, onSuccess }: { project?: AdminProject;
     setIsLoading(true);
     try {
       if (project) {
-        await adminApi.updateProject(project.key, formData);
+        const updateData = { ...formData };
+        if (!updateData.tb_password) delete updateData.tb_password;
+        await adminApi.updateProject(project.key, updateData);
         addToast({ type: 'success', message: t('admin.project.saveSuccess') });
       } else {
         await adminApi.createProject(formData);
