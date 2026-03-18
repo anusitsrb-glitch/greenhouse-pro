@@ -15,7 +15,7 @@ type ProjectFormData = {
   status: ProjectStatus;
   tb_base_url: string;
   tb_username: string;
-  tb_password: string;
+  tb_password?: string;
 };
 
 export function ProjectsPage() {
@@ -154,7 +154,7 @@ function ProjectModal({ project, onClose, onSuccess }: { project?: AdminProject;
         await adminApi.updateProject(project.key, updateData);
         addToast({ type: 'success', message: t('admin.project.saveSuccess') });
       } else {
-        await adminApi.createProject(formData);
+        await adminApi.createProject({ ...formData, tb_password: formData.tb_password ?? '' });
         addToast({ type: 'success', message: t('admin.project.createSuccess') });
       }
       onSuccess();
