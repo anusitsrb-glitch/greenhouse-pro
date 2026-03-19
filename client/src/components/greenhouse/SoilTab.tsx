@@ -31,25 +31,43 @@ function getNodeIndices(sensors: { sensor_key: string; sensor_type: string; is_a
   return Array.from(indices).sort((a, b) => a - b);
 }
 
+// ดึง offset จาก sensor_configs แต่ละ data_key
+function buildOffsetMap(
+  sensors: { data_key: string; calibration_offset: number | null }[]
+): Record<string, number> {
+  const map: Record<string, number> = {};
+  for (const s of sensors) {
+    map[s.data_key] = Number(s.calibration_offset ?? 0);
+  }
+  return map;
+}
+
 export function SoilTab({ project, gh, isReady }: SoilTabProps) {
   const { t } = useT();
 
-  // ---- Dynamic node count จาก DB ----
+  // ---- Dynamic node count + offsets จาก DB ----
   const [nodeIndices, setNodeIndices] = useState<number[]>(
     Array.from({ length: DEFAULT_NODE_COUNT }, (_, i) => i + 1)
   );
+  const [offsets, setOffsets] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (!project || !gh) return;
     fetch(`/api/admin/sensors/${project}/${gh}`)
       .then((res) => res.ok ? res.json() : null)
       .then((json) => {
-        if (!json?.data?.sensors?.length) return; // fallback
-        const indices = getNodeIndices(json.data.sensors);
+        const sensors = json?.data?.sensors;
+        if (!Array.isArray(sensors) || sensors.length === 0) return;
+
+        // node indices จาก soil sensors
+        const indices = getNodeIndices(sensors);
         if (indices.length > 0) setNodeIndices(indices);
+
+        // offset map จากทุก sensor
+        setOffsets(buildOffsetMap(sensors));
       })
       .catch(() => {
-        // เงียบ — ใช้ fallback 10 node
+        // เงียบ — ใช้ fallback 10 node, offset = 0
       });
   }, [project, gh]);
 
@@ -107,6 +125,7 @@ export function SoilTab({ project, gh, isReady }: SoilTabProps) {
           timestamps={airData.timestamps}
           isLoading={airData.isLoading}
           isReady={isReady}
+          offsets={offsets}
         />
       </section>
 
@@ -125,6 +144,7 @@ export function SoilTab({ project, gh, isReady }: SoilTabProps) {
               timestamps={soilData.timestamps}
               isLoading={soilData.isLoading}
               isReady={isReady}
+              offsets={offsets}
             />
           ))}
         </div>

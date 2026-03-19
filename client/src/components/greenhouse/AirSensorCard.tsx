@@ -9,6 +9,7 @@ interface AirSensorCardProps {
   timestamps: Record<string, number>;
   isLoading: boolean;
   isReady: boolean;
+  offsets?: Record<string, number>; // data_key → offset
 }
 
 interface SensorDisplayProps {
@@ -96,8 +97,15 @@ function SensorDisplay({
   );
 }
 
-export function AirSensorCard({ data, timestamps, isLoading, isReady }: AirSensorCardProps) {
+export function AirSensorCard({ data, timestamps, isLoading, isReady, offsets = {} }: AirSensorCardProps) {
   const { t } = useT();
+
+  // apply offset: ค่าจริง = raw + offset
+  const applyOffset = (key: string, raw: number | null): number | null => {
+    if (raw === null) return null;
+    const offset = offsets[key] ?? 0;
+    return raw + offset;
+  };
 
   const sensors = [
     {
@@ -162,7 +170,7 @@ export function AirSensorCard({ data, timestamps, isLoading, isReady }: AirSenso
               key={sensor.key}
               icon={sensor.icon}
               label={sensor.label}
-              value={data[sensor.key] ?? null}
+              value={applyOffset(sensor.key, data[sensor.key] ?? null)}
               timestamp={timestamps[sensor.key] || 0}
               unit={sensor.unit}
               colorClass={sensor.colorClass}
