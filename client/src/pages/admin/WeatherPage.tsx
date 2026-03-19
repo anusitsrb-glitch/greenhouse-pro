@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useT } from '@/i18n';
 import { AdminLayout } from './AdminLayout';
-import { CloudSun, MapPin, Search, Save, Loader2, ToggleLeft, ToggleRight, FolderOpen } from 'lucide-react';
+import { CloudSun, MapPin, Search, Save, Loader2, ToggleLeft, ToggleRight, FolderOpen, ChevronDown, ChevronRight } from 'lucide-react';
 
 interface GeoResult {
   name: string;
@@ -43,6 +43,9 @@ const DEFAULT_CONFIG: WeatherConfig = {
   show_rain_chance: 1,
 };
 
+const naturalSort = (a: Greenhouse, b: Greenhouse) =>
+  a.ghKey.localeCompare(b.ghKey, undefined, { numeric: true, sensitivity: 'base' });
+
 export function WeatherPage() {
   const { t } = useT();
   const [greenhouses, setGreenhouses] = useState<Greenhouse[]>([]);
@@ -52,6 +55,10 @@ export function WeatherPage() {
   const [searching, setSearching] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  const toggleProject = (key: string) =>
+    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
 
   useEffect(() => {
     fetch('/api/admin/greenhouses')
@@ -59,6 +66,9 @@ export function WeatherPage() {
       .then((json) => {
         const list = Array.isArray(json?.data?.greenhouses) ? json.data.greenhouses : [];
         setGreenhouses(list);
+        // Auto-expand โปรเจคแรก
+        const keys = [...new Set<string>(list.map((g: Greenhouse) => g.projectKey))].sort();
+        if (keys.length > 0) setExpanded({ [keys[0]]: true });
       })
       .catch(() => {});
   }, []);
@@ -150,150 +160,171 @@ export function WeatherPage() {
     { key: 'show_rain_chance', label: t('admin.weather.showRainChance') },
   ];
 
-  // จัดกลุ่มตาม projectKey
+  // จัดกลุ่มตาม projectKey + natural sort โรงเรือน
   const grouped = greenhouses.reduce<Record<string, Greenhouse[]>>((acc, gh) => {
     if (!acc[gh.projectKey]) acc[gh.projectKey] = [];
     acc[gh.projectKey].push(gh);
     return acc;
   }, {});
 
+  Object.keys(grouped).forEach((k) => grouped[k].sort(naturalSort));
   const projectKeys = Object.keys(grouped).sort();
 
   return (
     <AdminLayout title={t('admin.weather')} subtitle={t('admin.weather.subtitle')}>
-      <div className="space-y-8">
+      <div className="space-y-3">
         {greenhouses.length === 0 && (
           <div className="text-center text-gray-400 py-12">{t('common.noData')}</div>
         )}
 
-        {projectKeys.map((projectKey) => (
-          <div key={projectKey}>
-            {/* Project Group Header */}
-            <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
-              <FolderOpen className="w-4 h-4 text-primary" />
-              <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
-                {grouped[projectKey][0]?.projectName ?? projectKey}
-              </h2>
-              <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
-                {grouped[projectKey].length} โรงเรือน
-              </span>
-            </div>
+        {projectKeys.map((projectKey) => {
+          const isOpen = !!expanded[projectKey];
+          const projectName = grouped[projectKey][0]?.projectName ?? projectKey;
 
-            <div className="space-y-4">
-              {grouped[projectKey].map((gh) => {
-                const cfg = getConfig(gh);
-                const key = getKey(gh);
-                const results = searchResults[key] ?? [];
+          return (
+            <div key={projectKey} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
 
-                return (
-                  <div key={key} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6">
-                    {/* GH Header */}
-                    <div className="flex items-center gap-3 mb-5">
-                      <div className="w-9 h-9 rounded-xl bg-sky-100 dark:bg-sky-900 flex items-center justify-center">
-                        <CloudSun className="w-5 h-5 text-sky-600 dark:text-sky-400" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-900 dark:text-gray-100">{gh.nameTh}</p>
-                        <p className="text-xs text-gray-400">{gh.projectKey} / {gh.ghKey}</p>
-                      </div>
-                    </div>
+              {/* Project Header — คลิก Collapse/Expand */}
+              <button
+                onClick={() => toggleProject(projectKey)}
+                className="w-full flex items-center gap-3 px-5 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left"
+              >
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <FolderOpen className="w-4 h-4 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-900 dark:text-gray-100">{projectName}</p>
+                  <p className="text-xs text-gray-400">{projectKey} · {grouped[projectKey].length} โรงเรือน</p>
+                </div>
+                {isOpen
+                  ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                }
+              </button>
 
-                    {/* Location Search */}
-                    <div className="mb-4">
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                        {t('admin.weather.selectLocation')}
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={searchQueries[key] ?? ''}
-                          onChange={(e) => setSearchQueries((prev) => ({ ...prev, [key]: e.target.value }))}
-                          onKeyDown={(e) => e.key === 'Enter' && handleSearch(gh)}
-                          placeholder={t('admin.weather.searchPlaceholder')}
-                          className="flex-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/30"
-                        />
+              {/* Greenhouse List */}
+              {isOpen && (
+                <div className="border-t border-gray-100 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
+                  {grouped[projectKey].map((gh) => {
+                    const cfg = getConfig(gh);
+                    const key = getKey(gh);
+                    const results = searchResults[key] ?? [];
+
+                    return (
+                      <div key={key} className="p-6">
+                        {/* GH Header */}
+                        <div className="flex items-center gap-3 mb-5">
+                          <div className="w-9 h-9 rounded-xl bg-sky-100 dark:bg-sky-900 flex items-center justify-center">
+                            <CloudSun className="w-5 h-5 text-sky-600 dark:text-sky-400" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-900 dark:text-gray-100">{gh.nameTh}</p>
+                            <p className="text-xs text-gray-400">{gh.projectKey} / {gh.ghKey}</p>
+                          </div>
+                        </div>
+
+                        {/* Location Search */}
+                        <div className="mb-4">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                            {t('admin.weather.selectLocation')}
+                          </label>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={searchQueries[key] ?? ''}
+                              onChange={(e) => setSearchQueries((prev) => ({ ...prev, [key]: e.target.value }))}
+                              onKeyDown={(e) => e.key === 'Enter' && handleSearch(gh)}
+                              placeholder={t('admin.weather.searchPlaceholder')}
+                              className="flex-1 px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                            />
+                            <button
+                              onClick={() => handleSearch(gh)}
+                              disabled={searching[key]}
+                              className="px-3 py-2 bg-sky-500 hover:bg-sky-600 text-white text-sm rounded-lg flex items-center gap-1.5 disabled:opacity-50"
+                            >
+                              {searching[key] ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                              {t('admin.weather.searchBtn')}
+                            </button>
+                          </div>
+
+                          {results.length > 0 && (
+                            <div className="mt-1 border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
+                              {results.map((r, i) => (
+                                <button
+                                  key={i}
+                                  onClick={() => handleSelectLocation(gh, r)}
+                                  className="w-full text-left px-3 py-2 text-sm hover:bg-sky-50 dark:hover:bg-sky-900/30 flex items-center gap-2 border-b last:border-b-0 border-gray-100 dark:border-gray-700"
+                                >
+                                  <MapPin className="w-3.5 h-3.5 text-sky-500 flex-shrink-0" />
+                                  <span>{[r.name, r.admin1, r.country].filter(Boolean).join(', ')}</span>
+                                  <span className="ml-auto text-xs text-gray-400">
+                                    {Number(r.latitude).toFixed(2)}, {Number(r.longitude).toFixed(2)}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Current Location */}
+                        <div className="flex items-center gap-2 mb-4 p-3 bg-sky-50 dark:bg-sky-900/20 rounded-lg">
+                          <MapPin className="w-4 h-4 text-sky-500 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-sky-800 dark:text-sky-200 truncate">{cfg.location_name}</p>
+                            <p className="text-xs text-sky-500">
+                              {Number(cfg.latitude).toFixed(4)}, {Number(cfg.longitude).toFixed(4)}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Toggle Fields */}
+                        <div className="mb-5">
+                          <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('admin.weather.showFields')}</p>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            {TOGGLE_FIELDS.map(({ key: fieldKey, label }) => {
+                              const isOn = cfg[fieldKey] === 1;
+                              return (
+                                <button
+                                  key={fieldKey}
+                                  onClick={() => updateConfig(gh, { [fieldKey]: isOn ? 0 : 1 } as Partial<WeatherConfig>)}
+                                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                                    isOn
+                                      ? 'bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300'
+                                      : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
+                                  }`}
+                                >
+                                  {isOn
+                                    ? <ToggleRight className="w-4 h-4 flex-shrink-0" />
+                                    : <ToggleLeft className="w-4 h-4 flex-shrink-0" />
+                                  }
+                                  <span>{label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Save Button */}
                         <button
-                          onClick={() => handleSearch(gh)}
-                          disabled={searching[key]}
-                          className="px-3 py-2 bg-sky-500 hover:bg-sky-600 text-white text-sm rounded-lg flex items-center gap-1.5 disabled:opacity-50"
+                          onClick={() => handleSave(gh)}
+                          disabled={saving[key]}
+                          className={`flex items-center gap-2 px-4 py-2 text-sm rounded-lg disabled:opacity-50 transition-colors ${
+                            saved[key]
+                              ? 'bg-green-500 text-white'
+                              : 'bg-primary hover:bg-primary/90 text-white'
+                          }`}
                         >
-                          {searching[key] ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                          {t('admin.weather.searchBtn')}
+                          {saving[key] ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                          {saved[key] ? t('admin.weather.saveSuccess') : t('common.save')}
                         </button>
                       </div>
-
-                      {results.length > 0 && (
-                        <div className="mt-1 border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
-                          {results.map((r, i) => (
-                            <button
-                              key={i}
-                              onClick={() => handleSelectLocation(gh, r)}
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-sky-50 dark:hover:bg-sky-900/30 flex items-center gap-2 border-b last:border-b-0 border-gray-100 dark:border-gray-700"
-                            >
-                              <MapPin className="w-3.5 h-3.5 text-sky-500 flex-shrink-0" />
-                              <span>{[r.name, r.admin1, r.country].filter(Boolean).join(', ')}</span>
-                              <span className="ml-auto text-xs text-gray-400">
-                                {Number(r.latitude).toFixed(2)}, {Number(r.longitude).toFixed(2)}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Current Location */}
-                    <div className="flex items-center gap-2 mb-4 p-3 bg-sky-50 dark:bg-sky-900/20 rounded-lg">
-                      <MapPin className="w-4 h-4 text-sky-500 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-sky-800 dark:text-sky-200 truncate">{cfg.location_name}</p>
-                        <p className="text-xs text-sky-500">
-                          {Number(cfg.latitude).toFixed(4)}, {Number(cfg.longitude).toFixed(4)}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Toggle Fields */}
-                    <div className="mb-5">
-                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('admin.weather.showFields')}</p>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {TOGGLE_FIELDS.map(({ key: fieldKey, label }) => {
-                          const isOn = cfg[fieldKey] === 1;
-                          return (
-                            <button
-                              key={fieldKey}
-                              onClick={() => updateConfig(gh, { [fieldKey]: isOn ? 0 : 1 } as Partial<WeatherConfig>)}
-                              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-                                isOn
-                                  ? 'bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300'
-                                  : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
-                              }`}
-                            >
-                              {isOn
-                                ? <ToggleRight className="w-4 h-4 flex-shrink-0" />
-                                : <ToggleLeft className="w-4 h-4 flex-shrink-0" />
-                              }
-                              <span>{label}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Save Button */}
-                    <button
-                      onClick={() => handleSave(gh)}
-                      disabled={saving[key]}
-                      className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-white text-sm rounded-lg disabled:opacity-50 transition-colors"
-                    >
-                      {saving[key] ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                      {saved[key] ? t('admin.weather.saveSuccess') : t('common.save')}
-                    </button>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </AdminLayout>
   );

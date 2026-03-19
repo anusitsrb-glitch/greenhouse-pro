@@ -6,7 +6,7 @@ import { requireAuth } from '../middleware/auth.js';
 const router = Router();
 router.use(requireAuth);
 
-const CACHE_MINUTES = 10;
+const CACHE_MINUTES = 3;
 
 // GET /api/weather/:projectKey/:ghKey
 router.get('/:projectKey/:ghKey', async (req: Request, res: Response) => {
