@@ -54,3 +54,4 @@ greenhouse-pro-release.keystore
 client/android/greenhouse-pro-release.keystore
 client/android/key.properties
 /android/
+server/src/config/serviceAccountKey.json

@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { api, authApi } from '@/lib/api';
 import type { User, AuthState } from '@/types';
+import { initPushNotifications, unregisterPushToken } from '@/services/pushNotification';
 
 interface AuthContextType extends AuthState {
   login: (username: string, password: string) => Promise<boolean>;
@@ -82,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             isLoading: false,
             isAuthenticated: true,
           });
+          initPushNotifications();
           return true;
         } else {
           console.error('❌ No user in response data');
@@ -118,6 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.error('Logout error:', e);
     } finally {
+      await unregisterPushToken();
       api.clearCsrfToken();
       setState({
         user: null,

@@ -797,6 +797,18 @@ export async function runMigrations() {
     )
   `);
 
+  // Device tokens (FCM Push Notifications)
+  await query(`
+    CREATE TABLE IF NOT EXISTS device_tokens (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token TEXT NOT NULL UNIQUE,
+      platform TEXT NOT NULL CHECK (platform IN ('ios', 'android', 'web')),
+      created_at TEXT NOT NULL DEFAULT now()::text,
+      updated_at TEXT NOT NULL DEFAULT now()::text
+    )
+  `);
+
   // Control logs
   await query(`
     CREATE TABLE IF NOT EXISTS control_logs (
@@ -918,6 +930,7 @@ export async function runMigrations() {
   await query(`CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_device_status_logs_greenhouse_id ON device_status_logs(greenhouse_id)`);
   await query(`CREATE INDEX IF NOT EXISTS idx_sessions_expire ON sessions(expire)`);
+  await query(`CREATE INDEX IF NOT EXISTS idx_device_tokens_user_id ON device_tokens(user_id)`);
 
   console.log('✅ Database migrations completed');
 }

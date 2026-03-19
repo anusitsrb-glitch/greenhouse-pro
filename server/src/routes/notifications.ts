@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { query } from '../db/connection.js';
 import { sendSuccess, sendError, ThaiErrors } from '../utils/response.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { messaging } from '../services/firebase.js';
 import { notificationService } from '../services/notificationService.js';
 import { z } from 'zod';
 
@@ -197,6 +198,29 @@ router.put('/read-all', async (req: Request, res: Response) => {
   }
 });
 
+// DELETE /api/notifications/unregister-token
+router.delete('/unregister-token', async (req: Request, res: Response) => {
+  try {
+    const { token } = req.body;
+    const userId = req.session.userId;
+
+    if (!token) {
+      sendError(res, 'กรุณาระบุ token', 400);
+      return;
+    }
+
+    await query(
+      `DELETE FROM device_tokens WHERE token = $1 AND user_id = $2`,
+      [token, userId]
+    );
+
+    sendSuccess(res, { unregistered: true });
+  } catch (err) {
+    console.error('unregister-token error:', err);
+    sendError(res, 'ไม่สามารถลบ token ได้', 500);
+  }
+});
+
 // DELETE /api/notifications/:id
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
@@ -254,6 +278,89 @@ router.post('/control-history/notify', async (req: Request, res: Response) => {
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
+// POST /api/notifications/register-token
+router.post('/register-token', async (req: Request, res: Response) => {
+  try {
+    const { token, platform } = req.body;
+    const userId = req.session.userId;
+
+    if (!token || !platform) {
+      sendError(res, 'กรุณาระบุ token และ platform', 400);
+      return;
+    }
+    if (!['ios', 'android', 'web'].includes(platform)) {
+      sendError(res, 'platform ต้องเป็น ios, android หรือ web', 400);
+      return;
+    }
+
+    await query(
+      `INSERT INTO device_tokens (user_id, token, platform, updated_at)
+       VALUES ($1, $2, $3, now()::text)
+       ON CONFLICT (token) DO UPDATE
+         SET user_id = EXCLUDED.user_id,
+             platform = EXCLUDED.platform,
+             updated_at = now()::text`,
+      [userId, token, platform]
+    );
+
+    sendSuccess(res, { registered: true });
+  } catch (err) {
+    console.error('register-token error:', err);
+    sendError(res, 'ไม่สามารถบันทึก token ได้', 500);
+  }
+});
+
+
+
+// POST /api/notifications/send (Admin only)
+router.post('/send', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { title, body, userId } = req.body;
+
+    if (!title || !body) {
+      sendError(res, 'กรุณาระบุ title และ body', 400);
+      return;
+    }
+
+    let rows: { token: string }[];
+    if (userId) {
+      const result = await query(`SELECT token FROM device_tokens WHERE user_id = $1`, [userId]);
+      rows = result.rows;
+    } else {
+      const result = await query(`SELECT token FROM device_tokens`);
+      rows = result.rows;
+    }
+
+    if (rows.length === 0) {
+      sendSuccess(res, { sent: 0, message: 'ไม่มี device token' });
+      return;
+    }
+
+    const tokens = rows.map((r) => r.token);
+    const response = await messaging.sendEachForMulticast({ tokens, notification: { title, body } });
+
+    // ลบ token ที่ invalid
+    const invalidTokens: string[] = [];
+    response.responses.forEach((r, i) => {
+      if (!r.success) {
+        const code = r.error?.code;
+        if (code === 'messaging/invalid-registration-token' || code === 'messaging/registration-token-not-registered') {
+          invalidTokens.push(tokens[i]);
+        }
+      }
+    });
+    if (invalidTokens.length > 0) {
+      await query(`DELETE FROM device_tokens WHERE token = ANY($1)`, [invalidTokens]);
+    }
+
+    sendSuccess(res, { sent: response.successCount, failed: response.failureCount, invalidRemoved: invalidTokens.length });
+  } catch (err) {
+    console.error('send notification error:', err);
+    sendError(res, 'ไม่สามารถส่ง notification ได้', 500);
   }
 });
 
