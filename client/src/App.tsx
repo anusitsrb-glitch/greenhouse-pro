@@ -8,6 +8,7 @@ import { ProjectPage } from '@/pages/ProjectPage';
 import { GreenhousePage } from '@/pages/GreenhousePage';
 import { ProfilePage } from '@/pages/ProfilePage';
 import { NotificationPermissionBanner } from '@/components/notifications';
+import { CalibratePage } from '@/pages/admin';
 import { 
   UsersPage, ProjectsPage, GreenhousesPage, NotificationsPage, 
   SettingsPage, SensorsPage, ControlsPage, AlertsPage, AuditLogPage,
@@ -130,6 +131,7 @@ function AppRoutes() {
         <Route path="/admin/scenes" element={<AdminRoute><ScenesPage /></AdminRoute>} />
         <Route path="/admin/control-history" element={<AdminRoute><AdminControlHistoryPage /></AdminRoute>} />
         <Route path="/admin/weather" element={<AdminRoute><WeatherPage /></AdminRoute>} />
+        <Route path="/admin/calibrate" element={<AdminRoute><CalibratePage /></AdminRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       

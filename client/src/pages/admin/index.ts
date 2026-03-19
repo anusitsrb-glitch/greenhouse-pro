@@ -13,3 +13,4 @@ export { ScenesPage } from './ScenesPage';
 export { SecurityPage } from './SecurityPage';
 export { ControlHistoryPage } from './ControlHistoryPage';
 export { WeatherPage } from './WeatherPage';
+export { CalibratePage } from './CalibratePage';

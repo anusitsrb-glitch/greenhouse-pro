@@ -33,6 +33,7 @@ export function AdminLayout({ children, title, subtitle }: AdminLayoutProps) {
         { href: '/admin/sensors', label: t('admin.sensors'), icon: Gauge },
         { href: '/admin/controls', label: t('admin.controls'), icon: SlidersHorizontal },
         { href: '/admin/weather', label: t('admin.weather'), icon: CloudSun },
+        { href: '/admin/calibrate', label: t('admin.calibrate'), icon: SlidersHorizontal },
       ]
     },
     {

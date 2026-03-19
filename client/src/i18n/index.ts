@@ -1004,6 +1004,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'admin.weather.showRainChance': 'โอกาสฝนตก',
     'admin.weather.saveSuccess': 'บันทึกการตั้งค่าสำเร็จ',
     'admin.weather.noConfig': 'ยังไม่มีการตั้งค่า (ใช้ค่าเริ่มต้น กรุงเทพฯ)',
+    'admin.calibrate': 'Calibrate Sensor',
 
   },
 
@@ -2005,6 +2006,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'admin.weather.showRainChance': 'Rain Chance',
     'admin.weather.saveSuccess': 'Settings saved successfully',
     'admin.weather.noConfig': 'No config yet (default: Bangkok)',
+    'admin.calibrate': 'Calibrate Sensor',
 
   },
 
@@ -3002,6 +3004,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'admin.weather.showRainChance': 'မိုးရွာနိုင်ခြေ',
     'admin.weather.saveSuccess': 'သိမ်းဆည်းပြီးပါပြီ',
     'admin.weather.noConfig': 'ဆက်တင်မရှိသေးပါ (ပုံသေ: Bangkok)',
+    'admin.calibrate': 'Sensor ကိုချိန်ညှိရန်',
 
   },
 };

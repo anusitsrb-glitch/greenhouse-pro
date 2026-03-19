@@ -18,6 +18,7 @@ interface SoilNodeCardProps {
   timestamps: Record<string, number>;
   isLoading: boolean;
   isReady: boolean;
+  offsets?: Record<string, number>; // data_key → offset
 }
 
 interface MiniSensorProps {
@@ -73,17 +74,25 @@ export function SoilNodeCard({
   timestamps,
   isLoading,
   isReady,
+  offsets = {},
 }: SoilNodeCardProps) {
   const { t } = useT();
   const keys = getSoilKeys(nodeIndex);
 
-  const moisture = data[keys.MOISTURE] ?? null;
-  const temp     = data[keys.TEMP]     ?? null;
-  const ec       = data[keys.EC]       ?? null;
-  const ph       = data[keys.PH]       ?? null;
-  const n        = data[keys.N]        ?? null;
-  const p        = data[keys.P]        ?? null;
-  const k        = data[keys.K]        ?? null;
+  // apply offset: ค่าจริง = raw + offset
+  const applyOffset = (dataKey: string, raw: number | null): number | null => {
+    if (raw === null) return null;
+    const offset = offsets[dataKey] ?? 0;
+    return raw + offset;
+  };
+
+  const moisture = applyOffset(keys.MOISTURE, data[keys.MOISTURE] ?? null);
+  const temp     = applyOffset(keys.TEMP,     data[keys.TEMP]     ?? null);
+  const ec       = applyOffset(keys.EC,       data[keys.EC]       ?? null);
+  const ph       = applyOffset(keys.PH,       data[keys.PH]       ?? null);
+  const n        = applyOffset(keys.N,        data[keys.N]        ?? null);
+  const p        = applyOffset(keys.P,        data[keys.P]        ?? null);
+  const k        = applyOffset(keys.K,        data[keys.K]        ?? null);
 
   const checkNodeOnlineStatus = () => {
     if (!isReady) return false;
@@ -91,8 +100,11 @@ export function SoilNodeCard({
     const maxAge = 5 * 60 * 1000;
     const moistureTs = timestamps[keys.MOISTURE] || 0;
     const tempTs     = timestamps[keys.TEMP]     || 0;
+    // ใช้ raw data สำหรับตรวจสอบ online status (ไม่ใช้ค่าหลัง offset)
+    const rawMoisture = data[keys.MOISTURE] ?? null;
+    const rawTemp     = data[keys.TEMP]     ?? null;
     const hasRecentData = now - moistureTs < maxAge || now - tempTs < maxAge;
-    const hasValue = moisture !== null || temp !== null;
+    const hasValue = rawMoisture !== null || rawTemp !== null;
     return hasRecentData && hasValue;
   };
 
@@ -209,9 +221,9 @@ export function SoilNodeCard({
 
         {/* Secondary metrics */}
         <div className="space-y-1 border-t border-slate-200 dark:border-gray-600 pt-2">
-          <MiniSensor icon={Zap}         label="EC" value={ec} unit="µS/cm" colorClass="text-amber-600"  isLoading={isLoading} isReady={isReady} decimals={2} />
+          <MiniSensor icon={Zap}          label="EC" value={ec} unit="µS/cm" colorClass="text-amber-600"  isLoading={isLoading} isReady={isReady} decimals={2} />
           <div className="border-t border-slate-100 dark:border-gray-700" />
-          <MiniSensor icon={FlaskConical} label="pH" value={ph} unit=""      colorClass="text-violet-600" isLoading={isLoading} isReady={isReady} decimals={2} />
+          <MiniSensor icon={FlaskConical} label="pH" value={ph} unit=""       colorClass="text-violet-600" isLoading={isLoading} isReady={isReady} decimals={2} />
 
           {/* Nutrients */}
           <div className="pt-3 mt-2 border-t border-slate-200 dark:border-gray-600">
