@@ -148,7 +148,7 @@ export function WeatherCard({ project, gh }: WeatherCardProps) {
 
       {/* Updated at */}
       <p className="text-[10px] text-sky-500 dark:text-sky-400 mt-2">
-        {t('weather.updated')}: {new Date(weather.updated_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+        {t('weather.data_at')}: {new Date(weather.updated_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
         {cached && <span className="ml-1 opacity-60">({t('weather.cached')})</span>}
       </p>
     </div>

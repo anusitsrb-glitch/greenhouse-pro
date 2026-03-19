@@ -985,6 +985,7 @@ export const translations: Record<Language, Record<string, string>> = {
 
     'weather.unavailable': 'ไม่สามารถโหลดข้อมูลอากาศได้',
     'weather.updated': 'อัพเดทเมื่อ',
+    'weather.data_at': 'ข้อมูล ณ',
     'weather.cached': 'แคช',
     'weather.sectionTitle': 'สภาพอากาศภายนอก',
     'admin.weather': 'ตั้งค่าสภาพอากาศ',
@@ -1987,6 +1988,7 @@ export const translations: Record<Language, Record<string, string>> = {
 
     'weather.unavailable': 'Weather data unavailable',
     'weather.updated': 'Updated at',
+    'weather.data_at': 'Data at',
     'weather.cached': 'cached',
     'weather.sectionTitle': 'Outdoor Weather',
     'admin.weather': 'Weather Settings',
@@ -2985,6 +2987,7 @@ export const translations: Record<Language, Record<string, string>> = {
 
     'weather.unavailable': 'အပြင်ရာသီဥတုဒေတာမဖွင့်နိုင်ပါ',
     'weather.updated': 'အပ်ဒိတ်',
+    'weather.data_at': 'ဒေတာ ရရှိချိန်',
     'weather.cached': 'cache',
     'weather.sectionTitle': 'အပြင်ရာသီဥတု',
     'admin.weather': 'ရာသီဥတုဆက်တင်',
