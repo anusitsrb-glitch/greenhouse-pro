@@ -186,7 +186,7 @@ function GreenhousePanel({ gh }: GreenhousePanelProps) {
       const list: SensorConfig[] = Array.isArray(json?.data?.sensors)
         ? json.data.sensors.filter(
             (s: SensorConfig) =>
-              (s.is_active === 1 || s.is_active === true) && ['air', 'soil', 'water', 'light', 'custom'].includes(s.sensor_type)
+              Boolean(s.is_active) && ['air', 'soil', 'water', 'light', 'custom'].includes(s.sensor_type)
           )
         : [];
       setSensors(list);
