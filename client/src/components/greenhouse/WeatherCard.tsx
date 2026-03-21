@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useT } from '@/i18n';
 import { MapPin, RefreshCw, Thermometer, Droplets, Wind, Umbrella, Sun } from 'lucide-react';
+import { getApiUrl } from '@/config/env';
 
 interface WeatherData {
   temperature: number;
@@ -50,7 +51,7 @@ export function WeatherCard({ project, gh }: WeatherCardProps) {
 
   const fetchWeather = () => {
     setLoading(true);
-    fetch(`/api/weather/${project}/${gh}`)
+    fetch(getApiUrl(`/api/weather/${project}/${gh}`))
       .then((r) => r.ok ? r.json() : Promise.reject())
       .then((json) => {
         // API returns { success, data: { weather, config, cached } }
