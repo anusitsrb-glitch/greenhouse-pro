@@ -5,6 +5,8 @@ import {
   SlidersHorizontal, FolderOpen, ChevronDown, ChevronRight,
   Save, Loader2, RotateCcw, CheckCircle2, Gauge,
 } from 'lucide-react';
+import { getApiUrl } from '@/config/env';
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -70,7 +72,7 @@ function SensorRow({ sensor, projectKey, ghKey, onSaved }: SensorRowProps) {
     if (isNaN(parsed)) return;
     setSaving(true);
     try {
-      await fetch(`/api/admin/sensors/${projectKey}/${ghKey}/calibrate/${sensor.sensor_key}`, {
+      await fetch(getApiUrl(`/api/admin/sensors/${projectKey}/${ghKey}/calibrate/${sensor.sensor_key}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ offset: parsed, scale: sensor.calibration_scale ?? 1 }),
@@ -181,7 +183,7 @@ function GreenhousePanel({ gh }: GreenhousePanelProps) {
     if (loaded) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/sensors/${gh.projectKey}/${gh.ghKey}`);
+      const res = await fetch(getApiUrl(`/api/admin/sensors/${gh.projectKey}/${gh.ghKey}`));
       const json = await res.json();
       const list: SensorConfig[] = Array.isArray(json?.data?.sensors)
         ? json.data.sensors.filter(
@@ -319,7 +321,7 @@ export function CalibratePage() {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
 
   useEffect(() => {
-    fetch('/api/admin/greenhouses')
+    fetch(getApiUrl('/api/admin/greenhouses'))
       .then((r) => (r.ok ? r.json() : null))
       .then((json) => {
         const list: Greenhouse[] = Array.isArray(json?.data?.greenhouses)

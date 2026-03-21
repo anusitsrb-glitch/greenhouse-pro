@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useT } from '@/i18n';
 import { AdminLayout } from './AdminLayout';
 import { CloudSun, MapPin, Search, Save, Loader2, ToggleLeft, ToggleRight, FolderOpen, ChevronDown, ChevronRight } from 'lucide-react';
+import { getApiUrl } from '@/config/env';
 
 interface GeoResult {
   name: string;
@@ -61,7 +62,7 @@ export function WeatherPage() {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
 
   useEffect(() => {
-    fetch('/api/admin/greenhouses')
+    fetch(getApiUrl('/api/admin/greenhouses'))
       .then((r) => r.ok ? r.json() : null)
       .then((json) => {
         const list = Array.isArray(json?.data?.greenhouses) ? json.data.greenhouses : [];
@@ -77,7 +78,7 @@ export function WeatherPage() {
   useEffect(() => {
     if (!greenhouses.length) return;
     greenhouses.forEach((gh) => {
-      fetch(`/api/admin/weather/${gh.projectKey}/${gh.ghKey}`)
+      fetch(getApiUrl(`/api/admin/weather/${gh.projectKey}/${gh.ghKey}`))
         .then((r) => r.ok ? r.json() : null)
         .then((json) => {
           const cfg = json?.data?.config;
@@ -137,7 +138,7 @@ export function WeatherPage() {
     const cfg = getConfig(gh);
     setSaving((prev) => ({ ...prev, [getKey(gh)]: true }));
     try {
-      await fetch(`/api/admin/weather/${gh.projectKey}/${gh.ghKey}`, {
+      await fetch(getApiUrl(`/api/admin/weather/${gh.projectKey}/${gh.ghKey}`), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cfg),
