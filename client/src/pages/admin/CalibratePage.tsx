@@ -5,8 +5,7 @@ import {
   SlidersHorizontal, FolderOpen, ChevronDown, ChevronRight,
   Save, Loader2, RotateCcw, CheckCircle2, Gauge,
 } from 'lucide-react';
-import { getApiUrl } from '@/config/env';
-
+import { api } from '@/lib/api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -72,11 +71,10 @@ function SensorRow({ sensor, projectKey, ghKey, onSaved }: SensorRowProps) {
     if (isNaN(parsed)) return;
     setSaving(true);
     try {
-      await fetch(getApiUrl(`/api/admin/sensors/${projectKey}/${ghKey}/calibrate/${sensor.sensor_key}`), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ offset: parsed, scale: sensor.calibration_scale ?? 1 }),
-      });
+      await api.post(
+        `/admin/sensors/${projectKey}/${ghKey}/calibrate/${sensor.sensor_key}`,
+        { offset: parsed, scale: sensor.calibration_scale ?? 1 }
+      );
       setSaved(true);
       onSaved(sensor.sensor_key, parsed);
       setTimeout(() => setSaved(false), 2500);
@@ -91,7 +89,6 @@ function SensorRow({ sensor, projectKey, ghKey, onSaved }: SensorRowProps) {
 
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-3 py-3 px-4 rounded-xl bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-      {/* Sensor info */}
       <div className="flex items-center gap-3 flex-1 min-w-0">
         <span className="text-xl w-7 text-center flex-shrink-0">
           {SENSOR_ICON[sensor.sensor_type] ?? '🔧'}
@@ -106,17 +103,11 @@ function SensorRow({ sensor, projectKey, ghKey, onSaved }: SensorRowProps) {
         </div>
       </div>
 
-      {/* Offset input + controls */}
       <div className="flex items-center gap-2 flex-shrink-0">
-        {/* Unit badge */}
         <span className="hidden sm:inline text-xs text-gray-400 dark:text-gray-500 w-10 text-right">
           {sensor.unit}
         </span>
-
-        {/* Offset label */}
         <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">offset</span>
-
-        {/* Number input */}
         <input
           type="number"
           step="0.1"
@@ -130,8 +121,6 @@ function SensorRow({ sensor, projectKey, ghKey, onSaved }: SensorRowProps) {
             }
             text-gray-900 dark:text-gray-100`}
         />
-
-        {/* Reset */}
         <button
           onClick={handleReset}
           title="รีเซ็ตเป็น 0"
@@ -139,8 +128,6 @@ function SensorRow({ sensor, projectKey, ghKey, onSaved }: SensorRowProps) {
         >
           <RotateCcw className="w-3.5 h-3.5" />
         </button>
-
-        {/* Save button */}
         <button
           onClick={handleSave}
           disabled={saving || (!isDirty && !saved)}
@@ -183,8 +170,9 @@ function GreenhousePanel({ gh }: GreenhousePanelProps) {
     if (loaded) return;
     setLoading(true);
     try {
-      const res = await fetch(getApiUrl(`/api/admin/sensors/${gh.projectKey}/${gh.ghKey}`));
-      const json = await res.json();
+      const json = await api.get<{ sensors: SensorConfig[] }>(
+        `/admin/sensors/${gh.projectKey}/${gh.ghKey}`
+      );
       const list: SensorConfig[] = Array.isArray(json?.data?.sensors)
         ? json.data.sensors.filter(
             (s: SensorConfig) =>
@@ -221,7 +209,6 @@ function GreenhousePanel({ gh }: GreenhousePanelProps) {
 
   return (
     <div className="border border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden">
-      {/* Greenhouse header — คลิก expand */}
       <button
         onClick={handleToggle}
         className="w-full flex items-center gap-3 px-4 py-3.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors text-left"
@@ -241,7 +228,6 @@ function GreenhousePanel({ gh }: GreenhousePanelProps) {
         }
       </button>
 
-      {/* Sensor list */}
       {open && (
         <div className="border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 space-y-4">
           {loaded && sensors.length === 0 && (
@@ -255,13 +241,7 @@ function GreenhousePanel({ gh }: GreenhousePanelProps) {
               </p>
               <div className="space-y-2">
                 {airSensors.map((s) => (
-                  <SensorRow
-                    key={s.sensor_key}
-                    sensor={s}
-                    projectKey={gh.projectKey}
-                    ghKey={gh.ghKey}
-                    onSaved={handleSaved}
-                  />
+                  <SensorRow key={s.sensor_key} sensor={s} projectKey={gh.projectKey} ghKey={gh.ghKey} onSaved={handleSaved} />
                 ))}
               </div>
             </div>
@@ -274,13 +254,7 @@ function GreenhousePanel({ gh }: GreenhousePanelProps) {
               </p>
               <div className="space-y-2">
                 {soilSensors.map((s) => (
-                  <SensorRow
-                    key={s.sensor_key}
-                    sensor={s}
-                    projectKey={gh.projectKey}
-                    ghKey={gh.ghKey}
-                    onSaved={handleSaved}
-                  />
+                  <SensorRow key={s.sensor_key} sensor={s} projectKey={gh.projectKey} ghKey={gh.ghKey} onSaved={handleSaved} />
                 ))}
               </div>
             </div>
@@ -293,13 +267,7 @@ function GreenhousePanel({ gh }: GreenhousePanelProps) {
               </p>
               <div className="space-y-2">
                 {otherSensors.map((s) => (
-                  <SensorRow
-                    key={s.sensor_key}
-                    sensor={s}
-                    projectKey={gh.projectKey}
-                    ghKey={gh.ghKey}
-                    onSaved={handleSaved}
-                  />
+                  <SensorRow key={s.sensor_key} sensor={s} projectKey={gh.projectKey} ghKey={gh.ghKey} onSaved={handleSaved} />
                 ))}
               </div>
             </div>
@@ -321,21 +289,18 @@ export function CalibratePage() {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
 
   useEffect(() => {
-    fetch(getApiUrl('/api/admin/greenhouses'))
-      .then((r) => (r.ok ? r.json() : null))
+    api.get<{ greenhouses: Greenhouse[] }>('/admin/greenhouses')
       .then((json) => {
         const list: Greenhouse[] = Array.isArray(json?.data?.greenhouses)
           ? json.data.greenhouses
           : [];
         setGreenhouses(list);
-        // Auto-expand โปรเจคแรก
         const keys = [...new Set<string>(list.map((g) => g.projectKey))].sort();
         if (keys.length > 0) setExpanded({ [keys[0]]: true });
       })
       .catch(() => {});
   }, []);
 
-  // จัดกลุ่มตาม projectKey + natural sort โรงเรือน
   const grouped = greenhouses.reduce<Record<string, Greenhouse[]>>((acc, gh) => {
     if (!acc[gh.projectKey]) acc[gh.projectKey] = [];
     acc[gh.projectKey].push(gh);
@@ -359,11 +324,7 @@ export function CalibratePage() {
           const projectName = grouped[projectKey][0]?.projectName ?? projectKey;
 
           return (
-            <div
-              key={projectKey}
-              className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden"
-            >
-              {/* Project header */}
+            <div key={projectKey} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
               <button
                 onClick={() => toggleProject(projectKey)}
                 className="w-full flex items-center gap-3 px-5 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left"
@@ -383,7 +344,6 @@ export function CalibratePage() {
                 }
               </button>
 
-              {/* Greenhouse list */}
               {isOpen && (
                 <div className="border-t border-gray-100 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 p-4 space-y-3">
                   {grouped[projectKey].map((gh) => (
@@ -395,7 +355,6 @@ export function CalibratePage() {
           );
         })}
 
-        {/* Helper note */}
         {greenhouses.length > 0 && (
           <div className="flex items-start gap-2.5 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800 text-sm text-blue-700 dark:text-blue-300">
             <SlidersHorizontal className="w-4 h-4 mt-0.5 flex-shrink-0" />

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useT } from '@/i18n';
 import { AdminLayout } from './AdminLayout';
 import { CloudSun, MapPin, Search, Save, Loader2, ToggleLeft, ToggleRight, FolderOpen, ChevronDown, ChevronRight } from 'lucide-react';
-import { getApiUrl } from '@/config/env';
+import { api } from '@/lib/api';
 
 interface GeoResult {
   name: string;
@@ -62,24 +62,20 @@ export function WeatherPage() {
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
 
   useEffect(() => {
-    fetch(getApiUrl('/api/admin/greenhouses'))
-      .then((r) => r.ok ? r.json() : null)
+    api.get<{ greenhouses: Greenhouse[] }>('/admin/greenhouses')
       .then((json) => {
         const list = Array.isArray(json?.data?.greenhouses) ? json.data.greenhouses : [];
         setGreenhouses(list);
-        // Auto-expand โปรเจคแรก
         const keys = [...new Set<string>(list.map((g: Greenhouse) => g.projectKey))].sort();
         if (keys.length > 0) setExpanded({ [keys[0]]: true });
       })
       .catch(() => {});
   }, []);
 
-  // Server returns: { success: true, data: { config: {...} } }
   useEffect(() => {
     if (!greenhouses.length) return;
     greenhouses.forEach((gh) => {
-      fetch(getApiUrl(`/api/admin/weather/${gh.projectKey}/${gh.ghKey}`))
-        .then((r) => r.ok ? r.json() : null)
+      api.get<{ config: WeatherConfig }>(`/admin/weather/${gh.projectKey}/${gh.ghKey}`)
         .then((json) => {
           const cfg = json?.data?.config;
           if (cfg) {
@@ -138,11 +134,7 @@ export function WeatherPage() {
     const cfg = getConfig(gh);
     setSaving((prev) => ({ ...prev, [getKey(gh)]: true }));
     try {
-      await fetch(getApiUrl(`/api/admin/weather/${gh.projectKey}/${gh.ghKey}`), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cfg),
-      });
+      await api.put(`/admin/weather/${gh.projectKey}/${gh.ghKey}`, cfg);
       setSaved((prev) => ({ ...prev, [getKey(gh)]: true }));
       setTimeout(() => setSaved((prev) => ({ ...prev, [getKey(gh)]: false })), 2000);
     } catch {
@@ -161,7 +153,6 @@ export function WeatherPage() {
     { key: 'show_rain_chance', label: t('admin.weather.showRainChance') },
   ];
 
-  // จัดกลุ่มตาม projectKey + natural sort โรงเรือน
   const grouped = greenhouses.reduce<Record<string, Greenhouse[]>>((acc, gh) => {
     if (!acc[gh.projectKey]) acc[gh.projectKey] = [];
     acc[gh.projectKey].push(gh);
@@ -185,7 +176,6 @@ export function WeatherPage() {
           return (
             <div key={projectKey} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
 
-              {/* Project Header — คลิก Collapse/Expand */}
               <button
                 onClick={() => toggleProject(projectKey)}
                 className="w-full flex items-center gap-3 px-5 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left"
@@ -203,7 +193,6 @@ export function WeatherPage() {
                 }
               </button>
 
-              {/* Greenhouse List */}
               {isOpen && (
                 <div className="border-t border-gray-100 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700">
                   {grouped[projectKey].map((gh) => {
@@ -213,7 +202,6 @@ export function WeatherPage() {
 
                     return (
                       <div key={key} className="p-6">
-                        {/* GH Header */}
                         <div className="flex items-center gap-3 mb-5">
                           <div className="w-9 h-9 rounded-xl bg-sky-100 dark:bg-sky-900 flex items-center justify-center">
                             <CloudSun className="w-5 h-5 text-sky-600 dark:text-sky-400" />
@@ -224,7 +212,6 @@ export function WeatherPage() {
                           </div>
                         </div>
 
-                        {/* Location Search */}
                         <div className="mb-4">
                           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                             {t('admin.weather.selectLocation')}
@@ -267,7 +254,6 @@ export function WeatherPage() {
                           )}
                         </div>
 
-                        {/* Current Location */}
                         <div className="flex items-center gap-2 mb-4 p-3 bg-sky-50 dark:bg-sky-900/20 rounded-lg">
                           <MapPin className="w-4 h-4 text-sky-500 flex-shrink-0" />
                           <div className="flex-1 min-w-0">
@@ -278,7 +264,6 @@ export function WeatherPage() {
                           </div>
                         </div>
 
-                        {/* Toggle Fields */}
                         <div className="mb-5">
                           <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{t('admin.weather.showFields')}</p>
                           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -305,7 +290,6 @@ export function WeatherPage() {
                           </div>
                         </div>
 
-                        {/* Save Button */}
                         <button
                           onClick={() => handleSave(gh)}
                           disabled={saving[key]}
