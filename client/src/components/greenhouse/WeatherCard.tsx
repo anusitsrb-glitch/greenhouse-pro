@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useT } from '@/i18n';
 import { MapPin, RefreshCw, Thermometer, Droplets, Wind, Umbrella, Sun } from 'lucide-react';
-import { getApiUrl } from '@/config/env';
+import { api } from '@/lib/api';
 
 interface WeatherData {
   temperature: number;
@@ -51,10 +51,10 @@ export function WeatherCard({ project, gh }: WeatherCardProps) {
 
   const fetchWeather = () => {
     setLoading(true);
-    fetch(getApiUrl(`/api/weather/${project}/${gh}`))
-      .then((r) => r.ok ? r.json() : Promise.reject())
+    api.get<{ weather: WeatherData; config: WeatherConfig; cached: boolean }>(
+      `/weather/${project}/${gh}`
+    )
       .then((json) => {
-        // API returns { success, data: { weather, config, cached } }
         const w = json?.data?.weather;
         const c = json?.data?.config;
         if (!w || !c) {
@@ -62,7 +62,7 @@ export function WeatherCard({ project, gh }: WeatherCardProps) {
         } else {
           setWeather(w);
           setConfig(c);
-          setCached(json.data.cached ?? false);
+          setCached(json.data?.cached ?? false);
           setError(false);
         }
       })
